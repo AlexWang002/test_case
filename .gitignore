@@ -1,0 +1,10 @@
+build*
+out*
+.vscode
+.vs
+CMake*.json
+arm_test
+rs_lidar_sdk*
+temp
+release
+mipi_data/*txt

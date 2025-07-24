@@ -1,0 +1,38 @@
+variables:
+  GIT_STRATEGY: clone
+  GIT_SUBMODULE_STRATEGY: recursive
+
+stages:
+  - build
+
+build_job:
+  stage: build  # 编译阶段
+  script:
+    - echo "Updating code..."
+    - git fetch --all # 获取所有分支
+    - git branch --show-current  # 输出当前分支
+    - git checkout $CI_COMMIT_REF_NAME  # 切换到当前分支
+    - git pull origin $CI_COMMIT_REF_NAME # 更新代码
+    - git branch --show-current  # 输出当前分支
+    - echo "The code was updated successfully!"
+
+    - echo "Beginning to build the aarch_x86_64 version."
+    - ./scripts/compile.sh -c -i -p pc   # 编译 X86
+    - echo "Complete build the aarch_x86_64 version."
+
+    - echo "Beginning to build the ARM version."
+    - ./scripts/compile.sh -c -i -p arm   # 编译 ARM
+    - echo "Complete build the ARM version."
+
+    - echo "Beginning the pc-lint job;"
+    - ./scripts/pclp/pclp.sh
+
+  only:
+    - web
+    - merge_requests  # 仅在web和merge_requests分支上触发
+  tags:
+    - build
+  artifacts:  # 保存测试结果
+    name: "CI_Job_Results"
+    paths:
+      - release/

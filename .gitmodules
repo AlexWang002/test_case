@@ -1,0 +1,6 @@
+[submodule "3rdparty/rs_logger"]
+	path = 3rdparty/rs_logger
+	url = http://gitlab+deploy-token-50:pq_ysAZsyyy_UUZsBs7a@gitlab.robosense.cn/software_dev/service_calibration_group/modules/rs_logger.git
+[submodule "3rdparty/yaml-cpp"]
+	path = 3rdparty/yaml-cpp
+	url = http://gitlab+deploy-token-67:xjjZz7zvv1xRpzQZ5GDv@gitlab.robosense.cn/software_dev/service_calibration_group/modules/yaml-cpp.git
