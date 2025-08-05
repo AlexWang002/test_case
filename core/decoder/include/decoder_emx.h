@@ -124,13 +124,13 @@ typedef struct
   uint16_t radius;
   uint8_t intensity;
   uint8_t attribute;
-} RSEMXMsopWave;
+} RSEMXMsopWave;  // 4-bytes
 
 typedef struct
 {
   uint16_t peak; /* 0 - 1023 */
   uint16_t width;
-} RSEMXMsopRaw;
+} RSEMXMsopRaw;  // 4-bytes
 
 typedef struct
 {
@@ -151,16 +151,16 @@ typedef struct
 
 typedef struct
 {
-  RSEMXMsopWave waves[2];
-  RSEMXMsopRaw raws[2];
-} RSEMXMsopPixel;
+  RSEMXMsopWave waves[2]; // 8-bytes
+  RSEMXMsopRaw raws[2];   // 8-bytes
+} RSEMXMsopPixel;  // 16-bytes
 
 typedef struct
 {
-  RSEMXMsopHeader header;
-  RSEMXMsopPixel pixels[192];
-  uint32_t reserved[3];
-} RSEMXMsopPkt;
+  RSEMXMsopHeader header;       // 32-bytes
+  RSEMXMsopPixel pixels[192];   // 3072-bytes
+  uint32_t reserved[3];         // 12-bytes
+} RSEMXMsopPkt;  // 3116-bytes
 
 #pragma pack(pop)
 

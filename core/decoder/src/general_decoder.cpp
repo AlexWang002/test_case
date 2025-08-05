@@ -94,11 +94,11 @@ void Decoder::initPointCloud()
     return;
 
   auto& cloud = *point_cloud_;
-  cloud.protocol_version = 0x0005;  // LidarSDK Struct Version
+  cloud.protocol_version = 0x0007;  // LidarSDK Struct Version
   cloud.return_mode = 0x1;
   cloud.sync_status = 0x0;
   cloud.frame_sync = 0x0;
-  cloud.mirror_id = 0x0; 
+  cloud.mirror_id = 0x0;
   uint32_t pointCount = getTheoreticalPointsPerFrame();
   if (pointCount == 0 || pointCount > MAX_POINTCLOUD_NUM)
   {

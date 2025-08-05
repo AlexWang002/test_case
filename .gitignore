@@ -2,6 +2,7 @@ build*
 out*
 .vscode
 .vs
+.marscode
 CMake*.json
 arm_test
 rs_lidar_sdk*

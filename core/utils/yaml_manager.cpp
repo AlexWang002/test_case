@@ -46,7 +46,7 @@ namespace robosense::lidar::yaml {
 /******************************************************************************/
 Difop2 difop2_inner_param;
 AlgoSwitch algo_switch_param;
-PcdParam pcd_saving_param;
+TestParam demo_test_param;
 std::vector<ThreadConfig> thread_params;
 
 /******************************************************************************/
@@ -66,6 +66,15 @@ inline uint16_t swapEndianU16(uint16_t value) noexcept {
 /******************************************************************************/
 /*                      Definition of exported functions                      */
 /******************************************************************************/
+bool readAlgoYaml(const std::string& path) {
+    AlgoYaml algo_yaml_obj(path);
+    ErrorCode result = algo_yaml_obj.parseYamlFile();
+    if (ErrorCode::SUCCESS != result) {
+        return false;
+    }
+
+    return true;
+}
 
 /******************************************************************************/
 /*          Definition of public functions of classes or templates             */
@@ -113,11 +122,17 @@ ErrorCode AlgoYaml::parseYamlFile() {
 
         if (ErrorCode::SUCCESS == result) {
             algo_switch_param = algo_param_;
+            algo_switch_param.data_valid = true;
+        } else {
+            algo_switch_param.data_valid = false;
         }
-        result = parsePcdParam();
+        result = parseTestParam();
 
         if (ErrorCode::SUCCESS == result) {
-            pcd_saving_param = pcd_param_;
+            demo_test_param = test_param_;
+            demo_test_param.data_valid = true;
+        } else {
+            demo_test_param.data_valid = false;
         }
     }  catch (const YAML::BadFile& e) {
         LogError("Error opening file: {}", e.what());
@@ -221,6 +236,7 @@ ErrorCode DifopYaml::checkYamlData() {
 
     if (!crc32::verify_crc32(all_bytes, crc32_)) {
         LogError("CRC32 value verify fault!");
+        difop2_param_.data_valid = false;
         return ErrorCode::CRC32_VERIFY_FAULT;
     }
     difop2_param_.data_valid = true;
@@ -251,7 +267,7 @@ ErrorCode AlgoYaml::parseAlgoSwitchData() {
     return ErrorCode::SUCCESS;
 }
 
-ErrorCode AlgoYaml::parsePcdParam() {
+ErrorCode AlgoYaml::parseTestParam() {
     std::string file {input_yaml_path_};
 
     if((file.size() < 6) || (0 != file.compare(file.size() - 4, 4, "yaml"))) {
@@ -264,12 +280,12 @@ ErrorCode AlgoYaml::parsePcdParam() {
     }
     YAML::Node node = YAML::LoadFile(file);
 
-    if ((!node.IsMap()) || (!node["PCD_Param"])) {
-        LogError("Feild 'PCD_Param' NOT in yaml file.");
+    if ((!node.IsMap()) || (!node["Test_Param"])) {
+        LogError("Feild 'Test_Param' NOT in yaml file.");
         return ErrorCode::PARSE_YAML_NODE_FAILED;
     }
 
-    pcd_param_ = node["PCD_Param"].as<PcdParam>();
+    test_param_ = node["Test_Param"].as<TestParam>();
 
     return ErrorCode::SUCCESS;
 }
@@ -551,8 +567,8 @@ struct convert<robosense::lidar::yaml::AlgoSwitch> {
 };
 
 template<>
-struct convert<robosense::lidar::yaml::PcdParam> {
-    static bool decode(const Node& node, robosense::lidar::yaml::PcdParam& rhs) {
+struct convert<robosense::lidar::yaml::TestParam> {
+    static bool decode(const Node& node, robosense::lidar::yaml::TestParam& rhs) {
         if ((!node.IsMap()) ||
             (!node["enable_save_pcd"]) ||
             (!node["save_path"])) {
@@ -566,6 +582,54 @@ struct convert<robosense::lidar::yaml::PcdParam> {
         }
         try {   // decode the data of save_path
             rhs.save_path = node["save_path"].as<std::string>();
+        } catch (const std::exception& e) {
+            LogError(e.what());
+            return false;
+        }
+        try {   // decode the data of enable_cpu_monitor
+            rhs.enable_cpu_monitor = node["enable_cpu_monitor"].as<bool>();
+        } catch (const std::exception& e) {
+            LogError(e.what());
+            return false;
+        }
+        try {   // decode the data of enable_print_difop2
+            rhs.enable_print_difop2 = node["enable_print_difop2"].as<bool>();
+        } catch (const std::exception& e) {
+            LogError(e.what());
+            return false;
+        }
+        try {   // decode the data of enable_mipi_crc_check
+            rhs.enable_mipi_crc_check = node["enable_mipi_crc_check"].as<bool>();
+        } catch (const std::exception& e) {
+            LogError(e.what());
+            return false;
+        }
+        try {   // decode the data of enable_difop2_crc_check
+            rhs.enable_difop2_crc_check = node["enable_difop2_crc_check"].as<bool>();
+        } catch (const std::exception& e) {
+            LogError(e.what());
+            return false;
+        }
+        try {   // decode the data of print_difop2_cycle
+            rhs.print_difop2_cycle = node["print_difop2_cycle"].as<uint32_t>();
+        } catch (const std::exception& e) {
+            LogError(e.what());
+            return false;
+        }
+        try {   // decode the data of cpu_monitor_cycle
+            rhs.cpu_monitor_cycle = node["cpu_monitor_cycle"].as<uint32_t>();
+        } catch (const std::exception& e) {
+            LogError(e.what());
+            return false;
+        }
+        try {   // decode the data of difop2_crc_check_cycle
+            rhs.difop2_crc_check_cycle = node["difop2_crc_check_cycle"].as<uint32_t>();
+        } catch (const std::exception& e) {
+            LogError(e.what());
+            return false;
+        }
+        try {   // decode the data of cpu_threshold
+            rhs.cpu_threshold = node["cpu_threshold"].as<double>();
         } catch (const std::exception& e) {
             LogError(e.what());
             return false;

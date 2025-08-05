@@ -80,9 +80,17 @@ struct AlgoSwitch { // 算法开关
     bool data_valid {false};
 };
 
-struct PcdParam {
+struct TestParam {
     bool enable_save_pcd {false};
     std::string save_path;
+    bool enable_cpu_monitor {false};
+    bool enable_print_difop2 {false};
+    bool enable_mipi_crc_check {false};
+    bool enable_difop2_crc_check {false};
+    uint32_t print_difop2_cycle {std::numeric_limits<uint32_t>::max()};
+    uint32_t cpu_monitor_cycle {std::numeric_limits<uint32_t>::max()};
+    uint32_t difop2_crc_check_cycle {std::numeric_limits<uint32_t>::max()};
+    double cpu_threshold {100.0};
 
     bool data_valid {false};
 };
@@ -148,11 +156,11 @@ class AlgoYaml : YamlAbstract<AlgoSwitch> {
 
   private:
     ErrorCode parseAlgoSwitchData();
-    ErrorCode parsePcdParam();
+    ErrorCode parseTestParam();
 
   private:
     AlgoSwitch algo_param_;
-    PcdParam pcd_param_;
+    TestParam test_param_;
 };
 
 
@@ -175,7 +183,7 @@ class ThreadConfigYaml : YamlAbstract<std::vector<ThreadConfig>> {
 /******************************************************************************/
 extern Difop2 difop2_inner_param;
 extern AlgoSwitch algo_switch_param;
-extern PcdParam pcd_saving_param;
+extern TestParam demo_test_param;
 extern std::vector<ThreadConfig> thread_params;
 
 /******************************************************************************/
@@ -185,6 +193,7 @@ extern std::vector<ThreadConfig> thread_params;
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
 /******************************************************************************/
+extern bool readAlgoYaml(const std::string& path);
 
 } // namespace robosense::lidar::yaml
 

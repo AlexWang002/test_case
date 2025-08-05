@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 
 
 install(FILES   ${CMAKE_SOURCE_DIR}/README.md
-                ${CMAKE_SOURCE_DIR}/middle_lidar_inner_para.yaml
+                ${CMAKE_SOURCE_DIR}/config/middle_lidar_inner_para.yaml
     DESTINATION ${INSTALL_DIR}
 )
 install(FILES   ${CMAKE_SOURCE_DIR}/api/lidar_sdk_api.h

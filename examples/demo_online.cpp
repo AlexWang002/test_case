@@ -21,6 +21,9 @@
 #include <thread>
 #include <unistd.h>
 #include <vector>
+#include "cpu_load.h"
+#include "crc32.h"
+#include "difop2.h"
 
 using namespace std::chrono_literals;
 using namespace dimw::sensor_access;
@@ -34,6 +37,9 @@ bool save_raw_data_ = false;
 std::string save_path_ = "./";
 int32_t test_num_ = 0;
 int32_t raw_data_file_num_max_ = 0;
+
+uint8_t save_count {7};
+uint64_t file_counter {0};
 
 std::shared_ptr<dimw::sensor_access::SensorIpcClient> lidar_client_ = nullptr;
 SyncQueue<LidarPointCloud*> stuffed_cloud_queue_(500, [](LidarPointCloud* ptr) {
@@ -493,10 +499,10 @@ LidarSdkErrorCode deviceInfoCallback(LidarSensorIndex sensor,
     } else {
         recv_time_interval = current_recv_device_info_timestamp - last_recv_device_info_timestamp;
         last_recv_device_info_timestamp = current_recv_device_info_timestamp;
-        
+
         // 计算接收帧率，添加异常处理
         float instant_recv_fps = (recv_time_interval > 0) ? 1000000.0f / recv_time_interval : 0.0f;
-        
+
         // 初始化或更新EMA
         if (ema_recv_fps == 0.0f) {
             ema_recv_fps = instant_recv_fps;
@@ -507,8 +513,8 @@ LidarSdkErrorCode deviceInfoCallback(LidarSensorIndex sensor,
 
 
     // 输出平滑后的帧率
-    std::cout << "Recv FPS: " << std::fixed << std::setprecision(2) << ema_recv_fps 
-            << " Hz, Recv Interval: " << recv_time_interval 
+    std::cout << "Recv FPS: " << std::fixed << std::setprecision(2) << ema_recv_fps
+            << " Hz, Recv Interval: " << recv_time_interval
             << " us," << std::endl;
 #endif
     return LidarSdkErrorCode::LIDAR_SDK_SUCCESS;
@@ -632,8 +638,11 @@ LidarSdkErrorCode writeSensorI2C(LidarSensorIndex sensor,
 }
 
 void saveRawData(const void* mipi_data, uint32_t length, int32_t fileCounter) {
-    std::string filename =
-        save_path_ + "/lidar_data_" + std::to_string(fileCounter) + ".bin";
+    // std::string filename =
+        // save_path_ + "/lidar_data_" + std::to_string(fileCounter) + ".bin";
+    std::string filename = save_path_ + "pc_bin/lidar_data_" +
+                            std::to_string(fileCounter) + "_" +
+                            std::to_string(save_count) + ".bin";
 
     std::ofstream outFile(filename, std::ios::binary);
     if (outFile.is_open()) {
@@ -713,6 +722,49 @@ void getDataFromOsApi(LidarSdkInterface* lidar_interface) {
         buf->data = frame->data;
         buf->len = frame->size;
         buf->reservedPtr = frame;
+
+        // CRC test
+        if (yaml::demo_test_param.data_valid && yaml::demo_test_param.enable_mipi_crc_check) {
+            uint8_t* lidar_data = frame->data;
+            size_t adc_data_len = frame->size;
+            uint32_t calculate_crc = crc32::calculate_crc32(lidar_data, adc_data_len - 4);
+            uint32_t expected_crc = lidar_data[adc_data_len - 1] << 24 |
+                                    lidar_data[adc_data_len - 2] << 16 |
+                                    lidar_data[adc_data_len - 3] << 8 |
+                                    lidar_data[adc_data_len - 4];
+            static uint32_t right_cnt {0};
+            static uint32_t error_cnt {0};
+
+            if (calculate_crc != expected_crc) {
+                ++error_cnt;
+            } else {
+                ++right_cnt;
+            }
+
+            if (0 == (right_cnt + error_cnt) % 600) {
+                std::cout << std::dec << "right count: " << right_cnt << ", error count: " << error_cnt <<
+                                        ", error rate: " << static_cast<double>(error_cnt) / static_cast<double>(error_cnt + right_cnt) << std::endl;
+                std::cout << std::endl;
+            }
+        }
+
+        if (yaml::demo_test_param.data_valid && yaml::demo_test_param.enable_print_difop2) {
+            uint8_t* difop_data = frame->data + utils::MSOP_LEN;
+            std::memcpy(utils::difop2_mipi_data.data(), difop_data, utils::DIFOP_LEN);
+        }
+
+        // Save point cloud frame, when the CPU usage of algorithm is overloaded.
+        uint16_t msop_pkt_seq = frame->data[4] << 8 | frame->data[5];
+
+        if (utils::g_save_bin && msop_pkt_seq == 1 && save_count == 7) {
+            save_count = 1;
+            file_counter = utils::fileCounter;
+            utils::fileCounter++;
+        }
+        if (save_count < 7) {
+            saveRawData(buf->data, buf->len, file_counter);
+            save_count++;
+        }
 #if 0
      std::cout << "injectAdc:" << buf << " , frame:" << frame << " buf->data :" << buf->data << " buf->bufObj: " << buf->bufObj
                << " buf->reservedPtr: " << buf->reservedPtr << " buf->frameIndex: " << buf->frameIndex
@@ -725,10 +777,10 @@ void getDataFromOsApi(LidarSdkInterface* lidar_interface) {
                // 新增：用于平滑计算的指数移动平均(EMA)
                static float ema_inject_fps = 0.0f;
                static const float ALPHA = 0.2f;   // EMA 平滑因子，取值范围 [0,1]
-               
+
                uint64_t current_inject_timestamp = getTimeNowPhc();
                uint64_t inject_time_interval = 0;
-               
+
                if (is_first_inject) {
                    is_first_inject = false;
                    // 首次接收数据，初始化时间戳，不计算帧率
@@ -737,10 +789,10 @@ void getDataFromOsApi(LidarSdkInterface* lidar_interface) {
                } else {
                    inject_time_interval = current_inject_timestamp - last_inject_timestamp;
                    last_inject_timestamp = current_inject_timestamp;
-                   
+
                    // 计算接收帧率，添加异常处理
                    float instant_inject_fps = (inject_time_interval > 0) ? 1000000.0f / inject_time_interval : 0.0f;
-                   
+
                    // 初始化或更新EMA
                    if (ema_inject_fps == 0.0f) {
                        ema_inject_fps = instant_inject_fps;
@@ -748,11 +800,10 @@ void getDataFromOsApi(LidarSdkInterface* lidar_interface) {
                        ema_inject_fps = ALPHA * instant_inject_fps + (1.0f - ALPHA) * ema_inject_fps;
                    }
                }
-               
-               
+
                // 输出平滑后的帧率
-               std::cout << "Inject FPS: " << std::fixed << std::setprecision(2) << ema_inject_fps 
-                         << " Hz, Inject Interval: " << inject_time_interval 
+               std::cout << "Inject FPS: " << std::fixed << std::setprecision(2) << ema_inject_fps
+                         << " Hz, Inject Interval: " << inject_time_interval
                          << " us," << std::endl;
 #endif
         mipi_frame_cnt++;
@@ -793,6 +844,8 @@ void printHelp() {
 }
 
 int32_t main(int32_t argc, char* argv[]) {
+  robosense::lidar::utils::main_pid = getpid();
+  std::cout << "==================== main tid:" << std::dec << robosense::lidar::utils::main_pid << std::endl;
     std::cout << "Compiled on " << __DATE__ << " at " << __TIME__ << std::endl;
     for (int32_t i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -871,9 +924,9 @@ int32_t main(int32_t argc, char* argv[]) {
     const char* version = lidar_interface->getLidarSdkVersion();
     std::cout << "The sdk version is " << version << std::endl;
 
-    if (!save_pcd_ && (true == yaml::pcd_saving_param.data_valid)) {
-        save_pcd_ = yaml::pcd_saving_param.enable_save_pcd;
-        save_path_ = yaml::pcd_saving_param.save_path;
+    if (!save_pcd_ && yaml::demo_test_param.data_valid) {
+        save_pcd_ = yaml::demo_test_param.enable_save_pcd;
+        save_path_ = yaml::demo_test_param.save_path;
         std::cout << "save_pcd_ = " << save_pcd_ << std::endl;
         std::cout << "pcd_save_path_ = " << save_path_ << std::endl;
     }
@@ -940,8 +993,32 @@ int32_t main(int32_t argc, char* argv[]) {
         std::cout << "data: " << *(uint16_t*)data << ", data_len: " << data_len
                   << ", nrc: " << (uint16_t)nrc << std::endl;
 
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::string algo_yaml_path {"./algorithm_switch.yaml"};
+        std::uint8_t interval {0};
+        (void)yaml::readAlgoYaml(algo_yaml_path);
+
+        std::thread cpu_usage_thread([&]() {
+            pthread_setname_np(pthread_self(), "RS-CpuMonitor");
+            utils::monitThreads();
+        });
+
+        std::thread difop2_thread([&]() {
+            pthread_setname_np(pthread_self(), "RS-Difop2Monitor");
+            utils::compareDifop2();
+        });
+
         while (true) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (++interval < 5) {
+                continue;
+            }
+            interval = 0;
+            (void)yaml::readAlgoYaml(algo_yaml_path);
+
+            if (utils::algo_threshold != yaml::demo_test_param.cpu_threshold) {
+                utils::algo_threshold = yaml::demo_test_param.cpu_threshold;
+            }
         }
         lidar_interface->stop();
     }

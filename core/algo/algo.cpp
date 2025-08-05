@@ -27,12 +27,13 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.4 | 2025-07-14 | Move ground fit to thread 0 |
- * 
+ *
  ******************************************************************************/
 
 /******************************************************************************/
 /*                         Include dependant headers                          */
 /******************************************************************************/
+#include "cpu_load.h"
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -400,7 +401,7 @@ int AlgoFunction::applyFilter(int* data, int length, int order)
 
 /*******************************************************************************
  * \brief  Horizontal smooth processing
- * 
+ *
  * \param[in] hor_smooth_col: the column of the horizontal smooth
  *                Range: 0 - 759. Accuracy: 1.
  * \param[in] hor_smooth_col_buffer: the buffer index of the horizontal smooth
@@ -628,7 +629,7 @@ void AlgoFunction::hSmooth(int hor_smooth_col,
 
 /*******************************************************************************
  * \brief  Vertical smooth processing
- * 
+ *
  * \param[in] ver_smooth_col: the column of the vertical smooth
  *                Range: 0 - 759. Accuracy: 1.
  * \param[in] ver_smooth_col_buffer: the buffer index of the vertical smooth
@@ -1029,7 +1030,7 @@ void AlgoFunction::vSmooth(int ver_smooth_col, int ver_smooth_col_buffer)
 
 /*******************************************************************************
  * \brief  Rebuild distance and reflectance function
- * 
+ *
  * \param[in] dist_tmp1: distance neighborhood of wave 0
  *                Range: 0 - 2^32-1. Accuracy: 1.
  * \param[in] dist_tmp2: distance neighborhood of wave 1
@@ -1455,7 +1456,7 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
 
 /*******************************************************************************
  * \brief  Up sample distance and reflectance main function
- * 
+ *
  * \param[in] up_smpl_col: column index of sample point
  *                Range: 0 - 759. Accuracy: 1.
  * \param[in] up_smpl_col_buffer: column index of sample point in buffer
@@ -1688,7 +1689,7 @@ void AlgoFunction::processUpSample(int up_smpl_col,
 
 /*******************************************************************************
  * \brief  Take the remainder of a number
- * 
+ *
  * \param[in] a : original input data
  *                Range: 0 - 2^32-1. Accuracy: 1.
  * \param[in] b : remainder input data
@@ -1701,7 +1702,7 @@ inline int AlgoFunction::matlabMod(int a, int b){
 
 /*******************************************************************************
  * \brief  Frame filter main function
- * 
+ *
  * \param[in] filter_col: column index of sample point
  *                 Range: 0 - 759. Accuracy: 1.
  * \param[in] filter_col_buffer: buffer index of sample point
@@ -1944,7 +1945,7 @@ void AlgoFunction::frameFilter(int filter_col,
 
 /*******************************************************************************
  * \brief  Denoise pre-processing
- * 
+ *
  * \param[in] denoise_col: column index of sample point
  *                 Range: 0 - 759. Accuracy: 1.
  * \param[in] denoise_col_buffer: buffer index of sample point
@@ -2024,7 +2025,7 @@ void AlgoFunction::denoisePreProc(int denoise_col,
 
 /*******************************************************************************
  * \brief  Denoise main process function
- * 
+ *
  * \param[in] denoise_col_buffer: buffer index of sample point
  *                 Range: 0 - 10. Accuracy: 1.
  * \param[in] denoise_col_valid: valid index of sample point
@@ -2157,7 +2158,7 @@ void AlgoFunction::denoiseProcessing(int denoise_col_buffer,
 
 /*******************************************************************************
  * \brief  Matrix calculate inverse function
- * 
+ *
  * \param[in] mat: input matrix
  *              Range: N/A. Accuracy: N/A.
  * \param[out] inv: output inverse matrix
@@ -2165,26 +2166,26 @@ void AlgoFunction::denoiseProcessing(int denoise_col_buffer,
 *******************************************************************************/
 void AlgoFunction::matrixInverse(const Matrix3x3& mat, Matrix3x3& inv) {
     // 计算行列式
-    float det = mat(0,0)*(mat(1,1)*mat(2,2) - mat(1,2)*mat(2,1)) 
-              - mat(0,1)*(mat(1,0)*mat(2,2) - mat(1,2)*mat(2,0)) 
+    float det = mat(0,0)*(mat(1,1)*mat(2,2) - mat(1,2)*mat(2,1))
+              - mat(0,1)*(mat(1,0)*mat(2,2) - mat(1,2)*mat(2,0))
               + mat(0,2)*(mat(1,0)*mat(2,1) - mat(1,1)*mat(2,0));
-    
+
     if (std::fabs(det) < 1e-6f) {
         // 不可逆时返回单位矩阵
         for (int i = 0; i < 9; i++) inv.data[i] = (i % 4 == 0) ? 1.0f : 0.0f;
         return;
     }
-    
+
     float inv_det = 1.0f / det;
-    
+
     inv(0,0) = (mat(1,1)*mat(2,2) - mat(1,2)*mat(2,1)) * inv_det;
     inv(0,1) = (mat(0,2)*mat(2,1) - mat(0,1)*mat(2,2)) * inv_det;
     inv(0,2) = (mat(0,1)*mat(1,2) - mat(0,2)*mat(1,1)) * inv_det;
-    
+
     inv(1,0) = (mat(1,2)*mat(2,0) - mat(1,0)*mat(2,2)) * inv_det;
     inv(1,1) = (mat(0,0)*mat(2,2) - mat(0,2)*mat(2,0)) * inv_det;
     inv(1,2) = (mat(0,2)*mat(1,0) - mat(0,0)*mat(1,2)) * inv_det;
-    
+
     inv(2,0) = (mat(1,0)*mat(2,1) - mat(1,1)*mat(2,0)) * inv_det;
     inv(2,1) = (mat(0,1)*mat(2,0) - mat(0,0)*mat(2,1)) * inv_det;
     inv(2,2) = (mat(0,0)*mat(1,1) - mat(0,1)*mat(1,0)) * inv_det;
@@ -2192,7 +2193,7 @@ void AlgoFunction::matrixInverse(const Matrix3x3& mat, Matrix3x3& inv) {
 
 /*******************************************************************************
  * \brief  Matrix calculate vector mutilply function
- * 
+ *
  * \param[in] A: input matrix
  *              Range: N/A. Accuracy: N/A.
  * \param[in] v: input vector
@@ -2209,7 +2210,7 @@ void AlgoFunction::matVecMulti(const Matrix3x3& A, const Vector3& v, Vector3& re
 
 /*******************************************************************************
  * \brief  Select ground fit main function
- * 
+ *
  * \param[out] best_model: output best model result
  *              Range: N/A. Accuracy: N/A.
 *******************************************************************************/
@@ -2222,12 +2223,12 @@ void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
     int idx;
     int next_idx;
     int diff_idx;
-    
+
     // 差分矩阵
     int dist_diff[GND_LEN];
     int X_diff[GND_LEN];
     int Z_diff[GND_LEN];
-    
+
     // 掩码矩阵
     bool near_mask[GND_LEN];
     bool near_down[GND_ORI_LEN] = {false};
@@ -2248,7 +2249,7 @@ void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
             dist_diff[idx] = dist_wave0_buffer6[next_idx] - dist_wave0_buffer6[idx];
             X_diff[idx] = X_buffer6[next_idx] - X_buffer6[idx];
             Z_diff[idx] = Z_buffer6[next_idx] - Z_buffer6[idx];
-            
+
             // 近邻掩码
             near_mask[idx] = std::abs(dist_diff[idx]) < dist_th;
             near_down[idx] = near_mask[idx];       // 下邻点
@@ -2309,10 +2310,10 @@ void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
                 b_square[idx] = norm_cur2neib_square[idx];
                 b[idx] = norm_cur2neib[idx];
             }
-            
+
             // 计算cos_theta (避免除以零)
             if (a[idx] > 1e-6 && b[idx] > 1e-6) {
-                cos_theta[idx] = (a_square[idx] + b_square[idx] - norm_neib_square[idx]) 
+                cos_theta[idx] = (a_square[idx] + b_square[idx] - norm_neib_square[idx])
                                  / (2.0f * a[idx] * b[idx]);
             } else {
                 cos_theta[idx] = 1.0f; // 无效值
@@ -2327,11 +2328,11 @@ void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
                 }
             }
 
-            mask_roi[idx] = (X_buffer6[idx] > 0) && 
+            mask_roi[idx] = (X_buffer6[idx] > 0) &&
                            (X_buffer6[idx] < 10000) &&  // 50*200 = 10000
                            (std::fabs(Y_buffer6[idx]) < 2000) &&   // 10*200 = 2000
                            (std::fabs(Z_buffer6[idx] + 300) < 600); // 3*200=600
-            
+
             if (mask_roi[idx]) cnt_roi++;
         }
     }
@@ -2341,24 +2342,24 @@ void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
     for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
             int idx = r * cols + c;
-            mask_ground_pre[idx] = mask_roi[idx] && 
-                                  near_down[idx] && 
-                                  near_up[idx] && 
-                                  parallel_down[idx] && 
-                                  parallel_up[idx] && 
+            mask_ground_pre[idx] = mask_roi[idx] &&
+                                  near_down[idx] &&
+                                  near_up[idx] &&
+                                  parallel_down[idx] &&
+                                  parallel_up[idx] &&
                                   cos_theta[idx] < -0.86f;
         }
     }
-    
+
     // 形态学腐蚀 (5x5内核)
     bool mask_ground[GND_ORI_LEN] = {false};
     const int kernel_radius = 2; // 5x5内核
-    
+
     for (int r = kernel_radius; r < rows - kernel_radius; r++) {
         for (int c = kernel_radius; c < cols - kernel_radius; c++) {
             int idx = r * cols + c;
             if (!mask_ground_pre[idx]) continue;
-            
+
             bool all_ones = true;
             for (int i = -kernel_radius; i <= kernel_radius && all_ones; i++) {
                 for (int j = -kernel_radius; j <= kernel_radius; j++) {
@@ -2372,13 +2373,13 @@ void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
             mask_ground[idx] = all_ones;
         }
     }
-    
+
     // 收集地面点样本
     int x_sample[GND_ORI_LEN / 2] = {0};
     int y_sample[GND_ORI_LEN / 2] = {0};
     int z_sample[GND_ORI_LEN / 2] = {0};
     int cnt_sample = 0;
-    
+
     for (int r = 0; r < rows; r++) {
         for (int c = 0; c < cols; c++) {
             int idx = r * cols + c;
@@ -2390,28 +2391,28 @@ void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
             }
         }
     }
-    
+
     // 默认模型 (没有足够点时的返回值)
     best_model[0] = 0.0f;
     best_model[1] = 0.0f;
     best_model[2] = roi_z_center;
-    
+
     // 样本不足直接返回
     if (cnt_sample < 100) {
         return;
     }
-    
+
     // 构建线性系统: X_mat * model = z_vec
     // 其中 X_mat = [x, y, 1], model = [a, b, c], z_vec = z
     Matrix3x3 A = {0};
     Vector3 b_vec = {0};
-    
+
     // 计算 X_mat'*X_mat 和 X_mat'*z_vec
     for (size_t i = 0; i < cnt_sample; i++) {
         float x = x_sample[i];
         float y = y_sample[i];
         float z = z_sample[i];
-        
+
         // 更新 A = X_mat' * X_mat
         A(0,0) += x * x;
         A(0,1) += x * y;
@@ -2419,51 +2420,51 @@ void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
         A(1,1) += y * y;
         A(1,2) += y;
         A(2,2) += 1;
-        
+
         // 更新 b_vec = X_mat' * z_vec
         b_vec[0] += x * z;
         b_vec[1] += y * z;
         b_vec[2] += z;
     }
-    
+
     // 对称部分
     A(1,0) = A(0,1);
     A(2,0) = A(0,2);
     A(2,1) = A(1,2);
-    
+
     // 求解线性系统: A * model = b_vec
     Matrix3x3 A_inv;
     matrixInverse(A, A_inv);
     matVecMulti(A_inv, b_vec, best_model);
-    
+
     // 残差分析
     int best_cnt = 0;
     const float residual_threshold = 10.0f; // 0.05*200 = 10
-    
+
     for (size_t i = 0; i < cnt_sample; i++) {
-        float z_pred = best_model[0] * x_sample[i] + 
-                       best_model[1] * y_sample[i] + 
+        float z_pred = best_model[0] * x_sample[i] +
+                       best_model[1] * y_sample[i] +
                        best_model[2];
         float residual = std::fabs(z_sample[i] - z_pred);
         if (residual < residual_threshold) {
             best_cnt++;
         }
     }
-    
+
     // 检查地面点比例
     if (best_cnt < cnt_roi * 0.2f) {
         best_model[0] = 0.0f;
         best_model[1] = 0.0f;
         best_model[2] = roi_z_center;
     }
-    
+
     // return best_model;
 }
 
 // 高性能环形索引计算器（适配MATLAB的1-based索引模式）
 /*******************************************************************************
  * \brief  Calculate circular index of the buffer
- * 
+ *
  * \param[in] rear: rear index of the buffer
  *              Range: N/A. Accuracy: N/A.
  * \param[in] size: size of the buffer
@@ -2476,7 +2477,7 @@ inline void AlgoFunction::circularCalcIdx(int& rear, int size)
 
 /*******************************************************************************
  * \brief  Calculate height of the buffer
- * 
+ *
  * \param[in] pu16Dist: distance buffer
  *                 Range: 0 - 2^32-1. Accuracy: 1.
  * \param[in] col: column index of the buffer
@@ -2507,7 +2508,7 @@ void AlgoFunction::highCalcFunc(uint16_t *pu16Dist, int col, int* fit_high)
 
 /*******************************************************************************
  * \brief  Final decision of the algorithm, delete points with mask
- * 
+ *
  * \param[in] col_idx: column index of the buffer
  *                 Range: 0 - 759. Accuracy: 1.
  * \param[in] pu16Dist: distance buffer
@@ -2666,7 +2667,7 @@ void AlgoFunction::algoFrameChange(void)
 
 /*******************************************************************************
  * \brief  Algorithm main function
- * 
+ *
  * \param[in] col_idx: column index of the buffer
  *                 Range: 0 - 759. Accuracy: 1.
  * \param[in] pstFrameBuffer: frame buffer
@@ -2679,8 +2680,15 @@ int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, in
     int proc_col = -1;
     switch (task_id)
     {
-        case FILTER_ALGO:
-        {
+        case FILTER_ALGO: {
+
+        static bool first{true};
+        if (first) {
+            pid_t tid = gettid();
+            std::cout << "==================== filter algo tid:" << std::dec << tid << std::endl;
+            utils::addThread(tid, "pcAlgoMainFunc");
+            first = false;
+        }
         circularCalcIdx(rear1, buffer_size_filter);
         circularCalcIdx(filter_rear, filter_valid_size);
         circularCalcIdx(empty_rear, empty_size);
@@ -2847,8 +2855,15 @@ int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, in
             proc_col = VIEW_W - 1;
         }
         }break;
-        case DENOISE_ALGO:
-        {
+        case DENOISE_ALGO: {
+        static bool first{true};
+
+        if (first) {
+            pid_t tid = gettid();
+            std::cout << "==================== denoise algo tid:" << std::dec << tid << std::endl;
+            utils::addThread(tid, "Denoise_Algo");
+            first = false;
+        }
         circularCalcIdx(rear4, buffer_size_denoise);
         circularCalcIdx(basic_rear, denoise_valid_size);
 

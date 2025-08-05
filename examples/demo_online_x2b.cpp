@@ -752,9 +752,9 @@ int main(int argc, char* argv[]) {
     const char* version = lidar_interface->getLidarSdkVersion();
     std::cout << "The sdk version is " << version << std::endl;
 
-    if (!save_pcd_ && (true == yaml::pcd_saving_param.data_valid)) {
-        save_pcd_ = yaml::pcd_saving_param.enable_save_pcd;
-        save_path_ = yaml::pcd_saving_param.save_path;
+    if (!save_pcd_ && (true == yaml::demo_test_param.data_valid)) {
+        save_pcd_ = yaml::demo_test_param.enable_save_pcd;
+        save_path_ = yaml::demo_test_param.save_path;
         std::cout << "save_pcd_ = " << save_pcd_ << std::endl;
         std::cout << "pcd_save_path_ = " << save_path_ << std::endl;
     }
