@@ -3485,6 +3485,9 @@ int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, in
 
     return proc_col;
 }
-
+void AlgoFunction::denoiseMaskMemcpy(uint32_t dst_idx, uint8_t *src, uint32_t size)
+{
+    memcpy((uint8_t *)denoise_mask_out_frm[dst_idx], src, size);
+}
 }   // namespace lidar
 }   // namespace robosense
