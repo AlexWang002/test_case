@@ -311,7 +311,8 @@ void DecoderRSEMX::setPacketHeader(const RSEMXMsopPkt& pkt) {
     point_cloud_->frame_seq = ntohl(pkt.header.frame_cnt);
 
     if (difop2_received_) {
-        point_cloud_->lidar_parameter = difop2_;
+        point_cloud_->lidar_parameter = malloc(sizeof(difop2_));
+        memcpy(point_cloud_->lidar_parameter, difop2_, sizeof(difop2_));
         point_cloud_->lidar_parameter_length = sizeof(RSEMXDifop2Pkt);
     } else {
         LogError("difop2 data not received");

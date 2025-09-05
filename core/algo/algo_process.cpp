@@ -418,20 +418,20 @@ void CloudManager::algoProcess(int32_t task_id)
                     if (recvEnoughData(col, frame_buffer)) {
                         auto start = std::chrono::steady_clock::now();
                         /*PVA以整帧为单位执行denoise算法*/
-                        if(task_id == 0){
-                            if (col == 759) {
-                                /*拷贝整帧数据到denoise算法的PVA buffer中*/
-                                memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
+                        // if(task_id == 0){
+                        //     if (col == 759) {
+                        //         /*拷贝整帧数据到denoise算法的PVA buffer中*/
+                        //         memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
 
-                                auto denoise_start = std::chrono::steady_clock::now();
-                                denoiseProcPva();
-                                auto denoise_end = std::chrono::steady_clock::now();
-                                auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
-                                // std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
+                        //         auto denoise_start = std::chrono::steady_clock::now();
+                        //         denoiseProcPva();
+                        //         auto denoise_end = std::chrono::steady_clock::now();
+                        //         auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
+                        //         // std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
 
-                                algo_func_.denoiseMaskMemcpy(0, (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
-                            }
-                        }
+                        //         algo_func_.denoiseMaskMemcpy(0, (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                        //     }
+                        // }
 
                         if(task_id == 1){
                             if(col == 759){
@@ -479,6 +479,8 @@ void CloudManager::algoProcess(int32_t task_id)
                 if (!res) {
                     LogError("ERROR: algoProcess thread:{}, cv_calc_ wait timeout", task_id);
                 }
+            }
+        }
         if (task_id == 0) {
             denoiseDataFree();
         }
