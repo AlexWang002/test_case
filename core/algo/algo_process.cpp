@@ -293,11 +293,13 @@ void CloudManager::algoFinalProcess(void)
                 cv_calc_.notify_all();
             };
 
+            //std::cout << "wait for all algo thread done !-------" << std::endl;
             if (sendEnoughData(algo_func_.VIEW_W - 1)) {
                 for (int32_t col = 0; col < algo_func_.VIEW_W + 1; ++col) {
+                    //td::cout << "col: " << col << std::endl;
                     int32_t surface_id = frame_buffer->surface_id.load();
                     auto start = std::chrono::steady_clock::now();
-                    algo_func_.algoFianlDecision(col, dist, ref, frame_buffer);
+                    //algo_func_.algoFianlDecision(col, dist, ref, frame_buffer);
                     auto end = std::chrono::steady_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
                     total_time += duration;
@@ -351,7 +353,7 @@ void CloudManager::algoFinalProcess(void)
                 //发生丢包之后，先清0当前帧数据，然后切换到下一帧
                 frame_buffer->frame_droped.store(false);
                 resetAndSwitchFrame();
-                break;
+                //break;
             }   
             
         #ifdef ALGO_WRITE_FILE
@@ -402,7 +404,7 @@ void CloudManager::algoProcess(int32_t task_id)
                     total_time += duration;
                 } else {
                     isLostPkt = true;
-                    break;
+                    //break;
                 }
                 if (total_time.count() > kCalcTimeout_) {
                     LogError("ERROR: algoProcess calc time out :{} thread:{}", total_time.count(), task_id);

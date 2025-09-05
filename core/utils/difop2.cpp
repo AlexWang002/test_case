@@ -83,6 +83,7 @@ void printHex(const uint8_t* data, size_t size) {
  * \brief Compare difop2 data.
  */
 void compareDifop2() {
+    std::cout << "compareDifop2---------" << std::endl;
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(yaml::demo_test_param.print_difop2_cycle));
 

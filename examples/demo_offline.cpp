@@ -354,6 +354,30 @@ void processPointCloud(void) {
 }
 
 /*******************************************************************************
+ * \brief Save the raw data to a bin file.
+ * \param[in] kMipiData : raw data
+ *                Range: 0 - 2^32-1. Accuracy: 1.
+ * \param[in] length : data length
+ *                Range: 0 - 2^32-1. Accuracy: 1.
+ * \param[in] fileCounter : file counter
+ *                Range: -2^31 - 2^31-1. Accuracy: 1.
+ ******************************************************************************/
+void saveRawData(const void* kMipiData, uint32_t length, int32_t fileCounter) {
+    std::string filename = "./pc_bin/lidar_data_" +
+                            std::to_string(fileCounter) + ".bin";
+
+    std::ofstream outFile(filename, std::ios::binary);
+    if (outFile.is_open()) {
+        outFile.write(reinterpret_cast<const char*>(kMipiData), length);
+        outFile.close();
+        std::cout << "Saved data to: " << filename << ", (size: " << length
+                  << " bytes) " << std::endl;
+    } else {
+        std::cout << "Failed to open file: " << filename << std::endl;
+    }
+}
+
+/*******************************************************************************
  * \brief Callback of point cloud process and verify point cloud data.
  * \param[in] sensor : Sensor index
  *                Range: 6/7/8. Accuracy: 1.
@@ -417,12 +441,12 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor,
                   << ", frame_sync:"
                   << static_cast<uint32_t>(kLidarCloud->frame_sync)
                   << ", point_num:" << kLidarCloud->point_num
-                  << "，frame_seq:" << kLidarCloud->frame_seq
+                  << ", frame_seq:" << kLidarCloud->frame_seq
                   << ", frame_timestamp:" << kLidarCloud->frame_timestamp
                   << " us"
-                  << ",mirror_id:"
+                  << ", mirror_id:"
                   << static_cast<uint32_t>(kLidarCloud->mirror_id)
-                  << ", frame_time_interval：" << frame_time_interval << " us"
+                  << ", frame_time_interval: " << frame_time_interval << " us"
                   << ", recv_time_interval:" << recv_time_interval << " us"
                 //   << ", nan point num: " << cnt
                 //   << ", valid cnt:" << (kLidarCloud->point_num - cnt)
@@ -437,6 +461,17 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor,
                       << std::dec << " "; // 恢复十进制输出，避免后续输出受影响
         }
         std::cout << std::endl << std::endl;
+
+        size_t requiredSize = kLidarCloud->data_length;
+        LidarPointCloudPackets* msg = static_cast<LidarPointCloudPackets*>(malloc(requiredSize));
+        void* difop2_data = malloc(kLidarCloud->lidar_parameter_length);
+        std::memcpy(difop2_data, kLidarCloud->lidar_parameter, kLidarCloud->lidar_parameter_length);
+
+        std::memcpy(msg, kLidarCloud, requiredSize);
+        msg->lidar_parameter = difop2_data;
+
+        saveRawData(difop2_data, 500, 9999);
+        saveRawData(msg, requiredSize, kLidarCloud->frame_seq);
     }
     if (!save_pcd) {
         return LIDAR_SDK_SUCCESS;
@@ -988,9 +1023,9 @@ int main(int argc, char* argv[]) {
         sdk_cbks.deviceInfo = deviceInfoCallback;
 
         // 初始化SDK
-        if (lidar_interface->init(&sdk_cbks, "./ag_config.json") !=
-            LIDAR_SDK_SUCCESS) {
-            std::cout << "SDK initialization failed" << std::endl;
+        LidarSdkErrorCode err_code = lidar_interface->init(&sdk_cbks, "./ag_config.json");
+        if (err_code != LIDAR_SDK_SUCCESS) {
+            std::cout << "SDK initialization failed, error code: " << err_code << std::endl;
             return -1;
         }
     }
