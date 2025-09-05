@@ -293,8 +293,8 @@ void CloudManager::algoFinalProcess(void)
                 cv_calc_.notify_all();
             };
 
-            for (int32_t col = 0; col < algo_func_.VIEW_W + 1; ++col) {
-                if (sendEnoughData(col)) {
+            if (sendEnoughData(algo_func_.VIEW_W - 1)) {
+                for (int32_t col = 0; col < algo_func_.VIEW_W + 1; ++col) {
                     int32_t surface_id = frame_buffer->surface_id.load();
                     auto start = std::chrono::steady_clock::now();
                     algo_func_.algoFianlDecision(col, dist, ref, frame_buffer);
@@ -343,17 +343,17 @@ void CloudManager::algoFinalProcess(void)
                             }
                         }
                     }
-                } else {
-                    //发生丢包之后，先清0当前帧数据，然后切换到下一帧
-                    frame_buffer->frame_droped.store(false);
-                    resetAndSwitchFrame();
-                    break;
+                    if (algo_func_.VIEW_W == col) {
+                        resetAndSwitchFrame();
+                    }
                 }
-
-                if (algo_func_.VIEW_W == col) {
-                    resetAndSwitchFrame();
-                }
-            }
+            } else {
+                //发生丢包之后，先清0当前帧数据，然后切换到下一帧
+                frame_buffer->frame_droped.store(false);
+                resetAndSwitchFrame();
+                break;
+            }   
+            
         #ifdef ALGO_WRITE_FILE
             if (write_file_) {
                 write_file_ = false;
@@ -384,26 +384,25 @@ void CloudManager::algoProcess(int32_t task_id)
 {
     try {
         while (false == to_exit_handle_.load()) {
-            int32_t proc_col = 0;
+            // int32_t proc_col = 0;
             std::chrono::microseconds total_time = (std::chrono::microseconds)0;
             if (cacl_done_[task_id].load() == 0) {
                 bool isLostPkt = false;
                 AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
-                for (int32_t col = 0; col < algo_func_.VIEW_W + algo_func_.max_data_size; ++col) {
-                    if (recvEnoughData(col, frame_buffer)) {
-                        auto start = std::chrono::steady_clock::now();
-                        proc_col = algo_func_.pcAlgoMainFunc(col, frame_buffer, task_id);  // 算法后处理模块
+                
+                if (recvEnoughData(frame_buffer)) {
+                    auto start = std::chrono::steady_clock::now();
+                    // proc_col = algo_func_.pcAlgoMainFunc(col, frame_buffer, task_id);  // 算法后处理模块
 
-                        if (proc_col <= algo_func_.VIEW_W - 2) {
-                            updateAlgoIdx(proc_col, task_id);
-                        }
-                        auto end = std::chrono::steady_clock::now();
-                        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                        total_time += duration;
-                    } else {
-                        isLostPkt = true;
-                        break;
-                    }
+                    // if (proc_col <= algo_func_.VIEW_W - 2) {
+                        updateAlgoIdx(algo_func_.VIEW_W - 2, task_id);
+                    // }
+                    auto end = std::chrono::steady_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+                    total_time += duration;
+                } else {
+                    isLostPkt = true;
+                    break;
                 }
                 if (total_time.count() > kCalcTimeout_) {
                     LogError("ERROR: algoProcess calc time out :{} thread:{}", total_time.count(), task_id);
@@ -594,15 +593,15 @@ bool CloudManager::sendEnoughData(int32_t col)
     for (const auto& kIdx : algo_proc_idx_) {
         int32_t val = kIdx.load();
         all_loss = all_loss && (val == ALGO_LOSS_PKT_CODE);
-        all_ready = all_ready && (val > col);
+        all_ready = all_ready && (val >= col);
     }
 
     if (all_loss) {
         return false;
     }
-    if (algo_func_.VIEW_W == col) {
-        return true;
-    }
+    // if (algo_func_.VIEW_W == col) {
+    //     return true;
+    // }
     if (all_ready) {
         return true;
     }
@@ -634,16 +633,16 @@ bool CloudManager::sendEnoughData(int32_t col)
  * \param[in] frame_buffer: frame point cloud data buffer
  *               Range: 0~2^32 -1. Accuracy: 1.
  */
-bool CloudManager::recvEnoughData(int32_t col, AlgoFunction::tstFrameBuffer* frame_buffer)
+bool CloudManager::recvEnoughData(AlgoFunction::tstFrameBuffer* frame_buffer)
 {
     std::unique_lock<std::mutex> lock(mtx_recv_);
     // 等待前置列就绪
-    int32_t required_col;
-    if (col >= algo_func_.VIEW_W - 1) {
-        required_col = algo_func_.VIEW_W - 1;
-    } else {
-        required_col = col;
-    }
+    int32_t required_col = algo_func_.VIEW_W - 1;
+    // if (col >= algo_func_.VIEW_W - 1) {
+    //     required_col = algo_func_.VIEW_W - 1;
+    // } else {
+    //     required_col = col;
+    // }
 
     if (frame_buffer != nullptr && frame_buffer->frame_droped.load()) {
         return false;

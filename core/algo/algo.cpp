@@ -1563,72 +1563,76 @@ void AlgoFunction::highCalcFunc(uint16_t *dist0,uint16_t *dist1, int col,
  */
 void AlgoFunction::algoFianlDecision(int col_idx, uint16_t *pu16Dist, uint8_t *pu8Ref, tstFrameBuffer* frame_buffer)
 {
+    memcpy(pu16Dist, frame_buffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+    memcpy(&pu16Dist[VIEW_H], frame_buffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+    memcpy(pu8Ref, frame_buffer->ref0[col_idx], sizeof(uint8_t) * VIEW_H);
+    memcpy(&pu8Ref[VIEW_H], frame_buffer->ref0[col_idx], sizeof(uint8_t) * VIEW_H);
     // 提前计算环形缓冲区索引
-    circularCalcIdx(rear5, buffer_size_upsampling);
-    const int decision_col = col_idx;
-    const int decision_col_buffer = matlabMod(rear5 - 1 + 1, buffer_size_upsampling);
+    // circularCalcIdx(rear5, buffer_size_upsampling);
+    // const int decision_col = col_idx;
+    // const int decision_col_buffer = matlabMod(rear5 - 1 + 1, buffer_size_upsampling);
 
-    // 边界检查提前
-    if (decision_col >= 0 && decision_col < VIEW_W) {
-        // 获取当前列的指针，减少数组访问
-        uint16_t* current_dist_wave0 = stFilterFrmBuffer.dist_wave0[decision_col];
-        uint16_t* current_dist_wave1 = stFilterFrmBuffer.dist_wave1[decision_col];
-        uint8_t* current_refl_wave0 = stFilterFrmBuffer.refl_wave0[decision_col];
-        uint8_t* current_refl_wave1 = stFilterFrmBuffer.refl_wave1[decision_col];
+    // // 边界检查提前
+    // if (decision_col >= 0 && decision_col < VIEW_W) {
+    //     // 获取当前列的指针，减少数组访问
+    //     uint16_t* current_dist_wave0 = stFilterFrmBuffer.dist_wave0[decision_col];
+    //     uint16_t* current_dist_wave1 = stFilterFrmBuffer.dist_wave1[decision_col];
+    //     uint8_t* current_refl_wave0 = stFilterFrmBuffer.refl_wave0[decision_col];
+    //     uint8_t* current_refl_wave1 = stFilterFrmBuffer.refl_wave1[decision_col];
 
-        uint16_t* buffer_dist_wave0 = dist_wave0_buffer5[decision_col_buffer];
-        uint16_t* buffer_dist_wave1 = dist_wave1_buffer5[decision_col_buffer];
-        uint8_t* buffer_refl_wave0 = refl_wave0_buffer5[decision_col_buffer];
-        uint8_t* buffer_refl_wave1 = refl_wave1_buffer5[decision_col_buffer];
+    //     uint16_t* buffer_dist_wave0 = dist_wave0_buffer5[decision_col_buffer];
+    //     uint16_t* buffer_dist_wave1 = dist_wave1_buffer5[decision_col_buffer];
+    //     uint8_t* buffer_refl_wave0 = refl_wave0_buffer5[decision_col_buffer];
+    //     uint8_t* buffer_refl_wave1 = refl_wave1_buffer5[decision_col_buffer];
 
-        // 一次性拷贝整列数据
-        memcpy(buffer_dist_wave0, current_dist_wave0, sizeof(uint16_t) * VIEW_H);
-        memcpy(buffer_dist_wave1, current_dist_wave1, sizeof(uint16_t) * VIEW_H);
-        memcpy(buffer_refl_wave0, current_refl_wave0, sizeof(uint8_t) * VIEW_H);
-        memcpy(buffer_refl_wave1, current_refl_wave1, sizeof(uint8_t) * VIEW_H);
+    //     // 一次性拷贝整列数据
+    //     memcpy(buffer_dist_wave0, current_dist_wave0, sizeof(uint16_t) * VIEW_H);
+    //     memcpy(buffer_dist_wave1, current_dist_wave1, sizeof(uint16_t) * VIEW_H);
+    //     memcpy(buffer_refl_wave0, current_refl_wave0, sizeof(uint8_t) * VIEW_H);
+    //     memcpy(buffer_refl_wave1, current_refl_wave1, sizeof(uint8_t) * VIEW_H);
 
-        // 获取掩码指针
-        int* trail_mask_out = trail_mask_out_frm[decision_col];
-        int* stray_mask_out0 = stray_mask_out_frm0[decision_col];
-        int* stray_mask_out1 = stray_mask_out_frm1[decision_col];
-        int* spray_mask_out0 = spray_mark_out_frm0[decision_col];
-        int* spray_mask_out1 = spray_mark_out_frm1[decision_col];
+    //     // 获取掩码指针
+    //     int* trail_mask_out = trail_mask_out_frm[decision_col];
+    //     int* stray_mask_out0 = stray_mask_out_frm0[decision_col];
+    //     int* stray_mask_out1 = stray_mask_out_frm1[decision_col];
+    //     int* spray_mask_out0 = spray_mark_out_frm0[decision_col];
+    //     int* spray_mask_out1 = spray_mark_out_frm1[decision_col];
 
-        // 优化处理循环
-        for (int row_idx = 0; row_idx < VIEW_H; row_idx++)
-        {
-            const bool stray0 = stray_mask_out0[row_idx];
-            const bool stray1 = stray_mask_out1[row_idx];
-            const bool spray0 = spray_mask_out0[row_idx];
-            const bool spray1 = spray_mask_out1[row_idx];
-            const bool trail = trail_mask_out[row_idx];
-            const bool wave0_del_flag = stray0 || spray0 || trail;
-            const bool wave1_del_flag = !stray1 && !spray1 && !trail;
+    //     // 优化处理循环
+    //     for (int row_idx = 0; row_idx < VIEW_H; row_idx++)
+    //     {
+    //         const bool stray0 = stray_mask_out0[row_idx];
+    //         const bool stray1 = stray_mask_out1[row_idx];
+    //         const bool spray0 = spray_mask_out0[row_idx];
+    //         const bool spray1 = spray_mask_out1[row_idx];
+    //         const bool trail = trail_mask_out[row_idx];
+    //         const bool wave0_del_flag = stray0 || spray0 || trail;
+    //         const bool wave1_del_flag = !stray1 && !spray1 && !trail;
 
-            // 情况1: 两回波均无效点
-            if (wave0_del_flag && !wave1_del_flag) {
-                buffer_dist_wave0[row_idx] = 0;
-                buffer_refl_wave0[row_idx] = 0;
-            }
-            // 情况2: 第一回波无效点，第二回波有效点
-            else if (wave0_del_flag && wave1_del_flag) {
-                buffer_dist_wave0[row_idx] = buffer_dist_wave1[row_idx];
-                buffer_refl_wave0[row_idx] = buffer_refl_wave1[row_idx];
-            }
-            // 情况3: 第一回波有效，第二回波无效
-            else if (!wave0_del_flag && !wave1_del_flag) {
-                buffer_dist_wave1[row_idx] = 0;
-                buffer_refl_wave1[row_idx] = 0;
-            }
-        }
-    }
+    //         // 情况1: 两回波均无效点
+    //         if (wave0_del_flag && !wave1_del_flag) {
+    //             buffer_dist_wave0[row_idx] = 0;
+    //             buffer_refl_wave0[row_idx] = 0;
+    //         }
+    //         // 情况2: 第一回波无效点，第二回波有效点
+    //         else if (wave0_del_flag && wave1_del_flag) {
+    //             buffer_dist_wave0[row_idx] = buffer_dist_wave1[row_idx];
+    //             buffer_refl_wave0[row_idx] = buffer_refl_wave1[row_idx];
+    //         }
+    //         // 情况3: 第一回波有效，第二回波无效
+    //         else if (!wave0_del_flag && !wave1_del_flag) {
+    //             buffer_dist_wave1[row_idx] = 0;
+    //             buffer_refl_wave1[row_idx] = 0;
+    //         }
+    //     }
+    // }
 
-    // 上采样处理
-    const int up_smpl_col = decision_col - UpSamplingDelayCol;
-    const int up_smpl_col_buffer = matlabMod(decision_col_buffer + 1 - UpSamplingDelayCol - 1, buffer_size_upsampling);
-    const int up_smpl_col2_buffer = matlabMod(up_smpl_col_buffer + 2 - 1, buffer_size_upsampling);
+    // // 上采样处理
+    // const int up_smpl_col = decision_col - UpSamplingDelayCol;
+    // const int up_smpl_col_buffer = matlabMod(decision_col_buffer + 1 - UpSamplingDelayCol - 1, buffer_size_upsampling);
+    // const int up_smpl_col2_buffer = matlabMod(up_smpl_col_buffer + 2 - 1, buffer_size_upsampling);
 
-    processUpSample(up_smpl_col, up_smpl_col_buffer, up_smpl_col2_buffer, pu16Dist, pu8Ref, frame_buffer);
+    // processUpSample(up_smpl_col, up_smpl_col_buffer, up_smpl_col2_buffer, pu16Dist, pu8Ref, frame_buffer);
 }
 
 /**

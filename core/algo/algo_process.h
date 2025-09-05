@@ -118,7 +118,7 @@ class CloudManager
     void algoFinalProcess(void);
     void algoProcess(int32_t task_id);
     bool sendEnoughData(int32_t col);
-    bool recvEnoughData(int32_t col, AlgoFunction::tstFrameBuffer* frame_buffer);
+    bool recvEnoughData(AlgoFunction::tstFrameBuffer* frame_buffer);
     void updateAlgoIdx(int32_t proc_col, uint32_t task_id);
 
   public:
