@@ -13,6 +13,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_SOURCE_DIR}/api
     ${CMAKE_SOURCE_DIR}/core
     ${CMAKE_SOURCE_DIR}/3rdparty
+    ${CMAKE_SOURCE_DIR}/3rdparty/rs_logger/lib/spdlog/include
     ${CMAKE_SOURCE_DIR}/core/utils
     ${CMAKE_SOURCE_DIR}/core/decoder/include
 )

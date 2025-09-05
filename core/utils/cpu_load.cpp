@@ -46,11 +46,11 @@ namespace robosense::lidar::utils {
 /*              Definition of local types (enum, struct, union)               */
 /******************************************************************************/
 pid_t main_pid;
-std::atomic<double> algo_threshold {60.0};
-std::atomic<uint64_t> fileCounter {1UL};
+std::atomic<double> algo_threshold{60.0};
+std::atomic<uint64_t> fileCounter{1UL};
 std::map<pid_t, ThreadInfo> g_threads;
-std::atomic<bool> g_stop {false};
-std::atomic<bool> g_save_bin {false};
+std::atomic<bool> g_stop{false};
+std::atomic<bool> g_save_bin{false};
 
 /******************************************************************************/
 /*                   Declaration of exported constant data                    */
@@ -84,7 +84,7 @@ inline std::vector<std::string> split(const std::string& str, char delimiter) {
 uint64_t getTotalCPUTime() {
     std::ifstream stat_file("/proc/stat");
     std::string line;
-    std::getline(stat_file, line);
+    (void)std::getline(stat_file, line);
     std::vector<std::string> parts = split(line, ' ');
     uint64_t total_time = 0;
 
@@ -113,7 +113,7 @@ double calculateCPUUsage(ThreadInfo& thread) {
     uint64_t cur_total_time = getTotalCPUTime();
     double process_diff = static_cast<double>(cur_process_time) - static_cast<double>(thread.last_thread_time);
     double total_diff = static_cast<double>(cur_total_time) - static_cast<double>(thread.last_total_cpu_time);
-    double result {0.0};
+    double result{0.0};
 
     process_diff = process_diff > 0.0 ? process_diff : 0.0;
     total_diff = total_diff > 0.0 ? total_diff : 0.0;
@@ -177,9 +177,8 @@ void monitThreads() {
     // Sleep 2 seconds to wait for all threads to start.
     auto now = std::chrono::system_clock::now();
     uint64_t timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    double algo_time {0.0};
-    double main_cpu_usage {0.0};
-    uint64_t last_main_PID_time {0UL};
+    double algo_time{0.0};
+    double main_cpu_usage{0.0};
     ThreadInfo main_thread;
 
     main_thread.tid = main_pid;
@@ -188,7 +187,7 @@ void monitThreads() {
 
     main_cpu_usage = calculateCPUUsage(main_thread);
     for (auto& kv : g_threads) {
-        double thread_cpu_usage = calculateCPUUsage(kv.second);
+        (void)calculateCPUUsage(kv.second);
     }
 
     std::ostringstream oss_head;
@@ -201,7 +200,7 @@ void monitThreads() {
 
     std::ofstream csv_file("./csv_file/cpu_usage_" + std::to_string(timestamp_ms) + ".csv", std::ios::app);
     csv_file << oss_head.str();
-    csv_file.flush();
+    (void)csv_file.flush();
 
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(yaml::demo_test_param.cpu_monitor_cycle));
@@ -237,7 +236,7 @@ void monitThreads() {
         }
 
         csv_file << oss.str();
-        csv_file.flush();
+        (void)csv_file.flush();
     }
     csv_file.close();
 }

@@ -63,10 +63,6 @@ typedef struct
   uint32_t second;
   uint32_t microsecond;
 } RSTimeStamp;
-inline int16_t RS_SWAP_INT16(int16_t value)
-{
-  return (value << 8) | ((value >> 8) & 0xFF);
-}
 
 inline uint64_t parseTimeUTCWithUs(const RSTimeStamp& tsUtc)
 {
@@ -74,7 +70,7 @@ inline uint64_t parseTimeUTCWithUs(const RSTimeStamp& tsUtc)
   uint64_t sec = ntohl(tsUtc.second);
   // us
   uint64_t us = ntohl(tsUtc.microsecond);
-  return sec * 1000000 + us;
+  return sec * 1e6 + us;
 }
 
 }  // namespace lidar

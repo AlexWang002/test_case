@@ -1,10 +1,10 @@
 /*******************************************************************************
  * \addtogroup algo
  * \{
- * \headerfile algo_process.cpp
+ * \file algo_process.cpp
  * \brief
- * \version 0.3
- * \date 2025-06-27
+ * \version 0.5
+ * \date 2025-08-06
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -26,6 +26,11 @@
  * |-----|------------|--------------|
  * | 0.4 | 2025-07-14 | Modify code style, change timeout to 200ms |
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.5 | 2025-08-06 | Add comments;|
+ * |     |            | Fix warnings |
+ *
  ******************************************************************************/
 /******************************************************************************/
 /*                         Include dependant headers                          */
@@ -34,6 +39,7 @@
 #include "yaml_manager.h"
 #include "thread_config.h"
 #include "cpu_load.h"
+#include "rs_new_logger.h"
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -47,20 +53,21 @@ namespace robosense
 namespace lidar
 {
 
-/*******************************************************************************
+/**
  * \brief  Set thread kName
- *
  * \param[in] kName : new thread kName
  *                   range：0 - 2^32-1. Accuracy: 1.
- ******************************************************************************/
+ */
 void CloudManager::setThreadName(const std::string& kName)
 {
-    pthread_setname_np(pthread_self(), kName.substr(0, 15).c_str());
+    int32_t ret = pthread_setname_np(pthread_self(), kName.substr(0, 15).c_str());
+    if (ret != 0) {
+        LogError("ERROR: setThreadName error: {}, thread name: {}", ret, kName);
+    }
 }
 
-/*******************************************************************************
+/**
  * \brief  Submit processed blocks.
- *
  * \param[in] proc_col : processing column
  *                Range: -2^31 - 2^31-1. Accuracy: 1.
  * \param[in] frame_buffer : frame buffer
@@ -71,16 +78,22 @@ void CloudManager::setThreadName(const std::string& kName)
  *                Range: 0 - 2^32-1. Accuracy: 1.
  * \param[in] surface_id : channel index
  *                Range: 0-1. Accuracy: 1.
- ******************************************************************************/
-void CloudManager::assemblePkt(int proc_col, AlgoFunction::tstFrameBuffer* frame_buffer,
-                                uint16_t* dist, uint8_t* ref, int surface_id)
-{
+ */
+void CloudManager::assemblePkt(int32_t proc_col,
+                            AlgoFunction::tstFrameBuffer* frame_buffer,
+                            uint16_t* dist, uint8_t* ref, int32_t surface_id) {
     if ((proc_col < 0) || proc_col >= algo_func_.UP_VIEW_W) {
         LogDebug("ALGO: proc_col is invalid {}", proc_col);
         return;
     }
 
-    int index = frame_buffer->cloud_id[proc_col];
+    if (dist == nullptr || ref == nullptr || frame_buffer == nullptr) {
+        LogError("[CloudManager::assemblePkt] dist | ref | frame_buffer is nullptr");
+        return;
+    }
+
+    int32_t index = frame_buffer->cloud_id[proc_col];
+
     if ((index < 0) || (index >= kMaxCloudNum_)) {
         LogDebug("ALGO: send packet index out of range{}", index);
         return;
@@ -112,7 +125,7 @@ void CloudManager::assemblePkt(int proc_col, AlgoFunction::tstFrameBuffer* frame
         printf("write frame = %d\n", inj_frame_cnt_);
     }
 #else
-     // 更新处理结果
+    // 更新处理结果
     if (((0 == surface_id) && ((proc_col & 0x1) == 0))
         || ((1 == surface_id) && ((proc_col & 0x1) != 0))) {
         for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
@@ -130,17 +143,19 @@ void CloudManager::assemblePkt(int proc_col, AlgoFunction::tstFrameBuffer* frame
     cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
 }
 
-/*******************************************************************************
+/**
  * \brief  Msop send callback function.
- *
  * \param[in] kCbSend : Msop send function
  *                Range: 0 - 2^32-1. Accuracy: 1.
- ******************************************************************************/
+ */
 void CloudManager::regCallback(const std::function<void(const uint8_t* pkt, size_t size)>& kCbSend)
 {
     cb_send_ = kCbSend;
 }
 
+/**
+ * \brief  Start processing point cloud.
+ */
 void CloudManager::start(void)
 {
     to_exit_handle_.store(false);
@@ -148,7 +163,7 @@ void CloudManager::start(void)
     for (auto& idx : algo_proc_idx_) {
         idx.store(0);
     }
-    for (int i = 0; i < ALGO_THREAD_NUM; ++i) {
+    for (uint32_t i = 0; i < ALGO_THREAD_NUM; ++i) {
         cacl_done_[i].store(0);
         yaml::ThreadConfig config;
         if (yaml::thread_params.size() > i+3)
@@ -168,9 +183,12 @@ void CloudManager::start(void)
 
     algo_func_.algoInit();
 
-    for (int i = 0; i < ALGO_FRM_BUF_SIZE; ++i) {
+    for (int32_t i = 0; i < ALGO_FRM_BUF_SIZE; ++i) {
         frame_buffer_[i].frame_droped.store(false);
     }
+
+    LogInfo("Algo process start! Version:{}.{}.{}",std::to_string(ALGO_VERSION_MAJOR),
+        std::to_string(ALGO_VERSION_MINOR) ,std::to_string(ALGO_VERSION_PATCH));
 
 #ifdef ALGO_REINJ
     if (!processed_file_.is_open()) {
@@ -181,12 +199,12 @@ void CloudManager::start(void)
 #endif
 }
 
-/*******************************************************************************
+/**
  * \brief  Stop process point cloud.
- ******************************************************************************/
+ */
 bool CloudManager::stop(void)
 {
-    for (int i = 0; i < ALGO_FRM_BUF_SIZE; ++i) {
+    for (int32_t i = 0; i < ALGO_FRM_BUF_SIZE; ++i) {
         frame_buffer_[i].frame_droped.store(true);
     }
     cv_recv_.notify_all();
@@ -208,16 +226,15 @@ bool CloudManager::stop(void)
 }
 
 #ifdef ALGO_WRITE_FILE
-/*******************************************************************************
+/**
  * \brief  Write distance and reflection into file.
- *
-* \param[in] dist : current row distance data
+ * \param[in] dist : current row distance data
  *                Range: 0 - 2^32-1. Accuracy: 1.
  * \param[in] ref : current row reflection data
  *                Range: 0-255. Accuracy: 1.
  * \param[in] x: row index
  *               Range: 0-759. Accuracy: 1.
- ******************************************************************************/
+ */
 void CloudManager::writeFileFunc(uint16_t* dist, uint8_t* ref, int x)
 {
     if (write_file_) {
@@ -233,19 +250,14 @@ void CloudManager::writeFileFunc(uint16_t* dist, uint8_t* ref, int x)
 }
 #endif
 
-/*******************************************************************************
+/**
  * \brief  Algorithm delete point and package msop.
- ******************************************************************************/
+ */
 void CloudManager::algoFinalProcess(void)
 {
-    static bool first{true};
+    pid_t tid = gettid();
+    utils::addThread(tid, "algoFinalProcess");
 
-    if (first) {
-        pid_t tid = gettid();
-        std::cout << "==================== algoFinalProcess tid:" << std::dec << tid << std::endl;
-        utils::addThread(tid, "algoFinalProcess");
-        first = false;
-    }
     try {
         while (false == to_exit_handle_.load()) {
             uint16_t dist[algo_func_.VIEW_H * 2]{0};
@@ -268,23 +280,22 @@ void CloudManager::algoFinalProcess(void)
                 for (auto& idx : algo_proc_idx_) {
                     idx.store(0);
                 }
-                int old_val = proc_buffer_idx_.load();
-                int new_val;
+                int32_t old_val = proc_buffer_idx_.load();
+                int32_t new_val;
                 do {
                     new_val = (old_val + 1) % ALGO_FRM_BUF_SIZE;
                 } while (!proc_buffer_idx_.compare_exchange_weak(old_val, new_val));
 
                 std::lock_guard<std::mutex> lock(mtx_calc_);
-                for (int i = 0; i < ALGO_THREAD_NUM; ++i) {
+                for (int32_t i = 0; i < ALGO_THREAD_NUM; ++i) {
                     cacl_done_[i].store(0);
                 }
                 cv_calc_.notify_all();
-
             };
 
-            for (int col = 0; col < algo_func_.VIEW_W + 1; ++col) {
+            for (int32_t col = 0; col < algo_func_.VIEW_W + 1; ++col) {
                 if (sendEnoughData(col)) {
-                    int surface_id = frame_buffer->surface_id.load();
+                    int32_t surface_id = frame_buffer->surface_id.load();
                     auto start = std::chrono::steady_clock::now();
                     algo_func_.algoFianlDecision(col, dist, ref, frame_buffer);
                     auto end = std::chrono::steady_clock::now();
@@ -300,21 +311,21 @@ void CloudManager::algoFinalProcess(void)
                 #ifdef ALGO_WRITE_FILE
                                 writeFileFunc(dist_zero, ref_zero, 0);
                 #endif
-                                for(int i = 0; i < 2; ++i) {
-                                assemblePkt((((col - 1) * 2) + i) + 1, frame_buffer, dist, ref, surface_id);
+                                for(int32_t i = 0; i < 2; ++i) {
+                                    assemblePkt((((col - 1) * 2) + i) + 1, frame_buffer, dist, ref, surface_id);
                 #ifdef ALGO_WRITE_FILE
-                                writeFileFunc(dist, ref, i);
+                                    writeFileFunc(dist, ref, i);
                 #endif
                                 }
                             } else if (col < algo_func_.VIEW_W) {
-                                for (int i = 0; i < 2; ++i) {
+                                for (int32_t i = 0; i < 2; ++i) {
                                     assemblePkt((((col - 1) * 2) + i) + 1, frame_buffer, dist, ref, surface_id);
                 #ifdef ALGO_WRITE_FILE
                                     writeFileFunc(dist, ref, i);
                 #endif
                                 }
                             } else {
-                                for (int i = 0; i < 1; ++i) {
+                                for (int32_t i = 0; i < 1; ++i) {
                                     assemblePkt((((col - 1) * 2) + i) + 1, frame_buffer, dist, ref, surface_id);
                 #ifdef ALGO_WRITE_FILE
                                     writeFileFunc(dist, ref, i);
@@ -324,7 +335,7 @@ void CloudManager::algoFinalProcess(void)
                         }
                     } else {
                         if (col >= 1) {
-                            for(int i = 0; i < 2; ++i) {
+                            for(int32_t i = 0; i < 2; ++i) {
                                 assemblePkt(((col - 1) * 2) + i, frame_buffer, dist, ref, surface_id);
                 #ifdef ALGO_WRITE_FILE
                                 writeFileFunc(dist, ref, i);
@@ -364,21 +375,21 @@ void CloudManager::algoFinalProcess(void)
 }
 
 
-/*******************************************************************************
+/**
  * \brief  Algorithm point cloud process.
  * \param[in] task_id: process thread index
  *               Range: 0-1. Accuracy: 1.
- ******************************************************************************/
-void CloudManager::algoProcess(int task_id)
+ */
+void CloudManager::algoProcess(int32_t task_id)
 {
     try {
         while (false == to_exit_handle_.load()) {
-            int proc_col = 0;
+            int32_t proc_col = 0;
             std::chrono::microseconds total_time = (std::chrono::microseconds)0;
             if (cacl_done_[task_id].load() == 0) {
                 bool isLostPkt = false;
                 AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
-                for (int col = 0; col < algo_func_.VIEW_W + algo_func_.max_data_size; ++col) {
+                for (int32_t col = 0; col < algo_func_.VIEW_W + algo_func_.max_data_size; ++col) {
                     if (recvEnoughData(col, frame_buffer)) {
                         auto start = std::chrono::steady_clock::now();
                         proc_col = algo_func_.pcAlgoMainFunc(col, frame_buffer, task_id);  // 算法后处理模块
@@ -405,9 +416,13 @@ void CloudManager::algoProcess(int task_id)
                 }
             } else {
                 std::unique_lock<std::mutex> lock(mtx_calc_);
-                cv_calc_.wait_for(lock, std::chrono::milliseconds(200), [&] {
+                bool res = cv_calc_.wait_for(lock, std::chrono::milliseconds(200), [&] {
                     return (cacl_done_[task_id].load() == 0 || to_exit_handle_.load());
                 });
+
+                if (!res) {
+                    LogError("ERROR: algoProcess thread:{}, cv_calc_ wait timeout", task_id);
+                }
             }
         }
     }
@@ -416,29 +431,35 @@ void CloudManager::algoProcess(int task_id)
     }
 }
 
-/*******************************************************************************
+/**
  * \brief Receive point cloud data packets and process.
  * \param[in] kMsopData: point cloud data packets
  *               Range: 0~2^32 - 1. Accuracy: 1.
  * \param[in] msop_data_size: size of point cloud data packets
  *               Range: 3116. Accuracy: 1.
- ******************************************************************************/
-void CloudManager::receiveCloud(const uint8_t* kMsopData, int msop_data_size)
+ */
+void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size)
 {
-    const auto& kRawData = *reinterpret_cast<const RSEMXMsopPkt*>(kMsopData);
+    if (kMsopData == nullptr) {
+        LogError("[CloudManager::receiveCloud] kMsopData is nullptr");
+        return;
+    }
 
     if (msop_data_size != sizeof(RSEMXMsopPkt)) {
         LogError("ERROR: msop data size error:{}", msop_data_size);
         return;
     }
-    int old_val;
-    int new_val;
-    int proc_cloud_idx = proc_cloud_idx_.load();
+
+    const auto& kRawData = *reinterpret_cast<const RSEMXMsopPkt*>(kMsopData);
+
+    int32_t old_val;
+    int32_t new_val;
+    int32_t proc_cloud_idx = proc_cloud_idx_.load();
 
     std::lock_guard<std::mutex> lock(mtx_recv_);
-    int recv_buf_idx = recv_buffer_idx_.load();
+    int32_t recv_buf_idx = recv_buffer_idx_.load();
     AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[recv_buf_idx];
-    int pkt_cnt = ntohs(kRawData.header.pkt_seq) - 1;
+    int32_t pkt_cnt = ntohs(kRawData.header.pkt_seq) - 1;
 
     if ((pkt_cnt >= 0) && (pkt_cnt < algo_func_.UP_VIEW_W)) {
         //丢包之后的逻辑，先判断是否丢包
@@ -487,16 +508,15 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int msop_data_size)
             frame_buffer->surface_id.store(surface_id_pkt);
         }
 
-        int recv_idx = frame_buffer->recv_idx.load();
+        int32_t recv_idx = frame_buffer->recv_idx.load();
         if ((0 == pkt_cnt) && (0 != recv_idx)) {
-            FaultManager::getInstance().setFault(FaultBits::LidarPointCloudBufferOverflowFault);
             LogError("ERROR: algorithms timeout lead to recv loss pkt:{}", recv_idx);
+            FaultManager::getInstance().setFault(FaultBits::LidarPointCloudBufferOverflowFault);
             frame_buffer->frame_droped.store(true);
             cv_recv_.notify_all();
             return;
-        }
-        else if(0 == pkt_cnt) {
-            if(FaultManager::getInstance().hasFault(FaultBits::LidarPointCloudBufferOverflowFault))
+        } else if (0 == pkt_cnt) {
+            if (FaultManager::getInstance().hasFault(FaultBits::LidarPointCloudBufferOverflowFault))
                 FaultManager::getInstance().clearFault(FaultBits::LidarPointCloudBufferOverflowFault);
         }
 
@@ -507,8 +527,8 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int msop_data_size)
         proc_clouds_[proc_cloud_idx] = kRawData; // 将新的点云对象存储到正在处理的点云集合中
         frame_buffer->cloud_id[pkt_cnt] = proc_cloud_idx;
 
-        int upsample_col = pkt_cnt >> 1;
-        auto processWaves = [&](bool condition, int high_calc_col) {
+        int32_t upsample_col = pkt_cnt >> 1;
+        auto processWaves = [&](bool condition, int32_t high_calc_col) {
             if (condition) {
                 uint16_t* dist0 = &frame_buffer->dist0[upsample_col][0];
                 uint16_t* dist1 = &frame_buffer->dist1[upsample_col][0];
@@ -516,10 +536,12 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int msop_data_size)
                 uint8_t* ref1 = &frame_buffer->ref1[upsample_col][0];
                 uint8_t* att0 = &frame_buffer->att0[upsample_col][0];
                 uint8_t* att1 = &frame_buffer->att1[upsample_col][0];
-                int* high0 = &frame_buffer->high0[upsample_col][0];
-                int* high1 = &frame_buffer->high1[upsample_col][0];
+                uint8_t* gnd0 = &frame_buffer->gnd_mark0[upsample_col][0];
+                uint8_t* gnd1 = &frame_buffer->gnd_mark1[upsample_col][0];
+                int32_t* high0 = &frame_buffer->high0[upsample_col][0];
+                int32_t* high1 = &frame_buffer->high1[upsample_col][0];
 
-                for (int i = 0; i < algo_func_.VIEW_H; ++i) {
+                for (int32_t i = 0; i < algo_func_.VIEW_H; ++i) {
                     const RSEMXMsopWave* kWaves0 = &kRawData.pixels[i].waves[0];
                     const RSEMXMsopWave* kWaves1 = &kRawData.pixels[i].waves[1];
                     dist0[i] = ntohs(kWaves0->radius);
@@ -530,12 +552,11 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int msop_data_size)
                     att1[i] = kWaves1->attribute;
                 }
 
-                algo_func_.highCalcFunc(dist0, high_calc_col, high0);
-                algo_func_.highCalcFunc(dist1, high_calc_col, high1);
+                algo_func_.highCalcFunc(dist0, dist1, high_calc_col, high0, high1, gnd0, gnd1);
             } else {
                 uint16_t* dist0_raw = &frame_buffer->dist0_raw[upsample_col][0];
                 uint8_t* ref0_raw = &frame_buffer->ref0_raw[upsample_col][0];
-                for (int i = 0; i < algo_func_.VIEW_H; ++i) {
+                for (int32_t i = 0; i < algo_func_.VIEW_H; ++i) {
                     const RSEMXMsopWave* kWaves0 = &kRawData.pixels[i].waves[0];
                     dist0_raw[i] = ntohs(kWaves0->radius);
                     ref0_raw[i] = kWaves0->intensity;
@@ -543,9 +564,9 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int msop_data_size)
             }
         };
         if (0 == surface_id_pkt) {  //当前帧数id,确定奇偶列是否保存
-            processWaves((pkt_cnt & 0x1) == 0, (algo_func_.UP_VIEW_W - pkt_cnt) - 2);
+            processWaves((pkt_cnt & 0x1) == 0, pkt_cnt);
         } else {
-            processWaves((pkt_cnt & 0x1) != 0, pkt_cnt);
+            processWaves((pkt_cnt & 0x1) != 0, (algo_func_.UP_VIEW_W - pkt_cnt) - 1);
         }
 
         if ((pkt_cnt & 0x1) == 1) {
@@ -558,12 +579,12 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int msop_data_size)
     cv_recv_.notify_all();
 }
 
-/*******************************************************************************
- * \brief Judgy if enough Data is able to send.
+/**
+ * \brief Judge if enough Data is able to send.
  * \param[in] col: column index
  *               Range: 0-759. Accuracy: 1.
- ******************************************************************************/
-bool CloudManager::sendEnoughData(int col)
+ */
+bool CloudManager::sendEnoughData(int32_t col)
 {
     std::unique_lock<std::mutex> lock(mtx_send_);
 
@@ -571,7 +592,7 @@ bool CloudManager::sendEnoughData(int col)
     bool all_loss = true;
     bool all_ready = true;
     for (const auto& kIdx : algo_proc_idx_) {
-        int val = kIdx.load();
+        int32_t val = kIdx.load();
         all_loss = all_loss && (val == ALGO_LOSS_PKT_CODE);
         all_ready = all_ready && (val > col);
     }
@@ -590,7 +611,7 @@ bool CloudManager::sendEnoughData(int col)
         bool all_loss = true;
         bool all_ready = true;
         for(const auto& kIdx : algo_proc_idx_) {
-            int val = kIdx.load();
+            int32_t val = kIdx.load();
             all_loss = all_loss && (val == ALGO_LOSS_PKT_CODE);
             all_ready = all_ready && (val > col);
         }
@@ -606,28 +627,29 @@ bool CloudManager::sendEnoughData(int col)
     return true;
 }
 
-/*******************************************************************************
+/**
  * \brief Obtain pending blocks (called by the analysis thread).
  * \param[in] col: column index
  *               Range: 0-759. Accuracy: 1.
  * \param[in] frame_buffer: frame point cloud data buffer
  *               Range: 0~2^32 -1. Accuracy: 1.
- ******************************************************************************/
-bool CloudManager::recvEnoughData(int col, AlgoFunction::tstFrameBuffer* frame_buffer)
+ */
+bool CloudManager::recvEnoughData(int32_t col, AlgoFunction::tstFrameBuffer* frame_buffer)
 {
     std::unique_lock<std::mutex> lock(mtx_recv_);
     // 等待前置列就绪
-    int required_col;
+    int32_t required_col;
     if (col >= algo_func_.VIEW_W - 1) {
         required_col = algo_func_.VIEW_W - 1;
     } else {
         required_col = col;
     }
 
-    if (frame_buffer->frame_droped.load()) {
+    if (frame_buffer != nullptr && frame_buffer->frame_droped.load()) {
         return false;
     }
-    if (frame_buffer->recv_idx.load() > required_col) {
+
+    if (frame_buffer != nullptr && frame_buffer->recv_idx.load() > required_col) {
         return true;
     }
     bool success = cv_recv_.wait_for(lock, std::chrono::milliseconds(200),
@@ -641,14 +663,14 @@ bool CloudManager::recvEnoughData(int col, AlgoFunction::tstFrameBuffer* frame_b
     return true;
 }
 
-/*******************************************************************************
+/**
  * \brief ‌Submit the processed blocks.
  * \param[in] proc_col: process point cloud column index
  *               Range: 0-759. Accuracy: 1.
  * \param[in] task_id: process thread index
  *               Range: 0-1. Accuracy: 1.
- ******************************************************************************/
-void CloudManager::updateAlgoIdx(int proc_col, int task_id)
+ */
+void CloudManager::updateAlgoIdx(int32_t proc_col, uint32_t task_id)
 {
     if (task_id >= algo_proc_idx_.size()) {
         LogError("ERROR: task_id is invalid:{}, max:{}", task_id, algo_proc_idx_.size() - 1);

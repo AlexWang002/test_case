@@ -7,6 +7,8 @@ Algorithm_Switch:
     enable_hor_ref_smooth: false
     enable_ver_dist_smooth: false
     enable_ver_ref_smooth: false
+    enable_stray: true
+    enable_spray: true
 
 Test_Param:
     enable_save_pcd: true

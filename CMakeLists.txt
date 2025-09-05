@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(lidar_robosense_SDK LANGUAGES CXX VERSION 3.00.00)
+project(lidar_robosense_SDK LANGUAGES CXX VERSION 3.02.01)
 
 # Options
 option(COMPILE_EXAMPLES "Build Lidar SDK examples" ON)

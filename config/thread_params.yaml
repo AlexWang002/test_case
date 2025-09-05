@@ -1,25 +1,30 @@
 threads:
   - id: 1
     policy: SCHED_FIFO
-    priority: 80
-    cpu_affinity: [0]
+    priority: 40
+    cpu_affinity: [2]
 
   - id: 2
-    policy: SCHED_RR
-    priority: 70
-    cpu_affinity: [1]
+    policy: SCHED_FIFO
+    priority: 40
+    cpu_affinity: [3]
 
   - id: 3
     policy: SCHED_OTHER
-    priority: 65
-    cpu_affinity: [2]
+    priority: 35
+    cpu_affinity: [5]
 
   - id: 4
-    policy: SCHED_FIFO
-    priority: 85
-    cpu_affinity: [3]
+    policy: SCHED_RR
+    priority: 35
+    cpu_affinity: [5]
 
   - id: 5
     policy: SCHED_RR
-    priority: 60
-    cpu_affinity: [0, 1]
+    priority: 35
+    cpu_affinity: [6]
+
+  - id: 6
+    policy: SCHED_RR
+    priority: 35
+    cpu_affinity: [6]
