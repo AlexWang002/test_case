@@ -40,15 +40,10 @@
 #include "thread_config.h"
 #include "cpu_load.h"
 #include "rs_new_logger.h"
-<<<<<<< HEAD
 #include "trail.h"
 #include "denoise.h"
 #include "groundfit.h"
 #include "upsample.h"
-=======
-#include <iostream>
-#include <fstream>
->>>>>>> latest_dataflow
 /******************************************************************************/
 /*                      Include headers of the component                      */
 /******************************************************************************/
@@ -361,8 +356,8 @@ void CloudManager::algoFinalProcess(void)
                 // frame_buffer->frame_droped.store(false);
                 // resetAndSwitchFrame();
                 //break;
-            }   
-            
+            }
+
         #ifdef ALGO_WRITE_FILE
             if (write_file_) {
                 write_file_ = false;
@@ -418,40 +413,35 @@ void CloudManager::algoProcess(int32_t task_id)
             if (cacl_done_[task_id].load() == 0) {
                 bool isLostPkt = false;
                 AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
-                for (int32_t col = 0; col < algo_func_.VIEW_W + algo_func_.max_data_size; ++col) {
-                    if (recvEnoughData(col, frame_buffer)) {
+                    if (recvEnoughData(frame_buffer)) {
                         auto start = std::chrono::steady_clock::now();
                         /*PVA以整帧为单位执行denoise算法*/
-                        // if(task_id == 0){
-                        //     if (col == 759) {
-                        //         /*拷贝整帧数据到denoise算法的PVA buffer中*/
-                        //         memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
+                        if(task_id == 0){
+                            /*拷贝整帧数据到denoise算法的PVA buffer中*/
+                            memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
 
-                        //         auto denoise_start = std::chrono::steady_clock::now();
-                        //         denoiseProcPva();
-                        //         auto denoise_end = std::chrono::steady_clock::now();
-                        //         auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
-                        //         // std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
-
-                        //         algo_func_.denoiseMaskMemcpy(0, (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
-                        //     }
-                        // }
+                            auto denoise_start = std::chrono::steady_clock::now();
+                            denoiseProcPva();
+                            auto denoise_end = std::chrono::steady_clock::now();
+                            auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
+                            // std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
+                            memcpy(&algo_func_.denoise_mask_out_frm[0], (void *)denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                            // algo_func_.denoiseMaskMemcpy(0, (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                        }
 
                         if(task_id == 1){
-                            if(col == 759){
-                                /** Data initialization */
-                                memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                                memcpy(RefIn_h, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                            /** Data initialization */
+                            memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                            memcpy(RefIn_h, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
 
-                                /** Process */
-                                auto trail_start = std::chrono::steady_clock::now();
-                                trail_main();
-                                auto trail_end = std::chrono::steady_clock::now();
-                                auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
-                                // std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
-                                /** Mask copy */
-                                memcpy(&algo_func_.trail_mask_out_frm[0], TrailMask, algo_func_.VIEW_W * algo_func_.VIEW_H);
-                            }
+                            /** Process */
+                            auto trail_start = std::chrono::steady_clock::now();
+                            trail_main();
+                            auto trail_end = std::chrono::steady_clock::now();
+                            auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
+                            // std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
+                            /** Mask copy */
+                            memcpy(&algo_func_.trail_mask_out_frm[0], TrailMask, algo_func_.VIEW_W * algo_func_.VIEW_H);
                         }
 
                     // if (proc_col <= algo_func_.VIEW_W - 2) {
