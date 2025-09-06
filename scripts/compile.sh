@@ -97,7 +97,7 @@ fi
 echo "Building and installing the project for platform '$PLATFORM'..."
 # 运行 cmake 配置
 echo "Running cmake..."
-cmake .. $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
+cmake .. -DPVA_BUILD_MODE=L4T $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
 
 # 使用 make 编译
 echo "Compiling the project..."

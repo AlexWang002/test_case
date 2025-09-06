@@ -118,6 +118,9 @@ class Decoder {
             /// \note Using free(p) instead of the default delete indicates that
             ///    the LidarPointCloudPackets object is allocated using C-style malloc.
             if (p) {
+                if(p->lidar_parameter) {
+                    free(p->lidar_parameter);
+                }
                 free(p);
             }
         }

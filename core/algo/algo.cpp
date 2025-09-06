@@ -1414,7 +1414,7 @@ void AlgoFunction::highCalcFunc(uint16_t *dist0,uint16_t *dist1, int col,
         int dist_cur2 = dist1[row_idx];
         int x_cur2 = proj_dist1[row_idx];
         int z_cur2 = fit_high1[row_idx];
-        
+
         // 下邻点数据 (row_idx-1)
         int dist_down = dist0[row_idx-1];
         int x_down = proj_dist0[row_idx-1];
@@ -1436,13 +1436,13 @@ void AlgoFunction::highCalcFunc(uint16_t *dist0,uint16_t *dist1, int col,
         bool near_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur > 0) && (dist_up2 - dist_cur <= dist_diff_th);
         bool near_down_1 = (dist_down > 0) && (dist_cur - dist_down > 0) && (dist_cur - dist_down <= dist_diff_th);
         bool near_down_2 = (dist_down2 > 0) && (dist_cur - dist_down2 > 0) && (dist_cur - dist_down2 <= dist_diff_th);
-        
+
         // 计算邻近标志 (第二回波)
         bool near2_up_1 = (dist_up > 0) && (dist_up - dist_cur2 > 0) && (dist_up - dist_cur2 <= dist_diff_th);
         bool near2_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur2 > 0) && (dist_up2 - dist_cur2 <= dist_diff_th);
         bool near2_down_1 = (dist_down > 0) && (dist_cur2 - dist_down > 0) && (dist_cur2 - dist_down <= dist_diff_th);
         bool near2_down_2 = (dist_down2 > 0) && (dist_cur2 - dist_down2 > 0) && (dist_cur2 - dist_down2 <= dist_diff_th);
-        
+
         // 计算平坦标志 (第一回波)
         int dz_up = std::abs(z_up - z_cur);
         int dz_down = std::abs(z_down - z_cur);
@@ -1452,12 +1452,12 @@ void AlgoFunction::highCalcFunc(uint16_t *dist0,uint16_t *dist1, int col,
         int dx_down2 = std::abs(x_down2 - x_cur);
         int dz_up2 = std::abs(z_up2 - z_cur);
         int dx_up2 = std::abs(x_up2 - x_cur);
-        
+
         bool flat_flag11 = (dz_up * 2 <= dx_up) && (dz_down * 2 <= dx_down);
         bool flat_flag12 = (dz_up * 2 <= dx_up) && (dz_down2 * 2 <= dx_down2);
         bool flat_flag21 = (dz_up2 * 2 <= dx_up2) && (dz_down * 2 <= dx_down);
         bool flat_flag22 = (dz_up2 * 2 <= dx_up2) && (dz_down2 * 2 <= dx_down2);
-        
+
         // 计算平坦标志 (第二回波)
         int dz2_up = std::abs(z_up - z_cur2);
         int dz2_down = std::abs(z_down - z_cur2);
@@ -1467,24 +1467,24 @@ void AlgoFunction::highCalcFunc(uint16_t *dist0,uint16_t *dist1, int col,
         int dx2_down2 = std::abs(x_down2 - x_cur2);
         int dz2_up2 = std::abs(z_up2 - z_cur2);
         int dx2_up2 = std::abs(x_up2 - x_cur2);
-        
+
         bool flat2_flag11 = (dz2_up * 2 <= dx2_up) && (dz2_down * 2 <= dx2_down);
         bool flat2_flag12 = (dz2_up * 2 <= dx2_up) && (dz2_down2 * 2 <= dx2_down2);
         bool flat2_flag21 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down * 2 <= dx2_down);
         bool flat2_flag22 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down2 * 2 <= dx2_down2);
-        
+
         // 计算角度标志 (第一回波)
         bool angle_flag11 = std::abs(z_up + z_down - 2*z_cur) <= delta_z_th;
         bool angle_flag12 = std::abs(z_up + z_down2 - 2*z_cur) <= delta_z_th;
         bool angle_flag21 = std::abs(z_up2 + z_down - 2*z_cur) <= delta_z_th;
         bool angle_flag22 = std::abs(z_up2 + z_down2 - 2*z_cur) <= delta_z_th;
-        
+
         // 计算角度标志 (第二回波)
         bool angle2_flag11 = std::abs(z_up + z_down - 2*z_cur2) <= delta_z_th;
         bool angle2_flag12 = std::abs(z_up + z_down2 - 2*z_cur2) <= delta_z_th;
         bool angle2_flag21 = std::abs(z_up2 + z_down - 2*z_cur2) <= delta_z_th;
         bool angle2_flag22 = std::abs(z_up2 + z_down2 - 2*z_cur2) <= delta_z_th;
-        
+
         // ROI标志
         bool roi_flag = (dist_cur > 0) && (dist_cur <= dist_max_th) && (std::abs(z_cur) <= z_th);
         bool roi_flag2 = (dist_cur2 > 0) && (dist_cur2 <= dist_max_th) && (std::abs(z_cur2) <= z_th);
@@ -1500,46 +1500,46 @@ void AlgoFunction::highCalcFunc(uint16_t *dist0,uint16_t *dist1, int col,
         bool flag2_21 = near2_up_1 && near2_down_2 && flat2_flag12 && angle2_flag12;
         bool flag2_12 = near2_up_2 && near2_down_1 && flat2_flag21 && angle2_flag21;
         bool flag2_22 = near2_up_2 && near2_down_2 && flat2_flag22 && angle2_flag22;
-        
+
         // 地面标志计算
         bool ground_flag = roi_flag && (flag_11 || flag_12 || flag_21 || flag_22) ||
                           (std::abs(z_cur) < 20 && dist_cur < 4000);
-        
+
         bool ground_flag2 = !ground_flag && roi_flag2 &&
                            (flag2_11 || flag2_12 || flag2_21 || flag2_22) ||
                            (std::abs(z_cur2) < 20 && dist_cur2 < 4000);
-        
+
         // 更新地面标记 (当前行)
         if (ground_flag) gnd_mark0[row_idx] |= 1;
         if (ground_flag2) {
             gnd_mark1[row_idx] |= 1;
             gnd_mark0[row_idx] = 0; // 第一回波标记置0
         }
-        
+
         // 更新 row_idx-1 的第一回波标记 (gnd_mark_line(row_idx-1))
-        if ((ground_flag && (flag_11 || flag_12)) || 
+        if ((ground_flag && (flag_11 || flag_12)) ||
             (ground_flag2 && (flag2_11 || flag2_12))) {
             gnd_mark0[row_idx-1] |= 1;
         }
 
         // 更新 row_idx+1 的第一回波标记 (gnd_mark_line(row_idx+1))
-        if ((ground_flag && (flag_11 || flag_21)) || 
+        if ((ground_flag && (flag_11 || flag_21)) ||
             (ground_flag2 && (flag2_11 || flag2_21))) {
             gnd_mark0[row_idx+1] |= 1;
         }
 
         // 更新 row_idx-1 的第二回波标记 (gnd_mark_line2(row_idx-1))
-        if ((ground_flag && (flag_21 || flag_22)) || 
+        if ((ground_flag && (flag_21 || flag_22)) ||
             (ground_flag2 && (flag2_21 || flag2_22))) {
             gnd_mark1[row_idx-1] |= 1;
         }
 
         // 更新 row_idx+1 的第二回波标记 (gnd_mark_line2(row_idx+1))
-        if ((ground_flag && (flag_12 || flag_22)) || 
+        if ((ground_flag && (flag_12 || flag_22)) ||
             (ground_flag2 && (flag2_12 || flag2_22))) {
             gnd_mark1[row_idx+1] |= 1;
         }
-        
+
         // 低高度强制标记
         if (std::abs(z_down) < 20 && dist_down < 4000) {
             gnd_mark0[row_idx-1] = 2;
@@ -1718,7 +1718,7 @@ void AlgoFunction::algoFrameChange(void)
 
 /**
  * @brief stray delete algorithm of lidar
- * 
+ *
  * @param col_idx column index of the buffer
  *                  Range: 0 - 759. Accuracy: 1.
  * @param stray_col_buffer stray buffer column index
@@ -1796,20 +1796,20 @@ void AlgoFunction::strayDelete(int col_idx,
         int stray_chain_dist_c = 0;
         int stray_chain_row_st_c = 0;
         int stray_chain_row_ed_c = 0;
-        
+
         // 更新全局杂散链数组
         stray_chain_cnt[0] = stray_chain_cnt[1];
         stray_chain_cnt[1] = stray_chain_cnt[2];
         stray_chain_cnt[2] = stray_chain_cnt_c;
-        
+
         stray_chain_dist[0] = stray_chain_dist[1];
         stray_chain_dist[1] = stray_chain_dist[2];
         stray_chain_dist[2] = stray_chain_dist_c;
-        
+
         stray_chain_row_st[0] = stray_chain_row_st[1];
         stray_chain_row_st[1] = stray_chain_row_st[2];
         stray_chain_row_st[2] = stray_chain_row_st_c;
-        
+
         stray_chain_row_ed[0] = stray_chain_row_ed[1];
         stray_chain_row_ed[1] = stray_chain_row_ed[2];
         stray_chain_row_ed[2] = stray_chain_row_ed_c;
@@ -1819,19 +1819,19 @@ void AlgoFunction::strayDelete(int col_idx,
             // 获取当前行数据
             int dist_cur = dist_wave0_buffer3[stray_col_buffer][row_idx];
             int dist_cur2 = dist_wave1_buffer3[stray_col_buffer][row_idx];
-            
+
             int row_idx_up = std::max(0, row_idx - 1);
             int dist_up = dist_wave0_buffer3[stray_col_buffer][row_idx_up];
             int dist_up2 = dist_wave1_buffer3[stray_col_buffer][row_idx_up];
-            
+
             int crosstalk_cur = crtk_wave0_buffer3[stray_col_buffer][row_idx];
             int crosstalk_cur2 = crtk_wave1_buffer3[stray_col_buffer][row_idx];
             int crosstalk_up = crtk_wave0_buffer3[stray_col_buffer][row_idx_up];
             int crosstalk_up2 = crtk_wave1_buffer3[stray_col_buffer][row_idx_up];
-            
+
             int gnd_cur = grnd_wave0_buffer3[stray_col_buffer][row_idx];
             int gnd_cur2 = grnd_wave1_buffer3[stray_col_buffer][row_idx];
-            
+
             int height_cur = high_wave0_buffer3[stray_col_buffer][row_idx];
             int height_cur2 = high_wave1_buffer3[stray_col_buffer][row_idx];
 
@@ -1841,7 +1841,7 @@ void AlgoFunction::strayDelete(int col_idx,
             if (dist_cur > 0 && dist_cur < 14000 && gnd_cur) {
                 int gnd_seg = dist_cur >> 9; // 等价于除以512
                 if (gnd_seg >= 28) gnd_seg = 27;
-                
+
                 if (gnd_cnt_tab[gnd_seg] == 0) {
                     gnd_cnt_tab[gnd_seg] = 1;
                     gnd_row_ed_tab[gnd_seg] = row_idx;
@@ -1851,26 +1851,26 @@ void AlgoFunction::strayDelete(int col_idx,
                     gnd_cnt_tab[gnd_seg] = std::min(32, gnd_cnt_tab[gnd_seg] + 1);
                     gnd_row_ed_tab[gnd_seg] = row_idx;
                 }
-                
-                if ((dist_cur > gnd_dist_max && dist_cur - gnd_dist_max < 800) || 
+
+                if ((dist_cur > gnd_dist_max && dist_cur - gnd_dist_max < 800) ||
                         gnd_dist_max == 0) {
                     gnd_dist_max = dist_cur;
                 }
-            } 
+            }
             else if (dist_cur2 > 0 && dist_cur2 < 14000 && gnd_cur2) {
                 int gnd_seg = dist_cur2 >> 9;
                 if (gnd_seg >= 28) gnd_seg = 27;
-                
+
                 if (gnd_cnt_tab[gnd_seg] == 0) {
                     gnd_cnt_tab[gnd_seg] = 1;
                     gnd_row_ed_tab[gnd_seg] = row_idx;
                     gnd_height_st_tab[gnd_seg] = height_cur2;
-                } else if (row_idx - gnd_row_ed_tab[gnd_seg] <= 3 && 
+                } else if (row_idx - gnd_row_ed_tab[gnd_seg] <= 3 &&
                             std::abs(height_cur2 - gnd_height_st_tab[gnd_seg]) < 50) {
                     gnd_cnt_tab[gnd_seg] = std::min(32, gnd_cnt_tab[gnd_seg] + 1);
                     gnd_row_ed_tab[gnd_seg] = row_idx;
                 }
-                
+
                 if ((dist_cur2 > gnd_dist_max && dist_cur2 - gnd_dist_max < 800) ||
                         gnd_dist_max == 0) {
                     gnd_dist_max = dist_cur2;
@@ -1879,13 +1879,13 @@ void AlgoFunction::strayDelete(int col_idx,
 
             // ------ 天花板杂散标记 ------
             if (row_idx >= 139 && row_idx <= 143) { // 140-144行对应索引139-143
-                if (crosstalk_cur && 
-                    ((std::abs(dist_cur - dist_up) < 100 && crosstalk_up) || 
+                if (crosstalk_cur &&
+                    ((std::abs(dist_cur - dist_up) < 100 && crosstalk_up) ||
                         (std::abs(dist_cur - dist_up2) < 100 && crosstalk_up2))) {
                     ceil_stray_dist[2] = dist_cur;
-                } 
-                else if (crosstalk_cur2 && 
-                        ((std::abs(dist_cur2 - dist_up) < 100 && crosstalk_up) || 
+                }
+                else if (crosstalk_cur2 &&
+                        ((std::abs(dist_cur2 - dist_up) < 100 && crosstalk_up) ||
                             (std::abs(dist_cur2 - dist_up2) < 100 && crosstalk_up2))) {
                     ceil_stray_dist[2] = dist_cur2;
                 }
@@ -1905,8 +1905,8 @@ void AlgoFunction::strayDelete(int col_idx,
                         class_stray_cnt++;
                         class_stray_row = row_idx;
                     }
-                } 
-                else if (std::abs(class_dist - dist_cur) < dist_th_classify_cur && 
+                }
+                else if (std::abs(class_dist - dist_cur) < dist_th_classify_cur &&
                             row_idx - class_row_ed < 3) {
                     // 普通块处理
                     if (0 == class_stray_cnt) {
@@ -1921,7 +1921,7 @@ void AlgoFunction::strayDelete(int col_idx,
                                 class_stray_row = row_idx;
                             }
                         }
-                    } 
+                    }
                     // 杂散块处理
                     else if (class_stray_cnt > 0) {
                         class_row_ed = row_idx;
@@ -1935,12 +1935,12 @@ void AlgoFunction::strayDelete(int col_idx,
                             save_flag_col = true;
                         }
                     }
-                } 
+                }
                 else {
                     save_flag_col = true;
                 }
             }
-            
+
             // 保存聚类结果
             if (save_flag_col || row_idx == (VIEW_H - 1)) {
                 bool class_type = (class_stray_cnt > 0);
@@ -1955,20 +1955,20 @@ void AlgoFunction::strayDelete(int col_idx,
                         stray_chain_cnt_c = class_stray_cnt;
                         stray_chain_row_st_c = class_row_st;
                         stray_chain_row_ed_c = class_row_ed;
-                    } 
+                    }
                     // 合并条件
-                    else if(std::abs(class_dist - stray_chain_dist_c) < 100 && 
+                    else if(std::abs(class_dist - stray_chain_dist_c) < 100 &&
                             (class_row_st - stray_chain_row_ed_c < 20 || class_stray_cnt > 5)) {
                         stray_chain_dist_c = class_dist;
                         stray_chain_points_c += class_cnt;
                         stray_chain_cnt_c += class_stray_cnt;
                         stray_chain_row_ed_c = class_row_ed;
-                    } 
+                    }
                     // 替换条件
                     else if(class_stray_cnt > stray_chain_cnt_c) {
-                        wr_stray_class_flag = (stray_chain_cnt_c >= 5) && 
-                            (stray_chain_cnt_c * 2 >= stray_chain_points_c) && 
-                            (abs(stray_chain_dist_c - RainWall_in.dist) < 960) && 
+                        wr_stray_class_flag = (stray_chain_cnt_c >= 5) &&
+                            (stray_chain_cnt_c * 2 >= stray_chain_points_c) &&
+                            (abs(stray_chain_dist_c - RainWall_in.dist) < 960) &&
                             (RainWall_in.cnt > 150);
                         chain_last_row_st = stray_chain_row_st_c;
                         chain_last_row_ed = stray_chain_row_ed_c;
@@ -1995,7 +1995,7 @@ void AlgoFunction::strayDelete(int col_idx,
                         class_line[i] = 2;
                     }
                 }
-                
+
                 if (row_idx == (VIEW_H - 1) && stray_chain_cnt_c >= 5 &&
                     stray_chain_cnt_c * 2 >= stray_chain_points_c &&
                     std::abs(stray_chain_dist_c - RainWall_in.dist) < 960 &&
@@ -2003,7 +2003,7 @@ void AlgoFunction::strayDelete(int col_idx,
                     chain_last_row_st = stray_chain_row_st_c;
                     chain_last_row_ed = stray_chain_row_ed_c;
                     wr_stray_class_flag = true;
-                    
+
                 }
                 if (wr_stray_class_flag)
                 {
@@ -2026,7 +2026,7 @@ void AlgoFunction::strayDelete(int col_idx,
                     class_stray_row = (crosstalk_cur > 0) ? row_idx : 0;
                 }
             }
-            
+
             // 行结束处理
             if (row_idx == VIEW_H - 1) {
                 bool save_flag_row = false;
@@ -2034,33 +2034,33 @@ void AlgoFunction::strayDelete(int col_idx,
                 if (stray_chain_cnt_c > 0) {
                     int span_condition = (stray_chain_dist_c * (stray_chain_row_ed_c - stray_chain_row_st_c) * 7) >> 12;
                     if (span_condition > 120 && stray_chain_row_ed_c > 71) {
-                        if (stray_conn_cols == 0 && 
+                        if (stray_conn_cols == 0 &&
                             stray_chain_cnt_c * 2 > (stray_chain_row_ed_c - stray_chain_row_st_c)) {
                             stray_conn_dist = stray_chain_dist_c;
                             stray_conn_col_st = col_idx;
                             stray_conn_col_ed = col_idx;
                             stray_conn_cols = 1;
                             stray_conn_cnt = stray_chain_cnt_c;
-                        } 
-                        else if (std::abs(stray_conn_dist - stray_chain_dist_c) < 200 && 
+                        }
+                        else if (std::abs(stray_conn_dist - stray_chain_dist_c) < 200 &&
                                     col_idx - stray_conn_col_ed < 20) {
                             stray_conn_cols++;
                             stray_conn_dist = stray_chain_dist_c;
                             stray_conn_col_ed = col_idx;
                             stray_conn_cnt += stray_chain_cnt_c;
-                        } 
+                        }
                         else {
                             save_flag_row = true;
                         }
                     }
                 }
-                
+
                 if (save_flag_row || col_idx == VIEW_W - 1) {
                     if (stray_conn_cnt > 20 && stray_conn_cnt > rain_wall_cnt) {
                         rain_wall_cnt = stray_conn_cnt;
                         rain_wall_dist = stray_conn_dist;
                     }
-                    
+
                     if (col_idx == VIEW_W - 1) {
                         if (rain_wall_cnt > 0) {
                             RainWall_out.dist = rain_wall_dist;
@@ -2074,7 +2074,7 @@ void AlgoFunction::strayDelete(int col_idx,
                             }
                         }
                     }
-                    
+
                     if (stray_chain_cnt_c > 0) {
                         stray_conn_dist = stray_chain_dist_c;
                         stray_conn_col_st = col_idx;
@@ -2085,7 +2085,7 @@ void AlgoFunction::strayDelete(int col_idx,
                 }
             }
         }
-        
+
         // 更新杂散链信息
         stray_chain_cnt[2] = stray_chain_cnt_c;
         stray_chain_dist[2] = stray_chain_dist_c;
@@ -2097,29 +2097,29 @@ void AlgoFunction::strayDelete(int col_idx,
             // 获取当前行数据
             int dist_cur = dist_wave0_buffer3[stray_col_buffer][row_idx];
             int dist_cur2 = dist_wave1_buffer3[stray_col_buffer][row_idx];
-            
+
             int row_idx_down = std::max(0, row_idx - 1);
             int row_idx_up = std::min(VIEW_H - 1, row_idx + 1);
-            
+
             int dist_down = dist_wave0_buffer3[stray_col_buffer][row_idx_down];
             int dist_up = dist_wave0_buffer3[stray_col_buffer][row_idx_up];
-            
+
             int ref_cur = refl_wave0_buffer3[stray_col_buffer][row_idx];
             int ref_cur2 = refl_wave1_buffer3[stray_col_buffer][row_idx];
-            
+
             int peak_mark_cur = peak_wave0_buffer3[stray_col_buffer][row_idx];
             int peak_mark_l = peak_wave0_buffer3[stray_col_neib_buf[0]][row_idx];
             int peak_mark_r = peak_wave0_buffer3[stray_col_neib_buf[2]][row_idx];
-            
+
             int gnd_cur = grnd_wave0_buffer3[stray_col_buffer][row_idx];
             int gnd_cur2 = grnd_wave1_buffer3[stray_col_buffer][row_idx];
-            
+
             int height_cur = high_wave0_buffer3[stray_col_buffer][row_idx];
             int height_cur2 = high_wave1_buffer3[stray_col_buffer][row_idx];
-            
+
             int crosstalk_cur = crtk_wave0_buffer3[stray_col_buffer][row_idx];
             int crosstalk_cur2 = crtk_wave1_buffer3[stray_col_buffer][row_idx];
-            
+
             int smlr_cur2 = smlr_wave1_buffer3[stray_col_buffer][row_idx];
 
             int class_raw = class_line[row_idx];
@@ -2129,10 +2129,10 @@ void AlgoFunction::strayDelete(int col_idx,
             // 地面高度处理
             int ground_seg = (dist_cur >> 9);
             if (ground_seg >= 28) ground_seg = 27;
-            
+
             int ground_height = gnd_height_st_tab[ground_seg];
             int ground_dist_diff = 700;
-            
+
             if (ground_seg >= 9) {
                 if (gnd_cnt_tab[ground_seg] == 0) {
                     if (gnd_cnt_tab[ground_seg - 1] > 0) {
@@ -2142,7 +2142,7 @@ void AlgoFunction::strayDelete(int col_idx,
                     }
                 }
             }
-            
+
             // 更新地面标记
             if ((dist_cur2 > dist_cur && (gnd_cur2 && gnd_cur)) ||
                 (ground_height != 65535 && (height_cur - ground_height > 50))) {
@@ -2152,24 +2152,24 @@ void AlgoFunction::strayDelete(int col_idx,
             if (ground_height != 65535 && (height_cur2 - ground_height > 50)) {
                 gnd_cur2 = 0;
             }
-            
+
             // 连接标志
-            bool connect_ground_flag = 
-                !gnd_cur && 
-                ((height_cur - ground_height < 400 && 
+            bool connect_ground_flag =
+                !gnd_cur &&
+                ((height_cur - ground_height < 400 &&
                     std::abs(gnd_dist_max - dist_cur) <= ground_dist_diff) ||
-                    (dist_cur > gnd_dist_max && 
-                    dist_cur - gnd_dist_max <= 1600 && 
+                    (dist_cur > gnd_dist_max &&
+                    dist_cur - gnd_dist_max <= 1600 &&
                     height_cur < 400));
-            
-            bool connect_ceil_flag = 
+
+            bool connect_ceil_flag =
                 std::abs(dist_cur - ceil_stray_dist[2]) <= 400 ||
                 std::abs(dist_cur - ceil_stray_dist[1]) <= 400 ||
                 std::abs(dist_cur - ceil_stray_dist[0]) <= 400 ||
-                (std::abs(dist_cur - RainWall_in.dist) < 960 && 
-                    ((RainWall_in.cnt > 300) || 
+                (std::abs(dist_cur - RainWall_in.dist) < 960 &&
+                    ((RainWall_in.cnt > 300) ||
                     (RainWall_in.dist > 3000 && RainWall_in.cnt > 80)));
-            
+
             // 更新分类标记
             int class_cur = (class_raw == 1)  || (class_down == 1) || (class_up == 1) ||
                 (std::abs(dist_up - dist_cur) > 400 &&
@@ -2178,8 +2178,8 @@ void AlgoFunction::strayDelete(int col_idx,
 
             // 杂散和镜像标志
             bool stray_flag = (peak_mark_cur || peak_mark_l || peak_mark_r);
-            bool mirror_flag = (row_idx < RegionSize * 2) && 
-                                (dist_cur > 5000) && 
+            bool mirror_flag = (row_idx < RegionSize * 2) &&
+                                (dist_cur > 5000) &&
                                 (height_cur < -600);
 
             // 删除条件
@@ -2193,20 +2193,20 @@ void AlgoFunction::strayDelete(int col_idx,
                 (stray_chain_cnt[1] >= stray_Param.stray_cnt_th &&
                     std::abs(dist_cur - stray_chain_dist[1]) < 240 &&
                     ((row_idx >= stray_chain_row_st[1] && row_idx <= stray_chain_row_ed[1]) || class_cur));
-            
-            bool frame_del_en = 
-                (RainWall_in.cnt > 80) && 
-                (std::abs(dist_cur - RainWall_in.dist) < 960) && 
-                (height_cur > 0) && 
+
+            bool frame_del_en =
+                (RainWall_in.cnt > 80) &&
+                (std::abs(dist_cur - RainWall_in.dist) < 960) &&
+                (height_cur > 0) &&
                 class_cur;
-            
+
             // 最终删除标记
             bool stray_tag_en = (algo_Param.StrayRemoveOn &&
                                 (stray_flag || mirror_flag) &&
                                 (straight_del_en || column_del_en || frame_del_en) && !gnd_cur);
-            
+
             bool stray_del_en = stray_tag_en && !(connect_ground_flag && !connect_ceil_flag);
-            
+
             // 第二回波选择逻辑
             bool wave1_sel_base = (smlr_cur2 >= 1) && (crosstalk_cur2 == 0);
             bool wave1_sel_column =
@@ -2216,14 +2216,14 @@ void AlgoFunction::strayDelete(int col_idx,
                         std::abs(dist_cur2 - stray_chain_dist[0]) > 240) &&
                 (stray_chain_cnt[1] < stray_Param.stray_cnt_th ||
                         std::abs(dist_cur2 - stray_chain_dist[1]) > 240);
-            
-            bool wave1_sel_frame = 
-                (RainWall_in.dist == 0) || 
-                (dist_cur2 > RainWall_in.dist + 200) || 
+
+            bool wave1_sel_frame =
+                (RainWall_in.dist == 0) ||
+                (dist_cur2 > RainWall_in.dist + 200) ||
                 (dist_cur2 < RainWall_in.dist - 960);
-            
+
             bool wave1_sel_en = (wave1_sel_base && wave1_sel_column && wave1_sel_frame) || gnd_cur2;
-            
+
             // 设置输出掩码
             // if (stray_del_en) {
             //     stray_mark_out0[row_idx] = wave1_sel_en ? 2 : 3;
@@ -2250,7 +2250,7 @@ void AlgoFunction::strayDelete(int col_idx,
 
 /**
  * @brief rain enhance algorithm of lidar
- * 
+ *
  * @param spray_col column index of the buffer
  *                  Range: 0 - 759. Accuracy: 1.
  * @param spray_col_buffer spray buffer column index
@@ -2382,7 +2382,7 @@ void AlgoFunction::rainEnhance(int spray_col,
                 bool cond1;
                 bool cond0_2;
                 bool cond0_3;
-    
+
                 bool cond2;
                 int* local_ref_mask_a;
                 int* local_ref_mask_b;
@@ -2390,7 +2390,7 @@ void AlgoFunction::rainEnhance(int spray_col,
                 auto sign = [&](int x) {
                     return (x > 0) - (x < 0);
                 };
-                //雨雾标记读取 第一回波    
+                //雨雾标记读取 第一回波
                 uint8_t cur_mark_1 = rain_wave0_buffer4[spray_col_buffer][row_idx];// 第一回波
                 bool cond_self_01 = !cur_mark_1;
                 if (cond_self_01)
@@ -2712,7 +2712,7 @@ void AlgoFunction::rainEnhance(int spray_col,
                         }
                     }
                 }
-                //雨雾标记读取 第二回波    
+                //雨雾标记读取 第二回波
                 uint8_t cur_mark_2 = rain_wave1_buffer4[spray_col_buffer][row_idx];// secondary wave
                 bool cond_self_02 = !cur_mark_2;
                 if (cond_self_02)
@@ -3031,11 +3031,11 @@ void AlgoFunction::rainEnhance(int spray_col,
                         }
                     }
                 }
-                //雨雾标记读取 第二回波    
+                //雨雾标记读取 第二回波
             }
         }
     }
-                
+
     // 第二部分：雨滴过滤
     int spray_filter_col = spray_col - SprayFilterDelayCol;
     if (spray_filter_col < 0 || spray_filter_col >= VIEW_W) return;
@@ -3162,12 +3162,12 @@ void AlgoFunction::rainEnhance(int spray_col,
             spray_mark_out0[i] = rain_final0_buffer[spray_out_col_buffer][i];
             spray_mark_out1[i] = rain_final1_buffer[spray_out_col_buffer][i];
         }
-    } 
+    }
 }
 
 /**
  * @brief point cloud algorithm main process
- * 
+ *
  * @param col_idx column index of the buffer
  *                  Range: 0 - 759. Accuracy: 1.
  * @param pstFrameBuffer frame buffer of whole point cloud
