@@ -293,11 +293,8 @@ void CloudManager::algoFinalProcess(void)
                 }
                 cv_calc_.notify_all();
             };
-
-            //std::cout << "wait for all algo thread done !-------" << std::endl;
             if (sendEnoughData(algo_func_.VIEW_W - 1)) {
                 for (int32_t col = 0; col < algo_func_.VIEW_W + 1; ++col) {
-                    //td::cout << "col: " << col << std::endl;
                     int32_t surface_id = frame_buffer->surface_id.load();
                     auto start = std::chrono::steady_clock::now();
                     //algo_func_.algoFianlDecision(col, dist, ref, frame_buffer);
@@ -352,8 +349,8 @@ void CloudManager::algoFinalProcess(void)
                 }
             } else {
                 //发生丢包之后，先清0当前帧数据，然后切换到下一帧
-                frame_buffer->frame_droped.store(false);
-                resetAndSwitchFrame();
+                // frame_buffer->frame_droped.store(false);
+                // resetAndSwitchFrame();
                 //break;
             }   
             
@@ -394,32 +391,6 @@ void CloudManager::algoProcess(int32_t task_id)
                 AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
                 
                 if (recvEnoughData(frame_buffer)) {
-                    std::ofstream outFile("dist0_data.csv");
-    
-                    // 检查文件是否成功打开
-                    if (!outFile.is_open()) {
-                        std::cerr << "错误：无法打开文件 dist0_data.csv" << std::endl;
-                    }
-                    
-                    // 遍历数组并写入CSV文件
-                    for (int y = 0; y < algo_func_.VIEW_H; ++y) {
-                        for (int x = 0; x < algo_func_.VIEW_W; ++x) {
-                            // 写入当前元素
-                            outFile << frame_buffer->dist0[x][y];
-                            
-                            // 如果不是最后一列，添加逗号分隔符
-                            if (x < algo_func_.VIEW_W - 1) {
-                                outFile << ",";
-                            }
-                        }
-                        // 换行（每行对应一个y值）
-                        outFile << std::endl;
-                    }
-                    
-                    // 关闭文件
-                    outFile.close();
-                    
-                    std::cout << "数据已成功保存到 dist0_data.csv" << std::endl;
                     auto start = std::chrono::steady_clock::now();
                     // proc_col = algo_func_.pcAlgoMainFunc(col, frame_buffer, task_id);  // 算法后处理模块
 
@@ -440,7 +411,7 @@ void CloudManager::algoProcess(int32_t task_id)
                 if (isLostPkt) {
                     updateAlgoIdx(ALGO_LOSS_PKT_CODE - 1, task_id);
                 } else {
-                    updateAlgoIdx(algo_func_.VIEW_W - 1, task_id);
+                    updateAlgoIdx(algo_func_.VIEW_W - 2, task_id);
                 }
             } else {
                 std::unique_lock<std::mutex> lock(mtx_calc_);
@@ -624,7 +595,6 @@ bool CloudManager::sendEnoughData(int32_t col)
         all_loss = all_loss && (val == ALGO_LOSS_PKT_CODE);
         all_ready = all_ready && (val >= col);
     }
-
     if (all_loss) {
         return false;
     }
