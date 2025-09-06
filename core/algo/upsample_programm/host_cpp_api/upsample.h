@@ -11,12 +11,12 @@ extern uint16_t DistOutUp[VIEW_HEIGHT][VIEW_WIDTH];
 extern uint8_t RefOutOri[VIEW_HEIGHT][VIEW_WIDTH];
 extern uint8_t RefOutUp[VIEW_HEIGHT][VIEW_WIDTH];
 
-extern uint16_t *DistIn_d;
-extern uint16_t *DistIn_h;
+extern uint16_t *DistDownIn_d;
+extern uint16_t *DistDownIn_h;
 extern uint16_t *DistRawIn_d;
 extern uint16_t *DistRawIn_h;
-extern uint8_t *RefIn_d;
-extern uint8_t *RefIn_h;
+extern uint8_t *RefDownIn_d;
+extern uint8_t *RefDownIn_h;
 extern uint8_t *RefRawIn_d;
 extern uint8_t *RefRawIn_h;
 extern uint16_t *DistOutOri_d;

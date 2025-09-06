@@ -87,7 +87,6 @@ void upsampleDataFree()
 }
 void upsample_main()
 {
-
     try
     {
         Executable exec = Executable::Create(PVA_EXECUTABLE_DATA(upsample_dev),
@@ -193,8 +192,6 @@ void upsample_main()
         {
             std::cout << "VPU Program returned an Error Code: " << (int32_t)statusCode << std::endl;
         }
-
-
     }
     catch (cupva::Exception const &e)
     {

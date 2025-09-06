@@ -24,7 +24,9 @@
 #include <vector>
 #include <atomic>
 #include <map>
-
+#include <string>
+#include <sys/types.h>
+#include <unistd.h>
 /******************************************************************************/
 /*                      Include headers of the component                      */
 /******************************************************************************/
