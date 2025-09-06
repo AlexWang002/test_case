@@ -1563,7 +1563,11 @@ void AlgoFunction::highCalcFunc(uint16_t *dist0,uint16_t *dist1, int col,
  */
 void AlgoFunction::algoFianlDecision(int col_idx, uint16_t *pu16Dist, uint8_t *pu8Ref, tstFrameBuffer* frame_buffer)
 {
-    // 提前计算环形缓冲区索引
+    memcpy(pu16Dist, frame_buffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+    memcpy(&pu16Dist[VIEW_H], frame_buffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+    memcpy(pu8Ref, frame_buffer->ref0[col_idx], sizeof(uint8_t) * VIEW_H);
+    memcpy(&pu8Ref[VIEW_H], frame_buffer->ref0[col_idx], sizeof(uint8_t) * VIEW_H);
+    //提前计算环形缓冲区索引
     circularCalcIdx(rear5, buffer_size_upsampling);
     const int decision_col = col_idx;
     const int decision_col_buffer = matlabMod(rear5 - 1 + 1, buffer_size_upsampling);

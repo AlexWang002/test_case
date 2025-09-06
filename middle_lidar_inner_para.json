@@ -1,0 +1,10 @@
+{
+	"middle_lidar_sn":"12342344532",
+	"left_blind_spot_lidar_sn":"",
+	"right_blind_spot_lidar_sn":"",
+	"rear_blind_spot_lidar_sn":"",
+	"middle_lidar_crc":"0xb3559706U",
+	"left_blind_spot_lidar_crc":"",
+	"right_blind_spot_lidar_crc":"",
+	"rear_blind_spot_lidar_crc":""
+}
