@@ -169,10 +169,9 @@ void addThread(pid_t tid, const std::string& name) {
 }
 
 void monitThreads() {
-    if (!yaml::demo_test_param.enable_cpu_monitor) {
-        return;
-    }
-    LogDebug("monitThreads interval_time: {}", yaml::demo_test_param.cpu_monitor_cycle);
+    std::cout << "[Start cpu monitor thread]" << std::endl;
+
+    //LogDebug("monitThreads interval_time: {}", yaml::demo_test_param.cpu_monitor_cycle);
     std::this_thread::sleep_for(std::chrono::seconds(2));
     // Sleep 2 seconds to wait for all threads to start.
     auto now = std::chrono::system_clock::now();
@@ -190,28 +189,15 @@ void monitThreads() {
         (void)calculateCPUUsage(kv.second);
     }
 
-    std::ostringstream oss_head;
-    oss_head << "timestamp, main_PID, ";
-
-    for (auto& kv : g_threads) {
-        oss_head << kv.second.name << ", ";
-    }
-    oss_head << "saveOrNot, " << "\n";
-
-    std::ofstream csv_file("./csv_file/cpu_usage_" + std::to_string(timestamp_ms) + ".csv", std::ios::app);
-    csv_file << oss_head.str();
-    (void)csv_file.flush();
-
-    while (!g_stop) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(yaml::demo_test_param.cpu_monitor_cycle));
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         g_save_bin = false;
         now = std::chrono::system_clock::now();
         timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
         algo_time = 0.0;
         main_cpu_usage = calculateCPUUsage(main_thread);
 
-        std::ostringstream oss;
-        oss << timestamp_ms << ", " << main_cpu_usage << ", ";
+        std::cout << "cpu payload--------------" << std::endl;
         for (auto& kv : g_threads) {
             auto thread_name = kv.second.name;
             double thread_cpu_usage = calculateCPUUsage(kv.second);
@@ -219,11 +205,11 @@ void monitThreads() {
             if ("handleMsopData" != thread_name) {
                 algo_time += thread_cpu_usage;
             }
-            oss << thread_cpu_usage << ", ";
+            std::cout << "thread " << kv.second.tid << " cpu usage: " << thread_cpu_usage << ", ";
         }
+        std::cout << "--------------" << std::endl;
 
         if (algo_time > algo_threshold) {
-            oss << fileCounter << ".bin, \n";
             LogInfo("algo_time:{} > algo_threshold: {}", algo_time, algo_threshold);
             g_save_bin = true;
             LogInfo("SDK main process name: {}, cpu_usage: {}", main_thread.name, main_thread.cpu_usage);
@@ -232,13 +218,8 @@ void monitThreads() {
                 LogInfo("name: {}, cpu_usage: {}", kv.second.name, kv.second.cpu_usage);
             }
         } else {
-            oss << "  , \n";
         }
-
-        csv_file << oss.str();
-        (void)csv_file.flush();
     }
-    csv_file.close();
 }
 
 /******************************************************************************/

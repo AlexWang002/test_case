@@ -351,8 +351,8 @@ void CloudManager::algoFinalProcess(void)
                 }
             } else {
                 //发生丢包之后，先清0当前帧数据，然后切换到下一帧
-                // frame_buffer->frame_droped.store(false);
-                // resetAndSwitchFrame();
+                frame_buffer->frame_droped.store(false);
+                resetAndSwitchFrame();
                 //break;
             }
 
@@ -459,7 +459,7 @@ void CloudManager::algoProcess(int32_t task_id)
                 if (isLostPkt) {
                     updateAlgoIdx(ALGO_LOSS_PKT_CODE - 1, task_id);
                 } else {
-                    updateAlgoIdx(algo_func_.VIEW_W - 2, task_id);
+                    updateAlgoIdx(algo_func_.VIEW_W - 1, task_id);
                 }
             } else {
                 std::unique_lock<std::mutex> lock(mtx_calc_);
@@ -649,7 +649,7 @@ bool CloudManager::sendEnoughData(int32_t col)
     for (const auto& kIdx : algo_proc_idx_) {
         int32_t val = kIdx.load();
         all_loss = all_loss && (val == ALGO_LOSS_PKT_CODE);
-        all_ready = all_ready && (val >= col);
+        all_ready = all_ready && (val > col);
     }
     if (all_loss) {
         return false;
