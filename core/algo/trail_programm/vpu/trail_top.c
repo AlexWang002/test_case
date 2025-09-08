@@ -38,7 +38,7 @@ void HorTrailRemove(int* dist_tmp, int dist_trail, int* Hortrail_judge, int* wal
     int dif_dist_abs[4] = {0};
     int dif2_dist_abs[3] = {0};
     // 计算自适应阈值
-    const int AdjDisThreD = max(1, (int)(floor(dist_trail * trail_Param->DisThreRatio)));
+    const int AdjDisThreD = max(1, (dist_trail * trail_Param->DisThreRatio) >> 12);
     int zero_cnt = 0;
     int dif_dist_abs_cnt = 0;
 
@@ -209,7 +209,7 @@ CUPVA_VPU_MAIN()
                 if (dist_trail <= 0 || dist_trail >= bypass_distance) continue;
 
                 int trail_refer_mask = 0;
-                near_dist_th = clamp((int)(round(dist_trail * trail_Param.dist_th_ratio)), 2, 20);
+                near_dist_th = clamp(((dist_trail *  trail_Param.dist_th_ratio) >> 3), 2, 20);
                 int dist_tmp[HL] = {0};
 
                 for (int j = -HL/2; j <= HL/2; ++j) {
