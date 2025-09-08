@@ -34,7 +34,7 @@ int TrailMask[VIEW_HEIGHT][VIEW_WIDTH] = {0};
 namespace
 {
     int8_t TrailParam_a[sizeof(TrailParam_t)];
-    TrailParam_t *TrailParams = (TrailParam_t*) TrailParam_a;
+    TrailParam_t TrailParams = DEFAULT_TRAIL_PARAM;
 }
 
 void TrailDataAlloc()
@@ -65,16 +65,7 @@ void trail_main()
 
         CmdProgram prog = CmdProgram::Create(exec);
 
-        TrailParams->D_H = 250;
-        TrailParams->BypassDis = 3;
-        TrailParams->dist_th_ratio = 1;
-        TrailParams->DisThreRatio = DIS_THRE_RATIO_VALUE;
-        TrailParams->near_cnt_th_h = 2400;
-        TrailParams->near_cnt_th_v = 3;
-        TrailParams->SlopDifThre = 5;
-
-        prog["algorithmParams"].set(TrailParam_a, sizeof(TrailParam_t));
-
+        prog["algorithmParams"].set((int *)&TrailParams, sizeof(TrailParam_t));
         RasterDataFlow &sourceDistDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceDistDataFlowHandler     = prog["sourceDistDataFlowHandler"];
         uint16_t *inputDistBufferVMEM   = prog["inputDistBufferVMEM"].ptr<uint16_t>();

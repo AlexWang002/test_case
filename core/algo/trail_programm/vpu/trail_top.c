@@ -12,7 +12,7 @@ VMEM(C, uint16_t, outputValidBufferVMEM,
     RDF_DOUBLE(uint16_t,TILE_WIDTH, TILE_HEIGHT));
 
 /** declare_algorithm_params */
-VMEM(C, TrailParam_t, trail_Param);
+VMEM(C, int, algorithmParams, sizeof(TrailParam_t));
 
 /** declare_df_handles */
 VMEM(C, RasterDataFlowHandler, sourceDistDataFlowHandler);
@@ -38,7 +38,7 @@ void HorTrailRemove(int* dist_tmp, int dist_trail, int* Hortrail_judge, int* wal
     int dif_dist_abs[4] = {0};
     int dif2_dist_abs[3] = {0};
     // 计算自适应阈值
-    const int AdjDisThreD = max(1, (dist_trail * trail_Param->DisThreRatio) >> 12);
+    const int AdjDisThreD = max(1, (dist_trail * trail_Param->DisThreRatio) / 4096);
     int zero_cnt = 0;
     int dif_dist_abs_cnt = 0;
 
@@ -164,6 +164,7 @@ int VerTrailRemove(int dist_trail, int* dist_longit, int wall_judge, int near_cn
 
 CUPVA_VPU_MAIN()
 {
+    TrailParam_t *trail_Param = (TrailParam_t *)algorithmParams;
     /** Calculate line pitch */
     uint16_t srcDistLinePitch = cupvaRasterDataFlowGetLinePitch(sourceDistDataFlowHandler);
     uint16_t srcRefLinePitch = cupvaRasterDataFlowGetLinePitch(sourceRefDataFlowHandler);
@@ -196,8 +197,8 @@ CUPVA_VPU_MAIN()
         /** Process the columns except for "halo" */
         for (int col_idx = 2; col_idx < TILE_HEIGHT + 2; ++col_idx) //95
         {
-            const int near_threshold = trail_Param.near_cnt_th_h; //3
-            const int bypass_distance = trail_Param.BypassDis;
+            const int near_threshold = trail_Param->near_cnt_th_h; //3
+            const int bypass_distance = trail_Param->BypassDis;
 
             /** Trail process, judge current point based on 5*9 neighbor */
             for (int row_idx = 0; row_idx < TILE_WIDTH; ++row_idx)
@@ -209,7 +210,7 @@ CUPVA_VPU_MAIN()
                 if (dist_trail <= 0 || dist_trail >= bypass_distance) continue;
 
                 int trail_refer_mask = 0;
-                near_dist_th = clamp(((dist_trail *  trail_Param.dist_th_ratio) >> 3), 2, 20);
+                near_dist_th = clamp(((dist_trail *  trail_Param->dist_th_ratio) / 8), 2, 20);
                 int dist_tmp[HL] = {0};
 
                 for (int j = -HL/2; j <= HL/2; ++j) {
@@ -224,7 +225,7 @@ CUPVA_VPU_MAIN()
                 if (trail_refer_mask != 0) continue;
                 int Hortrail_judge = 0;
                 int wall_judge = 0;
-                HorTrailRemove(dist_tmp, dist_trail, &Hortrail_judge, &wall_judge, &trail_Param);
+                HorTrailRemove(dist_tmp, dist_trail, &Hortrail_judge, &wall_judge, trail_Param);
 
                 if(Hortrail_judge == 1)
                 {
@@ -237,7 +238,7 @@ CUPVA_VPU_MAIN()
                         const int buf_idx = start_idx + k;
                         dist_longit[buf_idx] = inputDistBufferVMEM[col_idx * srcDistLinePitch + srcDistOffset + row_idx - row_range_up + k];
                     }
-                    int Vertrail_judge = VerTrailRemove(dist_trail, dist_longit, wall_judge, near_cnt_h, near_dist_th, &trail_Param);
+                    int Vertrail_judge = VerTrailRemove(dist_trail, dist_longit, wall_judge, near_cnt_h, near_dist_th, trail_Param);
                     if(Vertrail_judge == 1)
                     {
                         outputValidBufferVMEM[(col_idx - 2) * dstLinePitch + row_idx + dstOffset] = 1;

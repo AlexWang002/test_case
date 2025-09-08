@@ -34,4 +34,15 @@ typedef struct{
     int near_cnt_th_h;
     int near_cnt_th_v;
 }TrailParam_t;
+
+#define DEFAULT_TRAIL_PARAM { \
+    .D_H = 250, \
+    .SlopDifThre = 3, \
+    .dist_th_ratio = 1, \
+    .DisThreRatio = DIS_THRE_RATIO_VALUE, \
+    .BypassDis = 2400, \
+    .near_cnt_th_h = 3, \
+    .near_cnt_th_v = 5 \
+}
+
 #endif
