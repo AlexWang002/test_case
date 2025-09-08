@@ -43,6 +43,7 @@
 #include <dirent.h>
 #include "rs_lidar_sdk_api.h"
 #include "rs_msop_parse.h"
+#include "cpu_load.h"
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -957,6 +958,7 @@ bool pathExists(const std::string& kPath) {
  * \return status of running
  ******************************************************************************/
 int main(int argc, char* argv[]) {
+    robosense::lidar::utils::main_pid = getpid();
     std::cout << "Compiled on " << __DATE__ << " at " << __TIME__ << std::endl;
     for (int32_t i = 1; i < argc; ++i) {
         std::string arg{argv[i]};
@@ -1097,6 +1099,12 @@ int main(int argc, char* argv[]) {
             lidar_interface->deInit();
             return -1;
         }
+
+        std::thread cpu_usage_thread([&]() {
+            pthread_setname_np(pthread_self(), "RS-CpuMonitor");
+            utils::monitThreads();
+        });
+
         while (true) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }

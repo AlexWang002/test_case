@@ -190,7 +190,7 @@ void monitThreads() {
     }
 
     while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         g_save_bin = false;
         now = std::chrono::system_clock::now();
         timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
@@ -205,9 +205,10 @@ void monitThreads() {
             if ("handleMsopData" != thread_name) {
                 algo_time += thread_cpu_usage;
             }
-            std::cout << "thread " << kv.second.tid << " cpu usage: " << thread_cpu_usage << ", ";
+            std::cout << "[thread name] " << kv.second.name 
+                << ", [cpu usage]: " << thread_cpu_usage << std::endl;
         }
-        std::cout << "--------------" << std::endl;
+        std::cout << "--------------" << std::endl << std::endl;;
 
         if (algo_time > algo_threshold) {
             LogInfo("algo_time:{} > algo_threshold: {}", algo_time, algo_threshold);
