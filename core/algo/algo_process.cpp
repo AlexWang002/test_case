@@ -307,7 +307,7 @@ void CloudManager::algoFinalProcess(void)
                 memcpy(RefDownIn_h, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 auto start = std::chrono::steady_clock::now();
-                upsample_main();
+                //upsample_main();
                 auto end = std::chrono::steady_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
                 total_time += duration;
@@ -419,7 +419,7 @@ void CloudManager::algoProcess(int32_t task_id)
                             memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
 
                             auto denoise_start = std::chrono::steady_clock::now();
-                            denoiseProcPva();
+                            //denoiseProcPva();
                             auto denoise_end = std::chrono::steady_clock::now();
                             auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
                             // std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
@@ -434,7 +434,7 @@ void CloudManager::algoProcess(int32_t task_id)
 
                             /** Process */
                             auto trail_start = std::chrono::steady_clock::now();
-                            trail_main();
+                            //trail_main();
                             auto trail_end = std::chrono::steady_clock::now();
                             auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
                             // std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;

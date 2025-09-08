@@ -398,12 +398,12 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor,
         return LIDAR_SDK_FAILD;
     }
 
+    static uint32_t saved_cnt = 0;
+
     // 将 buffer 转换为 LidarPointCloudPackets 指针
     const LidarPointCloudPackets* kLidarCloud = static_cast<const LidarPointCloudPackets*>(kBuffer);
 
     // 计算实际的点云数据大小
-    // size_t expected_size = sizeof(LidarPointCloudPackets) +
-                            // ((kLidarCloud->point_num - 1) * sizeof(LidarPoint));
     size_t expected_size = sizeof(LidarPointCloudPackets) +
                             (1520 - 1) * sizeof(DataBlock);
 
@@ -416,13 +416,6 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor,
         return LIDAR_SDK_FAILD;
     }
 
-    // uint32_t cnt{0};
-    // for (uint32_t i = 0; i < kLidarCloud->point_num; ++i) {
-    //     const LidarPoint* point{&kLidarCloud->point[i]};
-    //     if (std::isnan(point->x)) {
-    //         cnt++;
-    //     }
-    // }
     static uint64_t last_recv_frame_timestamp{0};
     uint64_t current_recv_frame_timestamp = getTimeNowPhc();
     uint64_t recv_time_interval =
@@ -463,6 +456,10 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor,
         }
         std::cout << std::endl << std::endl;
 
+        // saved_cnt += 1;
+        // std::cout << "[saved_cnt] " << saved_cnt << std::endl;
+
+#if 0
         size_t requiredSize = kLidarCloud->data_length;
         LidarPointCloudPackets* msg = static_cast<LidarPointCloudPackets*>(malloc(requiredSize));
         void* difop2_data = malloc(kLidarCloud->lidar_parameter_length);
@@ -490,46 +487,19 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor,
         size_t point_cloud_size {0};
 
         getPointCloud(point_cloud_data, point_cloud_size);
-        std::string save_path = "./pcd_files/point_cloud_" + std::to_string((int)kLidarCloud->frame_seq) + ".pcd";
+        std::string save_path = "./pcd_files/point_cloud_" + std::to_string(saved_cnt) + ".pcd";
         savePointCloudToPCD(save_path, (LidarPointCloud*)point_cloud_data, robosense::msop::PCD_ASCII);
-        
+
         free(difop2_data);
         free(msg);
 
         free(point_cloud_data);
+#endif
     }
     if (!save_pcd) {
         return LIDAR_SDK_SUCCESS;
     }
-    uint32_t pointCount{POINTCLOUD_NUM_PER_FRAME};
-    size_t requiredSize = sizeof(LidarPointCloudPackets) +
-                            + ((1520 - 1) * sizeof(DataBlock));
 
-    // LidarPointCloudPackets* msg = static_cast<LidarPointCloudPackets*>(malloc(requiredSize));
-    // // 复制LidarPointCloud结构体的基础成员
-    // msg->protocol_version = kLidarCloud->protocol_version;
-    // msg->return_mode = kLidarCloud->return_mode;
-    // msg->sync_status = kLidarCloud->sync_status;
-    // msg->frame_sync = kLidarCloud->frame_sync;
-    // msg->point_num = kLidarCloud->point_num;
-    // msg->frame_seq = kLidarCloud->frame_seq;
-    // msg->frame_timestamp = kLidarCloud->frame_timestamp;
-
-    // // // 复制reserved数组
-    // std::memcpy(msg->reserved, kLidarCloud->reserved,
-    //             sizeof(kLidarCloud->reserved));
-
-    // // // 复制点云数据数组（关键部分）
-    // if (msg->point_num > 0) {
-    //     size_t pointDataSize = msg->point_num * sizeof(LidarPoint);
-    //     std::memcpy(msg->point, kLidarCloud->point, pointDataSize);
-    // }
-    // bool is_overwritten{false};
-    // size_t sz = stuffed_cloud_queue_.push(msg, is_overwritten);
-    // if (is_overwritten) {
-    //     std::cout << "stuffed_cloud_queue_ is full, drop the oldest one sz:"
-    //               << sz << std::endl;
-    // }
     return LidarSdkErrorCode::LIDAR_SDK_SUCCESS;
 }
 
@@ -823,7 +793,7 @@ bool readHexDataFromFile(const std::string& kFilePath,
 
     // 读取文件内容到缓冲区
     if (file.read(buffer.data(), size)) {
-        std::cout << "read " << size << " bytes" << std::endl;
+        //std::cout << "read " << size << " bytes" << std::endl;
     } else {
         std::cout << "无法读取文件!" << std::endl;
         file.close();
@@ -883,6 +853,7 @@ void convertToHex(const std::vector<char>& kBuffer, size_t frame_idx) {
 void getDataFromOsApi(LidarSdkInterface* lidar_interface) {
 
     bool is_loop{false};
+
     // 1. 获取排序后的文件信息
     std::vector<FileInfo> fileInfos = getSortedFileInfos(lidar_data_path);
 
@@ -900,7 +871,7 @@ void getDataFromOsApi(LidarSdkInterface* lidar_interface) {
             continue;
         }
         std::cout << "load data from " << file_name
-                  << ", data size:" << mipi_data.size() << std::endl;
+                << ", data size:" << mipi_data.size() << std::endl;
         all_frames_data.push_back(mipi_data);
     }
     uint32_t mipi_frame_counter{0};
@@ -916,7 +887,9 @@ void getDataFromOsApi(LidarSdkInterface* lidar_interface) {
         buf->teof = getTimeNowMgr();
         buf->tsof = getTimeNowMgr();
         buf->bufObj = nullptr;
-        buf->data = mipi_data.data();
+        //buf->data = mipi_data.data();
+        buf->data = malloc(mipi_data.size());
+        memcpy((uint8_t *)buf->data, mipi_data.data(), mipi_data.size());
         buf->len = mipi_data.size();
         buf->reservedPtr = nullptr;
 
@@ -936,12 +909,13 @@ void getDataFromOsApi(LidarSdkInterface* lidar_interface) {
             }
 
             current_frame_index = (current_frame_index + 1) % kDataCnt;
-            if (!is_loop) {
-                if (current_frame_index == 0) {
-                    std::cout << "file end" << std::endl;
-                    break;
-                }
-            }
+            //std::cout << "[current_frame_index] " << current_frame_index << std::endl;
+            // if (!is_loop) {
+            //     if (current_frame_index == 0) {
+            //         std::cout << "file end" << std::endl;
+            //         break;
+            //     }
+            // }
         }
     }
 }
