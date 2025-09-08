@@ -67,7 +67,7 @@ void trail_main()
 
         TrailParams->D_H = 250;
         TrailParams->BypassDis = 3;
-        TrailParams->dist_th_ratio = 0.125;
+        TrailParams->dist_th_ratio = 1;
         TrailParams->DisThreRatio = DIS_THRE_RATIO_VALUE;
         TrailParams->near_cnt_th_h = 2400;
         TrailParams->near_cnt_th_v = 3;

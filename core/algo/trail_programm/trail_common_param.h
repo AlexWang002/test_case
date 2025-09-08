@@ -19,7 +19,7 @@
 #define TILE_COUNT    8
 #define UP_VIEW_HEIGHT   1520
 
-#define DIS_THRE_RATIO_VALUE (sin(0.2 / 180 * 3.141592657) / tan(0.2))
+#define DIS_THRE_RATIO_VALUE 71
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -28,8 +28,8 @@
 typedef struct{
     int D_H; //拖点最大距离差
     int SlopDifThre;
-    double dist_th_ratio;
-    double DisThreRatio;
+    int dist_th_ratio;
+    int DisThreRatio;
     int BypassDis;
     int near_cnt_th_h;
     int near_cnt_th_v;
