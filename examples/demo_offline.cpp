@@ -42,6 +42,7 @@
 #include <regex>
 #include <dirent.h>
 #include "rs_lidar_sdk_api.h"
+#include "rs_msop_parse.h"
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -470,8 +471,32 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor,
         std::memcpy(msg, kLidarCloud, requiredSize);
         msg->lidar_parameter = difop2_data;
 
-        saveRawData(difop2_data, 500, 9999);
-        saveRawData(msg, requiredSize, kLidarCloud->frame_seq);
+        using namespace robosense::msop;
+        int ret = parseDifopPkt((const uint8_t*)difop2_data, 500);
+        if (!ret) {
+            std::cout << "parseDifop2 failed" << std::endl;
+        }
+
+        static const uint16_t kBlockPerFrame {1520U};
+        size_t msop_size = sizeof(LidarPointCloudPackets) + (kBlockPerFrame - 1) * sizeof(DataBlock);
+        ret = parseMsopPkt((const uint8_t*)msg, msop_size);
+        if (!ret) {
+            std::cout << "parseMsopPkt failed" << std::endl;
+        }
+
+        static constexpr uint32_t kPointsPerFrame {192U * 1520U};
+        requiredSize = sizeof(LidarPointCloud) + (kPointsPerFrame - 1) * sizeof(LidarPoint);
+        uint8_t* point_cloud_data = static_cast<uint8_t*>(malloc(requiredSize));
+        size_t point_cloud_size {0};
+
+        getPointCloud(point_cloud_data, point_cloud_size);
+        std::string save_path = "./pcd_files/point_cloud_" + std::to_string((int)kLidarCloud->frame_seq) + ".pcd";
+        savePointCloudToPCD(save_path, (LidarPointCloud*)point_cloud_data, robosense::msop::PCD_ASCII);
+        
+        free(difop2_data);
+        free(msg);
+
+        free(point_cloud_data);
     }
     if (!save_pcd) {
         return LIDAR_SDK_SUCCESS;
@@ -1035,6 +1060,18 @@ int main(int argc, char* argv[]) {
               << LIDAR_SDK_API_PATCH_GET(api_version) << std::endl;
     const char* kVersion = lidar_interface->getLidarSdkVersion();
     std::cout << "The sdk version is " << kVersion << std::endl;
+
+    {
+        using namespace robosense::msop;
+        // 初始化msop_parser
+        bool ret = initMsop();
+
+        if (!ret) {
+            std::cout << "initMsop failed" << std::endl;
+            return -1;
+        }
+    }
+
     std::thread mockThread([&]() {
         int32_t ret{pthread_setname_np(pthread_self(), "RS-DEMO-inject")};
         if (ret != 0) {

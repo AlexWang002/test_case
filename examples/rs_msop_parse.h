@@ -79,6 +79,9 @@ bool initMsop();
 bool parseDifopPkt(const uint8_t* packet, size_t size);
 void getPointCloud(void* point_cloud, uint32_t size);
 bool parseMsopPkt(const uint8_t* packet, size_t size);
+bool savePointCloudToPCD(const std::string& kFileName,
+                         LidarPointCloud* cloud,
+                         PCDFormat format);
 
 } // namespace robosense::msop
 

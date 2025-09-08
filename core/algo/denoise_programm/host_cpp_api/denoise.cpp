@@ -100,6 +100,14 @@ int denoiseProcPva()
                             .tile(TILE_WIDTH, TILE_HEIGHT);
 
         prog.compileDataFlows();
+
+        SyncObj sync = SyncObj::Create();
+        Fence fence{sync};
+        CmdRequestFences rf{fence};
+
+        CmdStatus status[2];
+        stream.submit({&prog, &rf}, status);
+        fence.wait();
     }
     catch (cupva::Exception const &e) 
     {

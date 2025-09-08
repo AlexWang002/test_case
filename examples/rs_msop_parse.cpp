@@ -403,6 +403,7 @@ bool parseMsopPkt(const uint8_t* packet, size_t size) {
 
 } // namespace robosense::msop
 
+#if 0
 int main(int32_t argc, char* argv[]) {
     using namespace robosense::msop;
     bool ret = initMsop();
@@ -453,5 +454,6 @@ int main(int32_t argc, char* argv[]) {
 
     return 0;
 }
+#endif
 
 /* \}  custom_demo */
