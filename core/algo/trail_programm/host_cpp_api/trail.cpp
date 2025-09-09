@@ -108,7 +108,7 @@ void trail_main()
         /** 将Fence封装在cmd中，与CmdProgram一起提交到PVA */
         CmdRequestFences rf{fence};
         /** 拖点算法绑定VPU1 */
-        Stream stream = Stream::Create(cupva::PVA0, cupva::VPU1);
+        Stream stream = Stream::Create();
         CmdStatus status[2];
         stream.submit({&prog, &rf}, status);
         /** 等待Fence失效 */

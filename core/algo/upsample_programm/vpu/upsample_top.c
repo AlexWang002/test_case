@@ -400,24 +400,25 @@ CUPVA_VPU_MAIN()
             if((TileIdx != TILE_COUNT - 1) && (col_idx < TILE_HEIGHT - 1))
             {
                 const int window_size = (upsample_Param->WH << 1) + 1;
-                int dist_tmp1[5];
-                int dist_tmp2[5];
-                int ref_tmp1[5];
-                int ref_tmp2[5];
+
                 for (int row_idx = 0; row_idx < TILE_WIDTH; ++row_idx)
                 {
                     /** 初始化，目前不支持memset */
-                    for(int i = 0; i < window_size; i++){
-                        dist_tmp1[i] = 0;
-                        dist_tmp2[i] = 0;
-                        ref_tmp1[i] = 0;
-                        ref_tmp2[i] = 0;
-                    }
+                    int dist_tmp1[5] = {0};
+                    int dist_tmp2[5] = {0};
+                    int ref_tmp1[5] = {0};
+                    int ref_tmp2[5] = {0};
+                    // for(int i = 0; i < window_size; i++){
+                    //     dist_tmp1[i] = 0;
+                    //     dist_tmp2[i] = 0;
+                    //     ref_tmp1[i] = 0;
+                    //     ref_tmp2[i] = 0;
+                    // }
                     int dist_raw = inputDistRawBufferVMEM[srcDistRawOffset + (col_idx - 1) * DistInRawLinePitch + row_idx];
                     int ref_raw = inputRefRawBufferVMEM[srcRefRawOffset + (col_idx - 1) * RefInRawLinePitch + row_idx];
-                    if(TileIdx == 0 && col_idx == 2 && row_idx == 15){
+                    // if(TileIdx == 0 && col_idx == 2 && row_idx == 15){
                         // printf("dist_raw = %d, ref_raw = %d\n",dist_raw,ref_raw);
-                    }
+                    // }
 
                     // 合并数据提取逻辑
                     if (row_idx > upsample_Param->WH - 1 && row_idx < TILE_WIDTH - upsample_Param->WH) { //中间行
@@ -451,23 +452,23 @@ CUPVA_VPU_MAIN()
                             ref_tmp2[i] = inputRefBufferVMEM[srcDistOffset + (col_idx + 1) * RefInLinePitch + src_row];
                         }
                     }
-                    if(TileIdx == 0 && col_idx == 2 && row_idx == 15){
+                    // if(TileIdx == 0 && col_idx == 2 && row_idx == 15){
                         // printf("dist_tmp1[0]=%d\n,dist_tmp1[1]=%d\n,dist_tmp1[2]=%d\n,dist_tmp1[3]=%d\n,dist_tmp1[4] =%d\n",dist_tmp1[0],dist_tmp1[1],dist_tmp1[2],dist_tmp1[3],dist_tmp1[4]);
                         // printf("dist_tmp2[0]=%d\n,dist_tmp2[1]=%d\n,dist_tmp2[2]=%d\n,dist_tmp2[3]=%d\n, dist_tmp2[4] =%d\n", dist_tmp2[0],dist_tmp2[1],dist_tmp2[2],dist_tmp2[3],dist_tmp2[4]);
                         // printf("ref_tmp1[0]=%d\n,ref_tmp1[1]=%d\n,ref_tmp1[2]=%d\n,ref_tmp1[3]=%d\n,ref_tmp1[4] =%d\n",ref_tmp1[0],ref_tmp1[1],ref_tmp1[2],ref_tmp1[3],ref_tmp1[4]);
                         // printf("ref_tmp2[0]=%d\n,ref_tmp2[1]=%d\n,ref_tmp2[2]=%d\n,ref_tmp2[3]=%d\n,ref_tmp2[4] =%d\n",ref_tmp2[0],ref_tmp2[1],ref_tmp2[2],ref_tmp2[3],ref_tmp2[4]);
-                    }
+                    // }
                     // 使用栈数组存储mask和ad_mask
                     int mask1[3], mask2[3], ad_mask1[3], ad_mask2[3];
                     int PLRawFillMask = 0;
                     rebuildFunc(dist_tmp1, dist_tmp2, mask1, mask2, ad_mask1, ad_mask2, &PLRawFillMask, TileIdx, col_idx, row_idx);
-                    if(TileIdx == 0 && col_idx == 2 && row_idx == 15){
-                        // printf("mask1[0] = %d, mask1[1] = %d, mask1[2] = %d\n", mask1[0], mask1[1], mask1[2]);
-                        // printf("mask2[0] = %d, mask2[1] = %d, mask2[2] = %d\n", mask2[0], mask2[1], mask2[2]);
-                        // printf("ad_mask1[0] = %d, ad_mask1[1] = %d, ad_mask1[2] = %d\n", ad_mask1[0], ad_mask1[1], ad_mask1[2]);
-                        // printf("ad_mask2[0] = %d, ad_mask2[1] = %d, ad_mask2[2] = %d\n", ad_mask2[0], ad_mask2[1], ad_mask2[2]);
-                        // printf("PLRawFillMask = %d\n", PLRawFillMask);
-                    }
+                    // if(TileIdx == 0 && col_idx == 2 && row_idx == 15){
+                    //     // printf("mask1[0] = %d, mask1[1] = %d, mask1[2] = %d\n", mask1[0], mask1[1], mask1[2]);
+                    //     // printf("mask2[0] = %d, mask2[1] = %d, mask2[2] = %d\n", mask2[0], mask2[1], mask2[2]);
+                    //     // printf("ad_mask1[0] = %d, ad_mask1[1] = %d, ad_mask1[2] = %d\n", ad_mask1[0], ad_mask1[1], ad_mask1[2]);
+                    //     // printf("ad_mask2[0] = %d, ad_mask2[1] = %d, ad_mask2[2] = %d\n", ad_mask2[0], ad_mask2[1], ad_mask2[2]);
+                    //     // printf("PLRawFillMask = %d\n", PLRawFillMask);
+                    // }
                      // 提取中心3个元素（对应原始代码的segment(1,3)）
                     int dist_c1[3], dist_c2[3], ref_c1[3], ref_c2[3];
                     for (int i = 0; i < 3; ++i) {
@@ -551,10 +552,10 @@ CUPVA_VPU_MAIN()
                     }
                     // 存储结果
                     dist_ins_c[row_idx] = dist_ins;
-                    if(TileIdx == 0 && col_idx == 2)
-                    {
+                    // if(TileIdx == 0 && col_idx == 2)
+                    // {
                         // printf("dist_ins_c: %d\n", dist_ins_c[row_idx]);
-                    }
+                    // }
                     ref_ins_c[row_idx] = ref_ins;
                     outputDistUpBufferVMEM[dstDistOffset + col_idx * DistOutUpLinePitch + row_idx] = dist_ins;
                     outputRefUpBufferVMEM[dstRefOffset + col_idx * RefOutUpLinePitch + row_idx] = ref_ins;
@@ -593,9 +594,9 @@ CUPVA_VPU_MAIN()
                         outputRefOriBufferVMEM[dstRefOffset + (col_idx + 1) * RefOutOriLinePitch + row_end - 1] = ref_c2[0];
                         outputRefOriBufferVMEM[dstRefOffset + (col_idx + 1) * RefOutOriLinePitch + row_end] = ref_c2[1];
                     }
-                    if(TileIdx == 0 && col_idx == 2){
-                        //TODO
-                    }
+                    // if(TileIdx == 0 && col_idx == 2){
+                    //     //TODO
+                    // }
                 }
             }
         }

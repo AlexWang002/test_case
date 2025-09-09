@@ -23,8 +23,3 @@ threads:
     policy: SCHED_RR
     priority: 35
     cpu_affinity: [6]
-
-  - id: 6
-    policy: SCHED_RR
-    priority: 35
-    cpu_affinity: [6]

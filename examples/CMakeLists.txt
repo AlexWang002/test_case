@@ -27,7 +27,7 @@ if(COMPILE_ARM_VERSION)
     )
     install(TARGETS rs_demo_online  DESTINATION ${CMAKE_SOURCE_DIR}/arm_test)
 
-    add_executable(rs_demo_offline demo_offline.cpp ${CMAKE_SOURCE_DIR}/core/utils/sync_queue.h)
+    add_executable(rs_demo_offline demo_offline.cpp rs_msop_parse.cpp ${CMAKE_SOURCE_DIR}/core/utils/sync_queue.h)
     target_link_libraries(rs_demo_offline  "-Wl,-unresolved-symbols=ignore-in-shared-libs"
         lidar_robosense_SDK
         ${CMAKE_SOURCE_DIR}/3rdparty/dimw/lib/libsensor_ipcclient.so

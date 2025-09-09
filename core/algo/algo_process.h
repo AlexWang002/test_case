@@ -48,7 +48,7 @@
 #include "rs_new_logger.h"
 
 #define ALGO_FRM_BUF_SIZE (3)
-#define ALGO_THREAD_NUM (3)
+#define ALGO_THREAD_NUM (2)
 #define ALGO_LOSS_PKT_CODE (-1)
 #define ALGO_VERSION_MAJOR 01
 #define ALGO_VERSION_MINOR 00
@@ -67,6 +67,10 @@ namespace lidar
 class CloudManager
 {
   private:
+
+    uint16_t dist_wave0[760][192];
+    uint8_t refl_wave0[760][192];
+
     static constexpr int32_t kCalcTimeout_{100000};
     static constexpr int32_t kMaxCloudNum_{7600};
     static constexpr int32_t algo_frm_buf_size_{3};

@@ -289,63 +289,88 @@ void CloudManager::algoFinalProcess(void)
                 cv_calc_.notify_all();
             };
             if (sendEnoughData(algo_func_.VIEW_W - 1)) {
+                memcpy(dist_wave0, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(refl_wave0, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 for (int col_idx = 0; col_idx < algo_func_.VIEW_W; col_idx++)
                 {
-                    for (int row_idx = 0; row_idx < algo_func_.VIEW_W; row_idx++){
+                    for (int row_idx = 0; row_idx < algo_func_.VIEW_H; row_idx++){
                         // 按照优先级处理不同掩码情况
                         if (algo_func_.trail_mask_out_frm[col_idx][row_idx] == 1 ||
                             algo_func_.denoise_mask_out_frm[col_idx][row_idx] == 0){
                             // 只清空wave0数据
-                            frame_buffer->dist0[col_idx][row_idx] = 0;
-                            frame_buffer->ref0[col_idx][row_idx] = 0;
+                            dist_wave0[col_idx][row_idx] = 0;
+                            refl_wave0[col_idx][row_idx] = 0;
                         }
                     }
                 }
                 /** Data initialization */
-                memcpy(DistDownIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(DistDownIn_h, dist_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(DistRawIn_h, frame_buffer->dist0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(RefDownIn_h, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(RefDownIn_h, refl_wave0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 auto start = std::chrono::steady_clock::now();
                 upsample_main();
                 auto end = std::chrono::steady_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+                std::cout << "upsample_main time: " << duration.count() << " us" << std::endl;
                 total_time += duration;
-                for (int32_t col = 0; col < algo_func_.VIEW_W + 1; ++col) {
+                for (int32_t col = 0; col < algo_func_.VIEW_W; ++col) {
                     int32_t surface_id = frame_buffer->surface_id.load();
                     /** 拷贝上采样后的数据到dist和ref中 */
                     int offset = col * algo_func_.VIEW_H;
-                    memcpy(dist, &DistOutOri_h[offset], sizeof(uint16_t) * algo_func_.VIEW_H);
-                    memcpy(&dist[algo_func_.VIEW_H], &DistOutUp_h[offset], sizeof(uint16_t) * algo_func_.VIEW_H);
-                    memcpy(ref, &RefOutOri_h[offset], sizeof(uint8_t) * algo_func_.VIEW_H);
-                    memcpy(&ref[algo_func_.VIEW_H], &RefOutUp_h[offset], sizeof(uint8_t) * algo_func_.VIEW_H);
-                    if (1 == surface_id) {
-                        if (col >= 1) {
-                            if (1 == col) {
-                                uint16_t dist_zero[algo_func_.VIEW_H * 2]{0};
-                                uint8_t ref_zero[algo_func_.VIEW_H * 2]{0};
-                                assemblePkt(0, frame_buffer, dist_zero, ref_zero, surface_id);
-                                for(int32_t i = 0; i < 2; ++i) {
-                                    assemblePkt((((col - 1) * 2) + i) + 1, frame_buffer, dist, ref, surface_id);
-                                }
-                            } else if (col < algo_func_.VIEW_W) {
-                                for (int32_t i = 0; i < 2; ++i) {
-                                    assemblePkt((((col - 1) * 2) + i) + 1, frame_buffer, dist, ref, surface_id);
+                    if (0 == surface_id) {
+                        for(int32_t j = 0; j < 2; ++j) {
+                            int32_t index = frame_buffer->cloud_id[col * 2 + j];
+                            auto& cloud = proc_clouds_[index];
+                            if(j == 0){
+                                for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
+                                    cloud.pixels[i].waves[0].radius = DistOutOri_h[offset + i];
+                                    cloud.pixels[i].waves[0].intensity = RefOutOri_h[offset + i];
                                 }
                             } else {
-                                for (int32_t i = 0; i < 1; ++i) {
-                                    assemblePkt((((col - 1) * 2) + i) + 1, frame_buffer, dist, ref, surface_id);
+                                for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
+                                    cloud.pixels[i].waves[0].radius = DistOutUp_h[offset + i];
+                                    cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
                                 }
                             }
+                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                         }
                     } else {
-                        if (col >= 1) {
-                            for(int32_t i = 0; i < 2; ++i) {
-                                assemblePkt(((col - 1) * 2) + i, frame_buffer, dist, ref, surface_id);
+                        if(col == 0){
+                            int32_t index = frame_buffer->cloud_id[col];
+                            auto& cloud = proc_clouds_[index];
+                            for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
+                                cloud.pixels[i].waves[0].radius = 0;
+                                cloud.pixels[i].waves[0].intensity = 0;
+                            }
+                        }else if(col == algo_func_.VIEW_W - 1){
+                            int32_t index = frame_buffer->cloud_id[col];
+                            auto& cloud = proc_clouds_[index];
+                            int LastOffset = col * algo_func_.VIEW_H;
+                            for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
+                                cloud.pixels[i].waves[0].radius = DistOutOri_h[LastOffset + i];
+                                cloud.pixels[i].waves[0].intensity = RefOutOri_h[LastOffset + i];
+                            }
+                        } else{
+                            for(int32_t j = 0; j < 2; ++j) {
+                                int32_t index = frame_buffer->cloud_id[col + j];
+                                auto& cloud = proc_clouds_[index];
+                                if(j == 0){
+                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
+                                        cloud.pixels[i].waves[0].radius = DistOutOri_h[offset + i];
+                                        cloud.pixels[i].waves[0].intensity = RefOutOri_h[offset + i];
+                                    }
+                                } else {
+                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
+                                        cloud.pixels[i].waves[0].radius = DistOutUp_h[offset + i];
+                                        cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
+                                    }
+                                }
+                                cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                             }
                         }
                     }
-                    if (algo_func_.VIEW_W == col) {
+                    if (algo_func_.VIEW_W - 1 == col) {
                         resetAndSwitchFrame();
                     }
                 }
@@ -353,7 +378,6 @@ void CloudManager::algoFinalProcess(void)
                 //发生丢包之后，先清0当前帧数据，然后切换到下一帧
                 frame_buffer->frame_droped.store(false);
                 resetAndSwitchFrame();
-                //break;
             }
 
         #ifdef ALGO_WRITE_FILE
@@ -370,6 +394,7 @@ void CloudManager::algoFinalProcess(void)
                 LogError("ERROR: algoProcess calc time out :{} thread:{}", total_time.count(), ALGO_THREAD_NUM);
             }
         }
+        upsampleDataFree();
     }
     catch (const std::exception& kE) {
         LogError("ERROR: algoProcess thread:{}, crashed:{}", ALGO_THREAD_NUM, kE.what());
@@ -411,40 +436,36 @@ void CloudManager::algoProcess(int32_t task_id)
             if (cacl_done_[task_id].load() == 0) {
                 bool isLostPkt = false;
                 AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
-                    if (recvEnoughData(frame_buffer)) {
-                        auto start = std::chrono::steady_clock::now();
-                        /*PVA以整帧为单位执行denoise算法*/
-                        if(task_id == 0){
-                            /*拷贝整帧数据到denoise算法的PVA buffer中*/
-                            memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
+                if (recvEnoughData(frame_buffer)) {
+                    auto start = std::chrono::steady_clock::now();
+                    /*PVA以整帧为单位执行denoise算法*/
+                    if(task_id == 0){
+                        /*拷贝整帧数据到denoise算法的PVA buffer中*/
+                        memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
 
-                            auto denoise_start = std::chrono::steady_clock::now();
-                            denoiseProcPva();
-                            auto denoise_end = std::chrono::steady_clock::now();
-                            auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
-                            std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
-                            memcpy((uint8_t *)&algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
-                            //algo_func_.denoiseMaskMemcpy(0, (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
-                        }
+                        auto denoise_start = std::chrono::steady_clock::now();
+                        denoiseProcPva();
+                        auto denoise_end = std::chrono::steady_clock::now();
+                        auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
+                        std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
+                        memcpy((uint8_t *)&algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                        //algo_func_.denoiseMaskMemcpy(0, (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                    }
 
-                        if(task_id == 1){
-                            /** Data initialization */
-                            memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                            memcpy(RefIn_h, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                    if(task_id == 1){
+                        /** Data initialization */
+                        memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                        memcpy(RefIn_h, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
 
-                            /** Process */
-                            auto trail_start = std::chrono::steady_clock::now();
-                            trail_main();
-                            auto trail_end = std::chrono::steady_clock::now();
-                            auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
-                            std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
-                            /** Mask copy */
-                            memcpy(&algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(int) *algo_func_.VIEW_W * algo_func_.VIEW_H);
-                        }
-
-                    // if (proc_col <= algo_func_.VIEW_W - 2) {
-                        updateAlgoIdx(algo_func_.VIEW_W - 2, task_id);
-                    // }
+                        /** Process */
+                        auto trail_start = std::chrono::steady_clock::now();
+                        trail_main();
+                        auto trail_end = std::chrono::steady_clock::now();
+                        auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
+                        std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
+                        /** Mask copy */
+                        memcpy(&algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(int) *algo_func_.VIEW_W * algo_func_.VIEW_H);
+                    }
                     auto end = std::chrono::steady_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
                     total_time += duration;
@@ -669,7 +690,7 @@ bool CloudManager::sendEnoughData(int32_t col)
             all_loss = all_loss && (val == ALGO_LOSS_PKT_CODE);
             all_ready = all_ready && (val > col);
         }
-        return ((all_loss || (algo_func_.VIEW_W == col)) || all_ready);
+        return (all_loss || all_ready);
     });
     if ((!success) || (std::all_of(algo_proc_idx_.begin(), algo_proc_idx_.end(),
             [](const auto& kIdx) { return kIdx.load() == ALGO_LOSS_PKT_CODE; }))) {
