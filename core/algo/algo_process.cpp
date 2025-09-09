@@ -344,7 +344,7 @@ void CloudManager::algoFinalProcess(void)
                                 cloud.pixels[i].waves[0].intensity = 0;
                             }
                         }else if(col == algo_func_.VIEW_W - 1){
-                            int32_t index = frame_buffer->cloud_id[col];
+                            int32_t index = frame_buffer->cloud_id[2 * col + 1];
                             auto& cloud = proc_clouds_[index];
                             int LastOffset = col * algo_func_.VIEW_H;
                             for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
@@ -353,7 +353,7 @@ void CloudManager::algoFinalProcess(void)
                             }
                         } else{
                             for(int32_t j = 0; j < 2; ++j) {
-                                int32_t index = frame_buffer->cloud_id[col + j];
+                                int32_t index = frame_buffer->cloud_id[2 * col - 1 + j];
                                 auto& cloud = proc_clouds_[index];
                                 if(j == 0){
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
