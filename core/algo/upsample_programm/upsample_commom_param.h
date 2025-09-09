@@ -8,8 +8,8 @@
  * license agreement from NVIDIA CORPORATION is strictly prohibited.
  */
 
-#ifndef TRAIL_COMMON_PARAMS_H
-#define TRAIL_COMMON_PARAMS_H
+#ifndef UPSAMPLE_COMMON_PARAMS_H
+#define UPSAMPLE_COMMON_PARAMS_H
 
 #include <stdint.h>
 #include <math.h>

@@ -60,7 +60,7 @@ void checkConsistency(const int* dist, const int* diffs, int* mask, int diff_th)
     }
 }
 
-void rebuildFunc(int* dist_tmp1, int* dist_tmp2, int* mask1, int* mask2, int* ad_mask1, int* ad_mask2, int* PLRawFillMask, int TileIdx, int col_idx, int row_idx)
+void rebuildFunc(int* dist_tmp1, int* dist_tmp2, int* mask1, int* mask2, int* ad_mask1, int* ad_mask2, int* PLRawFillMask)
 {
     InsertParam_t params;
     for(int i = 0; i < 3; i++){
@@ -74,7 +74,6 @@ void rebuildFunc(int* dist_tmp1, int* dist_tmp2, int* mask1, int* mask2, int* ad
     const int diff_th = params.diff_th;
     const int diff_ratio_max = params.diff_ratio_max;
     const int diff2_th = params.diff2_th;
-    const float ratio_scale = diff_ratio_max / 4096.0;
 
     // 替代 Eigen::Vector3i dist_c1 = dist_tmp1.segment(1, 3)
     int dist_c1[3] = { dist_tmp1[1], dist_tmp1[2], dist_tmp1[3] };  // 注意原始数据索引偏移
@@ -110,8 +109,8 @@ void rebuildFunc(int* dist_tmp1, int* dist_tmp2, int* mask1, int* mask2, int* ad
     // 阈值计算（展开为数组操作）
     int diff_th_max1[3], diff_th_max2[3];
     for (int i = 0; i < 3; ++i) {
-        diff_th_max1[i] = (int)(dist_c1[i] * ratio_scale);
-        diff_th_max2[i] = (int)(dist_c2[i] * ratio_scale);
+        diff_th_max1[i] = (int)(dist_c1[i] * diff_ratio_max / 4096);
+        diff_th_max2[i] = (int)(dist_c2[i] * diff_ratio_max / 4096);
     }
 
     // 初始化掩码数组（使用基础类型替代Eigen向量）
@@ -457,9 +456,12 @@ CUPVA_VPU_MAIN()
                         // printf("ref_tmp2[0]=%d\n,ref_tmp2[1]=%d\n,ref_tmp2[2]=%d\n,ref_tmp2[3]=%d\n,ref_tmp2[4] =%d\n",ref_tmp2[0],ref_tmp2[1],ref_tmp2[2],ref_tmp2[3],ref_tmp2[4]);
                     // }
                     // 使用栈数组存储mask和ad_mask
-                    int mask1[3], mask2[3], ad_mask1[3], ad_mask2[3];
+                    int mask1[3] = {0};
+                    int mask2[3] = {0};
+                    int ad_mask1[3] = {0};
+                    int ad_mask2[3] = {0};
                     int PLRawFillMask = 0;
-                    rebuildFunc(dist_tmp1, dist_tmp2, mask1, mask2, ad_mask1, ad_mask2, &PLRawFillMask, TileIdx, col_idx, row_idx);
+                    rebuildFunc(dist_tmp1, dist_tmp2, mask1, mask2, ad_mask1, ad_mask2, &PLRawFillMask);
                     // if(TileIdx == 0 && col_idx == 2 && row_idx == 15){
                     //     // printf("mask1[0] = %d, mask1[1] = %d, mask1[2] = %d\n", mask1[0], mask1[1], mask1[2]);
                     //     // printf("mask2[0] = %d, mask2[1] = %d, mask2[2] = %d\n", mask2[0], mask2[1], mask2[2]);
@@ -551,8 +553,6 @@ CUPVA_VPU_MAIN()
                     // 存储结果
                     outputDistUpBufferVMEM[dstDistOffset + col_idx * DistOutUpLinePitch + row_idx] = dist_ins;
                     outputRefUpBufferVMEM[dstRefOffset + col_idx * RefOutUpLinePitch + row_idx] = ref_ins;
-
-                    // 优化缓冲区更新逻辑
                     if (row_idx > 0 && row_idx < TILE_WIDTH - 1) {
                         const int update_row = row_idx - 1;
                         for (int i = 0; i < 3; ++i) {
