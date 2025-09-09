@@ -457,44 +457,44 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor,
         }
         std::cout << std::endl << std::endl;
 
-        // saved_cnt += 1;
-        // std::cout << "[saved_cnt] " << saved_cnt << std::endl;
+#if 1
+        saved_cnt += 1;
+        if (saved_cnt % 5 == 0) {
+            size_t requiredSize = kLidarCloud->data_length;
+            LidarPointCloudPackets* msg = static_cast<LidarPointCloudPackets*>(malloc(requiredSize));
+            void* difop2_data = malloc(kLidarCloud->lidar_parameter_length);
+            std::memcpy(difop2_data, kLidarCloud->lidar_parameter, kLidarCloud->lidar_parameter_length);
 
-#if 0
-        size_t requiredSize = kLidarCloud->data_length;
-        LidarPointCloudPackets* msg = static_cast<LidarPointCloudPackets*>(malloc(requiredSize));
-        void* difop2_data = malloc(kLidarCloud->lidar_parameter_length);
-        std::memcpy(difop2_data, kLidarCloud->lidar_parameter, kLidarCloud->lidar_parameter_length);
+            std::memcpy(msg, kLidarCloud, requiredSize);
+            msg->lidar_parameter = difop2_data;
 
-        std::memcpy(msg, kLidarCloud, requiredSize);
-        msg->lidar_parameter = difop2_data;
+            using namespace robosense::msop;
+            int ret = parseDifopPkt((const uint8_t*)difop2_data, 500);
+            if (!ret) {
+                std::cout << "parseDifop2 failed" << std::endl;
+            }
 
-        using namespace robosense::msop;
-        int ret = parseDifopPkt((const uint8_t*)difop2_data, 500);
-        if (!ret) {
-            std::cout << "parseDifop2 failed" << std::endl;
+            static const uint16_t kBlockPerFrame {1520U};
+            size_t msop_size = sizeof(LidarPointCloudPackets) + (kBlockPerFrame - 1) * sizeof(DataBlock);
+            ret = parseMsopPkt((const uint8_t*)msg, msop_size);
+            if (!ret) {
+                std::cout << "parseMsopPkt failed" << std::endl;
+            }
+
+            static constexpr uint32_t kPointsPerFrame {192U * 1520U};
+            requiredSize = sizeof(LidarPointCloud) + (kPointsPerFrame - 1) * sizeof(LidarPoint);
+            uint8_t* point_cloud_data = static_cast<uint8_t*>(malloc(requiredSize));
+            size_t point_cloud_size {0};
+
+            getPointCloud(point_cloud_data, point_cloud_size);
+            std::string save_path = "./pcd_files/point_cloud_" + std::to_string(saved_cnt) + ".pcd";
+            savePointCloudToPCD(save_path, (LidarPointCloud*)point_cloud_data, robosense::msop::PCD_ASCII);
+
+            free(difop2_data);
+            free(msg);
+
+            free(point_cloud_data);
         }
-
-        static const uint16_t kBlockPerFrame {1520U};
-        size_t msop_size = sizeof(LidarPointCloudPackets) + (kBlockPerFrame - 1) * sizeof(DataBlock);
-        ret = parseMsopPkt((const uint8_t*)msg, msop_size);
-        if (!ret) {
-            std::cout << "parseMsopPkt failed" << std::endl;
-        }
-
-        static constexpr uint32_t kPointsPerFrame {192U * 1520U};
-        requiredSize = sizeof(LidarPointCloud) + (kPointsPerFrame - 1) * sizeof(LidarPoint);
-        uint8_t* point_cloud_data = static_cast<uint8_t*>(malloc(requiredSize));
-        size_t point_cloud_size {0};
-
-        getPointCloud(point_cloud_data, point_cloud_size);
-        std::string save_path = "./pcd_files/point_cloud_" + std::to_string(saved_cnt) + ".pcd";
-        savePointCloudToPCD(save_path, (LidarPointCloud*)point_cloud_data, robosense::msop::PCD_ASCII);
-
-        free(difop2_data);
-        free(msg);
-
-        free(point_cloud_data);
 #endif
     }
     if (!save_pcd) {
