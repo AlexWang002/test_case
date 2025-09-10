@@ -336,7 +336,6 @@ void CloudManager::algoFinalProcess(void)
                             cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                         }
                     } else {
-#if 1
                         if(col == 0){
                             {
                                 int32_t index = frame_buffer->cloud_id[col];
@@ -392,7 +391,6 @@ void CloudManager::algoFinalProcess(void)
                                 cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                             }
                         }
-#endif
                     }
                     if (algo_func_.VIEW_W - 1 == col) {
                         resetAndSwitchFrame();
