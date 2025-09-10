@@ -364,6 +364,7 @@ void CloudManager::algoFinalProcess(void)
                                 }
                                 cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                             }
+                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                         }else if(col == algo_func_.VIEW_W - 1){
                             int32_t index = frame_buffer->cloud_id[2 * col + 1];
                             auto& cloud = proc_clouds_[index];
