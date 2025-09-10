@@ -343,6 +343,7 @@ void CloudManager::algoFinalProcess(void)
                                 cloud.pixels[i].waves[0].radius = 0;
                                 cloud.pixels[i].waves[0].intensity = 0;
                             }
+                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                         }else if(col == algo_func_.VIEW_W - 1){
                             int32_t index = frame_buffer->cloud_id[2 * col + 1];
                             auto& cloud = proc_clouds_[index];
@@ -351,6 +352,7 @@ void CloudManager::algoFinalProcess(void)
                                 cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
                                 cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
                             }
+                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                         } else{
                             for(int32_t j = 0; j < 2; ++j) {
                                 int32_t index = frame_buffer->cloud_id[2 * col - 1 + j];
