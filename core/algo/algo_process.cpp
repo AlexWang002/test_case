@@ -304,8 +304,6 @@ void CloudManager::algoFinalProcess(void)
                     }
                 }
                 /** Data initialization */
-                memcpy(DistOutOri_h, dist_wave0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(RefOutOri_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(DistDownIn_h, dist_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(DistRawIn_h, frame_buffer->dist0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(RefDownIn_h, refl_wave0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
@@ -326,8 +324,8 @@ void CloudManager::algoFinalProcess(void)
                             auto& cloud = proc_clouds_[index];
                             if(j == 0){
                                 for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                    cloud.pixels[i].waves[0].radius = DistOutOri_h[offset + i];
-                                    cloud.pixels[i].waves[0].intensity = RefOutOri_h[offset + i];
+                                    cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
+                                    cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
                                 }
                             } else {
                                 for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
@@ -350,8 +348,8 @@ void CloudManager::algoFinalProcess(void)
                             auto& cloud = proc_clouds_[index];
                             int LastOffset = col * algo_func_.VIEW_H;
                             for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                cloud.pixels[i].waves[0].radius = DistOutOri_h[LastOffset + i];
-                                cloud.pixels[i].waves[0].intensity = RefOutOri_h[LastOffset + i];
+                                cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
+                                cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
                             }
                         } else{
                             for(int32_t j = 0; j < 2; ++j) {
@@ -359,8 +357,8 @@ void CloudManager::algoFinalProcess(void)
                                 auto& cloud = proc_clouds_[index];
                                 if(j == 0){
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                        cloud.pixels[i].waves[0].radius = DistOutOri_h[offset + i];
-                                        cloud.pixels[i].waves[0].intensity = RefOutOri_h[offset + i];
+                                        cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
+                                        cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
                                     }
                                 } else {
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {

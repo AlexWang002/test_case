@@ -22,9 +22,7 @@ using namespace cupva;
 
 PVA_DECLARE_EXECUTABLE(upsample_dev)
 
-uint16_t DistOutOri[VIEW_HEIGHT][VIEW_WIDTH] = {0};
 uint16_t DistOutUp[VIEW_HEIGHT][VIEW_WIDTH] = {0};
-uint8_t RefOutOri[VIEW_HEIGHT][VIEW_WIDTH] = {0};
 uint8_t RefOutUp[VIEW_HEIGHT][VIEW_WIDTH] = {0};
 
 uint16_t *DistDownIn_d = nullptr;
@@ -35,12 +33,8 @@ uint8_t *RefDownIn_d = nullptr;
 uint8_t *RefDownIn_h = nullptr;
 uint8_t *RefRawIn_d = nullptr;
 uint8_t *RefRawIn_h = nullptr;
-uint16_t *DistOutOri_d = nullptr;
-uint16_t *DistOutOri_h = nullptr;
 uint16_t *DistOutUp_d = nullptr;
 uint16_t *DistOutUp_h = nullptr;
-uint8_t *RefOutOri_d = nullptr;
-uint8_t *RefOutOri_h = nullptr;
 uint8_t *RefOutUp_d = nullptr;
 uint8_t *RefOutUp_h = nullptr;
 namespace {
@@ -61,14 +55,8 @@ void upsampleDataAlloc()
     RefRawIn_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
     RefRawIn_h = (uint8_t *)mem::GetHostPointer(RefRawIn_d);
 
-    DistOutOri_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
-    DistOutOri_h = (uint16_t *)mem::GetHostPointer(DistOutOri_d);
-
     DistOutUp_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
     DistOutUp_h = (uint16_t *)mem::GetHostPointer(DistOutUp_d);
-
-    RefOutOri_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
-    RefOutOri_h = (uint8_t *)mem::GetHostPointer(RefOutOri_d);
 
     RefOutUp_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
     RefOutUp_h = (uint8_t *)mem::GetHostPointer(RefOutUp_d);
@@ -80,9 +68,7 @@ void upsampleDataFree()
     mem::Free(DistRawIn_d);
     mem::Free(RefDownIn_d);
     mem::Free(RefRawIn_d);
-    mem::Free(DistOutOri_d);
     mem::Free(DistOutUp_d);
-    mem::Free(RefOutOri_d);
     mem::Free(RefOutUp_d);
 }
 void upsample_main()
@@ -130,28 +116,12 @@ void upsample_main()
             .tileBuffer(inputRefRawBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        RasterDataFlow &OutputDistOriDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto OutputDistOriDataFlowHandler     = prog["OutputDistOriDataFlowHandler"];
-        uint16_t *outputDistOriBufferVMEM       = prog["outputDistOriBufferVMEM"].ptr<uint16_t>();
-        OutputDistOriDataFlow.handler(OutputDistOriDataFlowHandler)
-            .dst(DistOutOri_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(outputDistOriBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT);
-
         RasterDataFlow &OutputDistUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto OutputDistUpDataFlowHandler     = prog["OutputDistUpDataFlowHandler"];
         uint16_t *outputDistUpBufferVMEM       = prog["outputDistUpBufferVMEM"].ptr<uint16_t>();
         OutputDistUpDataFlow.handler(OutputDistUpDataFlowHandler)
             .dst(DistOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(outputDistUpBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT);
-
-        RasterDataFlow &OutputRefOriDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto OutputRefOriDataFlowHandler     = prog["OutputRefOriDataFlowHandler"];
-        uint8_t *outputRefOriBufferVMEM       = prog["outputRefOriBufferVMEM"].ptr<uint8_t>();
-        OutputRefOriDataFlow.handler(OutputRefOriDataFlowHandler)
-            .dst(RefOutOri_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(outputRefOriBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
         RasterDataFlow &OutputRefUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
@@ -180,10 +150,7 @@ void upsample_main()
         fence.wait();
         /** 将结果写入数组 */
 
-        memcpy(&DistOutOri[0][0], DistOutOri_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
         memcpy(&DistOutUp[0][0], DistOutUp_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
-
-        memcpy(&RefOutOri[0][0], RefOutOri_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
         memcpy(&RefOutUp[0][0], RefOutUp_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
 
         /** 检查cmd状态 */
