@@ -336,12 +336,33 @@ void CloudManager::algoFinalProcess(void)
                             cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                         }
                     } else {
+#if 1
                         if(col == 0){
-                            int32_t index = frame_buffer->cloud_id[col];
-                            auto& cloud = proc_clouds_[index];
-                            for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                cloud.pixels[i].waves[0].radius = 0;
-                                cloud.pixels[i].waves[0].intensity = 0;
+                            {
+                                int32_t index = frame_buffer->cloud_id[col];
+                                auto& cloud = proc_clouds_[index];
+                                for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
+                                    cloud.pixels[i].waves[0].radius = 0;
+                                    cloud.pixels[i].waves[0].intensity = 0;
+                                }
+                                cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
+                            }
+
+                            for(int32_t j = 0; j < 2; ++j) {
+                                int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
+                                auto& cloud = proc_clouds_[index];
+                                if(j == 0){
+                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
+                                        cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
+                                        cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
+                                    }
+                                } else {
+                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
+                                        cloud.pixels[i].waves[0].radius = DistOutUp_h[offset + i];
+                                        cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
+                                    }
+                                }
+                                cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                             }
                         }else if(col == algo_func_.VIEW_W - 1){
                             int32_t index = frame_buffer->cloud_id[2 * col + 1];
@@ -351,9 +372,10 @@ void CloudManager::algoFinalProcess(void)
                                 cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
                                 cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
                             }
+                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                         } else{
                             for(int32_t j = 0; j < 2; ++j) {
-                                int32_t index = frame_buffer->cloud_id[2 * col - 1 + j];
+                                int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
                                 auto& cloud = proc_clouds_[index];
                                 if(j == 0){
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
@@ -369,6 +391,7 @@ void CloudManager::algoFinalProcess(void)
                                 cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                             }
                         }
+#endif
                     }
                     if (algo_func_.VIEW_W - 1 == col) {
                         resetAndSwitchFrame();
