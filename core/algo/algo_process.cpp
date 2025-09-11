@@ -472,15 +472,30 @@ void CloudManager::algoProcess(int32_t task_id)
                     auto start = std::chrono::steady_clock::now();
                     /*PVA以整帧为单位执行denoise算法*/
                     if(task_id == 0){
-                        /*拷贝整帧数据到denoise算法的PVA buffer中*/
-                        memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
-                        auto denoise_start = std::chrono::steady_clock::now();
-                        denoiseProcPva();
-                        auto denoise_end = std::chrono::steady_clock::now();
-                        auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
-                        std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
-                        memcpy((uint8_t *)&algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
-                        //algo_func_.denoiseMaskMemcpy(0, (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                        if (algo_func_.algo_Param.DenoiseOn) {
+                            /*拷贝整帧数据到denoise算法的PVA buffer中*/
+                            memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
+                            auto denoise_start = std::chrono::steady_clock::now();
+                            denoiseProcPva();
+                            auto denoise_end = std::chrono::steady_clock::now();
+                            auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
+                            std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
+                            memcpy(algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                            /*最后四列mask直接置为1*/
+                            for (int cc = 1; cc <= 4; cc ++) {
+                                for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
+                                    algo_func_.denoise_mask_out_frm[algo_func_.VIEW_W - cc][rr] = 1;
+                                }
+                            }
+                        }
+                        else {
+                            for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
+                                for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
+                                    algo_func_.denoise_mask_out_frm[cc][rr] = 1;
+                                }
+                            }
+                        }
+
 
                         /** Data initialization */
                         memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
@@ -492,7 +507,7 @@ void CloudManager::algoProcess(int32_t task_id)
                         auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
                         std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
                         /** Mask copy */
-                        memcpy(&algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(int) *algo_func_.VIEW_W * algo_func_.VIEW_H);
+                        memcpy(algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(int) *algo_func_.VIEW_W * algo_func_.VIEW_H);
                     }
                     else{
                         algo_func_.pcAlgoMainFunc(frame_buffer, task_id);
