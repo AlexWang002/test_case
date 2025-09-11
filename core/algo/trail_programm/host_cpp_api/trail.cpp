@@ -24,16 +24,12 @@ PVA_DECLARE_EXECUTABLE(trail_dev)
 uint16_t *DistIn_d = nullptr;
 uint16_t *DistIn_h = nullptr;
 
-uint8_t *RefIn_d = nullptr;
-uint8_t *RefIn_h = nullptr;
+uint8_t *ValidOut_d = nullptr;
+uint8_t *ValidOut_h = nullptr;
 
-int *ValidOut_d = nullptr;
-int *ValidOut_h = nullptr;
-
-int TrailMask[VIEW_HEIGHT][VIEW_WIDTH] = {0};
+uint8_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH] = {0};
 namespace
 {
-    int8_t TrailParam_a[sizeof(TrailParam_t)];
     TrailParam_t TrailParams = DEFAULT_TRAIL_PARAM;
 }
 
@@ -42,17 +38,13 @@ void TrailDataAlloc()
     DistIn_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
     DistIn_h = (uint16_t *)mem::GetHostPointer(DistIn_d);
 
-    RefIn_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
-    RefIn_h = (uint8_t *)mem::GetHostPointer(RefIn_d);
-
-    ValidOut_d = (int *)mem::Alloc(VIEW_HEIGHT* VIEW_WIDTH * sizeof(int));
-    ValidOut_h = (int *)mem::GetHostPointer(ValidOut_d);
+    ValidOut_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT* VIEW_WIDTH * sizeof(uint8_t));
+    ValidOut_h = (uint8_t *)mem::GetHostPointer(ValidOut_d);
 }
 
 void TrailDataFree()
 {
     mem::Free(DistIn_d);
-    mem::Free(RefIn_d);
     mem::Free(ValidOut_d);
 }
 
@@ -70,24 +62,12 @@ void trail_main()
         auto sourceDistDataFlowHandler     = prog["sourceDistDataFlowHandler"];
         uint16_t *inputDistBufferVMEM   = prog["inputDistBufferVMEM"].ptr<uint16_t>();
 
-        RasterDataFlow &sourceRefDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto sourceRefDataFlowHandler     = prog["sourceRefDataFlowHandler"];
-        uint16_t *inputRefBufferVMEM   = prog["inputRefBufferVMEM"].ptr<uint16_t>();
-
         RasterDataFlow &destinationDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto destinationDataFlowHandler     = prog["destinationDataFlowHandler"];
-        uint16_t *outputValidBufferVMEM       = prog["outputValidBufferVMEM"].ptr<uint16_t>();
-
-
+        uint8_t *outputValidBufferVMEM       = prog["outputValidBufferVMEM"].ptr<uint8_t>();
         sourceDistDataFlow.handler(sourceDistDataFlowHandler)
             .src(DistIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputDistBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT)
-            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
-
-        sourceRefDataFlow.handler(sourceRefDataFlowHandler)
-            .src(RefIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(inputRefBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
@@ -114,7 +94,7 @@ void trail_main()
         /** 等待Fence失效 */
         fence.wait();
         /** 将结果写入数组 */
-        memcpy(&TrailMask[0][0], ValidOut_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
+        memcpy(&TrailMask[0][0], ValidOut_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
         /** 检查cmd状态 */
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)

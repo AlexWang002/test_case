@@ -44,6 +44,8 @@
 #include "denoise.h"
 #include "groundfit.h"
 #include "upsample.h"
+#include <iostream>
+#include <fstream>
 /******************************************************************************/
 /*                      Include headers of the component                      */
 /******************************************************************************/
@@ -442,7 +444,6 @@ void CloudManager::algoProcess(int32_t task_id)
         }
 
         while (false == to_exit_handle_.load()) {
-            // int32_t proc_col = 0;
             std::chrono::microseconds total_time = (std::chrono::microseconds)0;
             if (cacl_done_[task_id].load() == 0) {
                 bool isLostPkt = false;
@@ -463,7 +464,6 @@ void CloudManager::algoProcess(int32_t task_id)
 
                         /** Data initialization */
                         memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                        memcpy(RefIn_h, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                         /** Process */
                         auto trail_start = std::chrono::steady_clock::now();
                         trail_main();

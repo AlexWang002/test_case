@@ -9,13 +9,10 @@
 extern uint16_t *DistIn_d;
 extern uint16_t *DistIn_h;
 
-extern uint8_t *RefIn_d;
-extern uint8_t *RefIn_h;
+extern uint8_t *ValidOut_d;
+extern uint8_t *ValidOut_h;
 
-extern int *ValidOut_d;
-extern int *ValidOut_h;
-
-extern int TrailMask[VIEW_HEIGHT][VIEW_WIDTH];
+extern uint8_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH];
 
 extern void trail_main();
 extern void TrailDataAlloc();

@@ -4,19 +4,15 @@
 /** Use double buffer, the vertical halo is 2 */
 VMEM(A, uint16_t, inputDistBufferVMEM,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
-VMEM(B, uint16_t, inputRefBufferVMEM,
-    RDF_DOUBLE(uint16_t,TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
-
 /** Output do not use halo */
-VMEM(C, uint16_t, outputValidBufferVMEM,
-    RDF_DOUBLE(uint16_t,TILE_WIDTH, TILE_HEIGHT));
+VMEM(B, uint8_t, outputValidBufferVMEM,
+    RDF_DOUBLE(int,TILE_WIDTH, TILE_HEIGHT));
 
 /** declare_algorithm_params */
 VMEM(C, int, algorithmParams, sizeof(TrailParam_t));
 
 /** declare_df_handles */
 VMEM(C, RasterDataFlowHandler, sourceDistDataFlowHandler);
-VMEM(C, RasterDataFlowHandler, sourceRefDataFlowHandler);
 VMEM(C, RasterDataFlowHandler, destinationDataFlowHandler);
 
 int clamp(int val, int min_val, int max_val) {
@@ -167,30 +163,21 @@ CUPVA_VPU_MAIN()
     TrailParam_t *trail_Param = (TrailParam_t *)algorithmParams;
     /** Calculate line pitch */
     uint16_t srcDistLinePitch = cupvaRasterDataFlowGetLinePitch(sourceDistDataFlowHandler);
-    uint16_t srcRefLinePitch = cupvaRasterDataFlowGetLinePitch(sourceRefDataFlowHandler);
     uint16_t dstLinePitch = cupvaRasterDataFlowGetLinePitch(destinationDataFlowHandler);
-
     /** Every tile offset */
     int32_t srcDistOffset = 0;
-    int32_t srcRefOffset = 0;
     int32_t dstOffset = 0;
-
     cupvaRasterDataFlowTrig(sourceDistDataFlowHandler);
-    cupvaRasterDataFlowTrig(sourceRefDataFlowHandler);
-
     /** Loop over tiles, TILE_COUNT = 8*/
     for(int TileIdx = 0; TileIdx < TILE_COUNT; TileIdx++)
     {
         /** Trigger the data flow and switch to the next tile */
         cupvaRasterDataFlowSync(sourceDistDataFlowHandler);
         cupvaRasterDataFlowTrig(sourceDistDataFlowHandler);
-        cupvaRasterDataFlowSync(sourceRefDataFlowHandler);
-        cupvaRasterDataFlowTrig(sourceRefDataFlowHandler);
 
         for(int i = 0; i < TILE_WIDTH * TILE_HEIGHT; i++){
-            outputValidBufferVMEM[i] = 0;
+            outputValidBufferVMEM[dstOffset + i] = 0;
         }
-        // memset(&outputValidBufferVMEM[dstOffset], 0, sizeof(uint16_t) * TILE_WIDTH * TILE_HEIGHT);
 #ifdef ALGO_ON
         const int HL = 5;
         const int VerticalRange = 4;
@@ -248,7 +235,6 @@ CUPVA_VPU_MAIN()
         }
 #endif
         srcDistOffset = cupvaRasterDataFlowGetOffset(sourceDistDataFlowHandler, srcDistOffset);
-        srcRefOffset = cupvaRasterDataFlowGetOffset(sourceRefDataFlowHandler, srcRefOffset);
         dstOffset = cupvaRasterDataFlowGetOffset(destinationDataFlowHandler, dstOffset);
 
         cupvaRasterDataFlowSync(destinationDataFlowHandler);

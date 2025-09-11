@@ -80,9 +80,9 @@ CUPVA_VPU_MAIN()
         cupvaRasterDataFlowTrig(InputRefRawDataFlowHandler);
 #ifdef ALGO_ON
         /** Process the columns except for "halo" */
-        for (int col_idx = 1; col_idx < TILE_HEIGHT - 1; ++col_idx) //95
+        for (int col_idx = 1; col_idx < TILE_HEIGHT + 1; ++col_idx) //95
         {
-            if((TileIdx != TILE_COUNT - 1) && (col_idx < TILE_HEIGHT - 1))
+            if((TileIdx != TILE_COUNT - 1) || (col_idx < TILE_HEIGHT))
             {
                 const int window_size = (upsample_Param->WH << 1) + 1;
 
@@ -147,8 +147,8 @@ CUPVA_VPU_MAIN()
                         ref_ins = MIN(ref_tmp1[2], ref_tmp2[2]);
                     }
                     // 存储结果
-                    outputDistUpBufferVMEM[dstDistOffset + col_idx * DistOutUpLinePitch + row_idx] = dist_ins;
-                    outputRefUpBufferVMEM[dstRefOffset + col_idx * RefOutUpLinePitch + row_idx] = ref_ins;
+                    outputDistUpBufferVMEM[dstDistOffset + (col_idx - 1) * DistOutUpLinePitch + row_idx] = dist_ins;
+                    outputRefUpBufferVMEM[dstRefOffset + (col_idx - 1) * RefOutUpLinePitch + row_idx] = ref_ins;
                 }
             }
         }
