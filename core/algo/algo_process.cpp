@@ -302,6 +302,10 @@ void CloudManager::algoFinalProcess(void)
                     int* stray_mask_out1 = algo_func_.stray_mask_out_frm1[col_idx];
                     int* spray_mask_out0 = algo_func_.spray_mark_out_frm0[col_idx];
                     int* spray_mask_out1 = algo_func_.spray_mark_out_frm1[col_idx];
+                    uint16_t* Distwave0 = dist_wave0[col_idx];
+                    uint16_t* Distwave1 = dist_wave1[col_idx];
+                    uint8_t* Refwave0 = refl_wave0[col_idx];
+                    uint8_t* Refwave1 = refl_wave1[col_idx];
                     for (int row_idx = 0; row_idx < algo_func_.VIEW_H; row_idx++){
                         const bool trail = trail_mask_out[row_idx];
                         const bool denoise = denoise_mask_out[row_idx];
@@ -314,13 +318,13 @@ void CloudManager::algoFinalProcess(void)
 
                         // 情况1: 两回波均无效点
                         if (wave0_del_flag && !wave1_sel_flag) {
-                            dist_wave0[row_idx] = 0;
-                            refl_wave0[row_idx] = 0;
+                            Distwave0[row_idx] = 0;
+                            Refwave0[row_idx] = 0;
                         }
                         // 情况2: 第一回波无效点，第二回波有效点
                         else if (wave0_del_flag && wave1_sel_flag) {
-                            dist_wave0[row_idx] = dist_wave1[row_idx];
-                            refl_wave0[row_idx] = refl_wave1[row_idx];
+                            Distwave0[row_idx] = Distwave1[row_idx];
+                            Refwave0[row_idx] = Refwave1[row_idx];
                         }
                     }
                 }
