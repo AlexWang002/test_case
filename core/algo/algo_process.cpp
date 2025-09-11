@@ -298,7 +298,7 @@ void CloudManager::algoFinalProcess(void)
                 for (int col_idx = 0; col_idx < algo_func_.VIEW_W; col_idx++)
                 {
                     // 获取掩码指针
-                    int* trail_mask_out = algo_func_.trail_mask_out_frm[col_idx];
+                    uint8_t* trail_mask_out = algo_func_.trail_mask_out_frm[col_idx];
                     int* denoise_mask_out = algo_func_.denoise_mask_out_frm[col_idx];
                     int* stray_mask_out0 = algo_func_.stray_mask_out_frm0[col_idx];
                     int* stray_mask_out1 = algo_func_.stray_mask_out_frm1[col_idx];
@@ -501,17 +501,25 @@ void CloudManager::algoProcess(int32_t task_id)
                             }
                         }
 
-
-                        /** Data initialization */
-                        memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                        /** Process */
-                        auto trail_start = std::chrono::steady_clock::now();
-                        trail_main();
-                        auto trail_end = std::chrono::steady_clock::now();
-                        auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
-                        std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
-                        /** Mask copy */
-                        memcpy(algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(int) *algo_func_.VIEW_W * algo_func_.VIEW_H);
+                        if (algo_func_.algo_Param.TrailRemoveOn) {
+                            /** Data initialization */
+                            memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                            /** Process */
+                            auto trail_start = std::chrono::steady_clock::now();
+                            trail_main();
+                            auto trail_end = std::chrono::steady_clock::now();
+                            auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
+                            std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
+                            /** Mask copy */
+                            memcpy(algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(int) *algo_func_.VIEW_W * algo_func_.VIEW_H);
+                        }
+                        else{
+                            for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
+                                for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
+                                    algo_func_.trail_mask_out_frm[cc][rr] = 0;
+                                }
+                            }
+                        }
                     }
                     else{
                         algo_func_.pcAlgoMainFunc(frame_buffer, task_id);
