@@ -351,12 +351,12 @@ void CloudManager::algoFinalProcess(void)
                             auto& cloud = proc_clouds_[index];
                             if(j == 0){
                                 for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                    cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
+                                    cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
                                     cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
                                 }
                             } else {
                                 for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                    cloud.pixels[i].waves[0].radius = DistOutUp_h[offset + i];
+                                    cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
                                     cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
                                 }
                             }
@@ -377,12 +377,12 @@ void CloudManager::algoFinalProcess(void)
                                 auto& cloud = proc_clouds_[index];
                                 if(j == 0){
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                        cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
+                                        cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
                                         cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
                                     }
                                 } else {
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                        cloud.pixels[i].waves[0].radius = DistOutUp_h[offset + i];
+                                        cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
                                         cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
                                     }
                                 }
@@ -393,7 +393,7 @@ void CloudManager::algoFinalProcess(void)
                             auto& cloud = proc_clouds_[index];
                             int LastOffset = col * algo_func_.VIEW_H;
                             for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
+                                cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
                                 cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
                             }
                             cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
@@ -403,12 +403,12 @@ void CloudManager::algoFinalProcess(void)
                                 auto& cloud = proc_clouds_[index];
                                 if(j == 0){
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                        cloud.pixels[i].waves[0].radius = dist_wave0[col][i];
+                                        cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
                                         cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
                                     }
                                 } else {
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                        cloud.pixels[i].waves[0].radius = DistOutUp_h[offset + i];
+                                        cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
                                         cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
                                     }
                                 }
