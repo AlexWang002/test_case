@@ -1,23 +1,41 @@
-/*
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+/*******************************************************************************
+ * \addtogroup upsample_programm
+ * \{
+ * \file upsample.cpp
+ * \brief
+ * \version 0.1
+ * \date 2025-09-11
  *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
-#include "upsample_commom_param.h"
+ * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
+ *
+ * \details
+ * #### Modification History :
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.1 | 2025-09-11 | Init version |
+ *
+ ******************************************************************************/
+
+/******************************************************************************/
+/*                         Include dependant headers                          */
+/******************************************************************************/
 #include <cupva_host_nonsafety.hpp>
 #include <cupva_host.hpp> /**< Main host-side C++-API header file */
-
 #include <cupva_platform.h> /**< Header that includes macros for specifying PVA executables */
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <chrono>
 #include <iomanip>
+
+/******************************************************************************/
+/*                      Include headers of the component                      */
+/******************************************************************************/
 #include "upsample.h"
+
+/******************************************************************************/
+/*                  Using namespace, type or template alias                   */
+/******************************************************************************/
 using namespace cupva;
 
 PVA_DECLARE_EXECUTABLE(upsample_dev)
@@ -37,10 +55,13 @@ uint16_t *DistOutUp_d = nullptr;
 uint16_t *DistOutUp_h = nullptr;
 uint8_t *RefOutUp_d = nullptr;
 uint8_t *RefOutUp_h = nullptr;
+
 namespace {
     InsertParam_t Up_param = DEFAULT_UP_PARAM;
 }
-
+/**
+ * \brief Allocate memory for upsample processing data structures
+*/
 void upsampleDataAlloc()
 {
     DistDownIn_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
@@ -62,6 +83,9 @@ void upsampleDataAlloc()
     RefOutUp_h = (uint8_t *)mem::GetHostPointer(RefOutUp_d);
 }
 
+/**
+ * \brief Free memory for upsample processing data structures
+*/
 void upsampleDataFree()
 {
     mem::Free(DistDownIn_d);
@@ -71,6 +95,10 @@ void upsampleDataFree()
     mem::Free(DistOutUp_d);
     mem::Free(RefOutUp_d);
 }
+
+/**
+ * \brief Upsample processing main function in host-side C++ API
+*/
 void upsample_main()
 {
     try

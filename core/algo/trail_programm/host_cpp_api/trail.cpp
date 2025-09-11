@@ -1,12 +1,24 @@
-/*
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+/*******************************************************************************
+ * \addtogroup trail_programm
+ * \{
+ * \file trail.cpp
+ * \brief
+ * \version 0.1
+ * \date 2025-09-11
  *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+ * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
+ *
+ * \details
+ * #### Modification History :
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.1 | 2025-09-11 | Init version |
+ *
+ ******************************************************************************/
+
+/******************************************************************************/
+/*                         Include dependant headers                          */
+/******************************************************************************/
 #include <cupva_host_nonsafety.hpp>
 #include <cupva_host.hpp> /**< Main host-side C++-API header file */
 #include <cupva_platform.h> /**< Header that includes macros for specifying PVA executables */
@@ -16,7 +28,14 @@
 #include <chrono>
 #include <iomanip>
 
+/******************************************************************************/
+/*                      Include headers of the component                      */
+/******************************************************************************/
 #include "trail.h"
+
+/******************************************************************************/
+/*                  Using namespace, type or template alias                   */
+/******************************************************************************/
 using namespace cupva;
 
 PVA_DECLARE_EXECUTABLE(trail_dev)
@@ -32,7 +51,9 @@ namespace
 {
     TrailParam_t TrailParams = DEFAULT_TRAIL_PARAM;
 }
-
+/**
+ * \brief Allocate memory for trail processing data structures
+*/
 void TrailDataAlloc()
 {
     DistIn_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
@@ -42,12 +63,18 @@ void TrailDataAlloc()
     ValidOut_h = (uint8_t *)mem::GetHostPointer(ValidOut_d);
 }
 
+/**
+ * \brief Free memory for trail processing data structures
+*/
 void TrailDataFree()
 {
     mem::Free(DistIn_d);
     mem::Free(ValidOut_d);
 }
 
+/**
+ * \brief Trail processing main function in host-side C++ API
+*/
 void trail_main()
 {
     try
@@ -65,6 +92,7 @@ void trail_main()
         RasterDataFlow &destinationDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto destinationDataFlowHandler     = prog["destinationDataFlowHandler"];
         uint8_t *outputValidBufferVMEM       = prog["outputValidBufferVMEM"].ptr<uint8_t>();
+
         sourceDistDataFlow.handler(sourceDistDataFlowHandler)
             .src(DistIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputDistBufferVMEM)
@@ -76,26 +104,18 @@ void trail_main()
             .tileBuffer(outputValidBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        /** 编译程序数据流 */
         prog.compileDataFlows();
 
         SetVPUPrintBufferSize(64 * 1024);
-
-        /** 创建一个SyncObj对象，用于存储PVA与CPU同步所需的数据，是一个单调递增的整数，每次发出信号都会增加 */
         SyncObj sync = SyncObj::Create();
-        /** 创建一个栅栏对象，用于PVA程序之间的同步 */
         Fence fence{sync};
-        /** 将Fence封装在cmd中，与CmdProgram一起提交到PVA */
         CmdRequestFences rf{fence};
-        /** 拖点算法绑定VPU1 */
+        /** Bind trail algorithm to VPU0 */
         Stream stream = Stream::Create(PVA0, VPU0);
         CmdStatus status[2];
         stream.submit({&prog, &rf}, status);
-        /** 等待Fence失效 */
         fence.wait();
-        /** 将结果写入数组 */
         memcpy(&TrailMask[0][0], ValidOut_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
-        /** 检查cmd状态 */
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {
