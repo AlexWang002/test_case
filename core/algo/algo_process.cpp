@@ -292,16 +292,41 @@ void CloudManager::algoFinalProcess(void)
             };
             if (sendEnoughData(algo_func_.VIEW_W - 1)) {
                 memcpy(dist_wave0, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(dist_wave1, frame_buffer->dist1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);//加入双回波数据
                 memcpy(refl_wave0, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(refl_wave1, frame_buffer->ref1, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 for (int col_idx = 0; col_idx < algo_func_.VIEW_W; col_idx++)
                 {
+                    // 获取掩码指针
+                    int* trail_mask_out = algo_func_.trail_mask_out_frm[col_idx];
+                    int* denoise_mask_out = algo_func_.denoise_mask_out_frm[col_idx];
+                    int* stray_mask_out0 = algo_func_.stray_mask_out_frm0[col_idx];
+                    int* stray_mask_out1 = algo_func_.stray_mask_out_frm1[col_idx];
+                    int* spray_mask_out0 = algo_func_.spray_mark_out_frm0[col_idx];
+                    int* spray_mask_out1 = algo_func_.spray_mark_out_frm1[col_idx];
+                    uint16_t* Distwave0 = dist_wave0[col_idx];
+                    uint16_t* Distwave1 = dist_wave1[col_idx];
+                    uint8_t* Refwave0 = refl_wave0[col_idx];
+                    uint8_t* Refwave1 = refl_wave1[col_idx];
                     for (int row_idx = 0; row_idx < algo_func_.VIEW_H; row_idx++){
-                        // 按照优先级处理不同掩码情况
-                        if (algo_func_.trail_mask_out_frm[col_idx][row_idx] == 1 ||
-                            algo_func_.denoise_mask_out_frm[col_idx][row_idx] == 0){
-                            // 只清空wave0数据
-                            dist_wave0[col_idx][row_idx] = 0;
-                            refl_wave0[col_idx][row_idx] = 0;
+                        const bool trail = trail_mask_out[row_idx];
+                        const bool denoise = denoise_mask_out[row_idx];
+                        const bool stray0 = stray_mask_out0[row_idx];
+                        const bool stray1 = stray_mask_out1[row_idx];
+                        const bool spray0 = spray_mask_out0[row_idx];
+                        const bool spray1 = spray_mask_out1[row_idx];
+                        const bool wave0_del_flag = stray0 || spray0 || trail || !denoise;
+                        const bool wave1_sel_flag = !stray1 && !spray1 && !trail && denoise;
+
+                        // 情况1: 两回波均无效点
+                        if (wave0_del_flag && !wave1_sel_flag) {
+                            Distwave0[row_idx] = 0;
+                            Refwave0[row_idx] = 0;
+                        }
+                        // 情况2: 第一回波无效点，第二回波有效点
+                        else if (wave0_del_flag && wave1_sel_flag) {
+                            Distwave0[row_idx] = Distwave1[row_idx];
+                            Refwave0[row_idx] = Refwave1[row_idx];
                         }
                     }
                 }
@@ -452,15 +477,30 @@ void CloudManager::algoProcess(int32_t task_id)
                     auto start = std::chrono::steady_clock::now();
                     /*PVA以整帧为单位执行denoise算法*/
                     if(task_id == 0){
-                        /*拷贝整帧数据到denoise算法的PVA buffer中*/
-                        memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
-                        auto denoise_start = std::chrono::steady_clock::now();
-                        denoiseProcPva();
-                        auto denoise_end = std::chrono::steady_clock::now();
-                        auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
-                        std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
-                        memcpy((uint8_t *)&algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
-                        //algo_func_.denoiseMaskMemcpy(0, (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                        if (algo_func_.algo_Param.DenoiseOn) {
+                            /*拷贝整帧数据到denoise算法的PVA buffer中*/
+                            memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
+                            auto denoise_start = std::chrono::steady_clock::now();
+                            denoiseProcPva();
+                            auto denoise_end = std::chrono::steady_clock::now();
+                            auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
+                            std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
+                            memcpy(algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                            /*最后四列mask直接置为1*/
+                            for (int cc = 1; cc <= 4; cc ++) {
+                                for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
+                                    algo_func_.denoise_mask_out_frm[algo_func_.VIEW_W - cc][rr] = 1;
+                                }
+                            }
+                        }
+                        else {
+                            for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
+                                for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
+                                    algo_func_.denoise_mask_out_frm[cc][rr] = 1;
+                                }
+                            }
+                        }
+
 
                         /** Data initialization */
                         memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
@@ -471,7 +511,10 @@ void CloudManager::algoProcess(int32_t task_id)
                         auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
                         std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
                         /** Mask copy */
-                        memcpy(&algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(int) *algo_func_.VIEW_W * algo_func_.VIEW_H);
+                        memcpy(algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(int) *algo_func_.VIEW_W * algo_func_.VIEW_H);
+                    }
+                    else{
+                        algo_func_.pcAlgoMainFunc(frame_buffer, task_id);
                     }
                     auto end = std::chrono::steady_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);

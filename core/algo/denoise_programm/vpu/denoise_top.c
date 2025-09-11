@@ -129,14 +129,13 @@ CUPVA_VPU_MAIN()
                         for (int r = -win_len_v; r <= win_len_v; r ++) {
                             if (r == 0 && row != (TILE_WIDTH - 1)) continue;
                             const int neib_row = row + r;
-                            if (neib_row < 0 || neib_row >= TILE_WIDTH) continue;
+                            if (neib_row < 0 || neib_row >= TILE_WIDTH || r == row) continue;
 
                             int r_loc = r + win_len_v;
-
                             for (int c = -win_len_h; c <= win_len_h; c ++) {
-                                const int neib_col = col + c;
-
                                 int c_loc = c + win_len_h;
+                                
+                                const int neib_col = col + c;
                                 int neib_idx = (src_offset + (neib_col + KERNEL_RADIUS_HEIGHT/2) * src_line_pitch + (neib_row + KERNEL_RADIUS_WIDTH)) % src_circular_buf_len;
 
                                 int dist_neib = input_dist_vmem[neib_idx];
@@ -145,7 +144,7 @@ CUPVA_VPU_MAIN()
                                 /*有效性判断*/
                                 if (absPVA(dist_neib, dist_cur) <= diff_th && (valid_neib != 6)) {
                                     const int zone = params->zone_matrix[r_loc][c_loc];
-                                    if (zone > 0 && zone <= 3) {
+                                    if (zone > 0) {
                                         neib_valid_num[zone - 1] ++;
                                         valid_mask[c_loc][r_loc] = 1;
                                     }
