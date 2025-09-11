@@ -511,7 +511,7 @@ void CloudManager::algoProcess(int32_t task_id)
                             auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
                             std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
                             /** Mask copy */
-                            memcpy(algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(int) *algo_func_.VIEW_W * algo_func_.VIEW_H);
+                            memcpy(algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(uint8_t) *algo_func_.VIEW_W * algo_func_.VIEW_H);
                         }
                         else{
                             for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
