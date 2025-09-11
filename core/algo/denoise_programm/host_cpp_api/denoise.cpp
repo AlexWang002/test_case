@@ -27,7 +27,7 @@ namespace {
 
 int denoiseDataAlloc()
 {
-    try 
+    try
     {
         denoise_dist_buffer_d = (uint16_t *)mem::Alloc(TILE_WIDTH * VIEW_HEIGHT * sizeof(uint16_t));
         denoise_dist_buffer_h = (uint16_t *)mem::GetHostPointer(denoise_dist_buffer_d);
@@ -45,7 +45,7 @@ int denoiseDataAlloc()
 
 int denoiseDataFree()
 {
-    try 
+    try
     {
         mem::Free(denoise_dist_buffer_d);
         mem::Free(denoise_mask_buffer_d);
@@ -71,7 +71,7 @@ int denoiseProcPva()
                                              PVA_EXECUTABLE_SIZE(denoise_dev));
 
 
-        Stream stream = Stream::Create();
+        Stream stream = Stream::Create(PVA0, VPU0);
 
         CmdProgram prog = CmdProgram::Create(exec);
 
@@ -109,7 +109,7 @@ int denoiseProcPva()
         stream.submit({&prog, &rf}, status);
         fence.wait();
     }
-    catch (cupva::Exception const &e) 
+    catch (cupva::Exception const &e)
     {
         std::cout << "Caught a cuPVA exception with message: " << e.what() << std::endl;
         return 1;

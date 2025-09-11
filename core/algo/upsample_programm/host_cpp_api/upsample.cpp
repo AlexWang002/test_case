@@ -143,7 +143,7 @@ void upsample_main()
         Fence fence{sync};
         /** 将Fence封装在cmd中，与CmdProgram一起提交到PVA */
         CmdRequestFences rf{fence};
-        Stream stream = Stream::Create();
+        Stream stream = Stream::Create(PVA0, VPU0);
         CmdStatus status[2];
         stream.submit({&prog, &rf}, status);
         /** 等待Fence失效 */

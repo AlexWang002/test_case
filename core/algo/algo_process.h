@@ -48,7 +48,7 @@
 #include "rs_new_logger.h"
 
 #define ALGO_FRM_BUF_SIZE (3)
-#define ALGO_THREAD_NUM (2)
+#define ALGO_THREAD_NUM (1)
 #define ALGO_LOSS_PKT_CODE (-1)
 #define ALGO_VERSION_MAJOR 01
 #define ALGO_VERSION_MINOR 00

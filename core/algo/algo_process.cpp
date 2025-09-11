@@ -435,17 +435,9 @@ void CloudManager::algoProcess(int32_t task_id)
 
         if (task_id == 0) {
             pid_t tid = gettid();
-            utils::addThread(tid, "denoise");
-
-            /*线程启动时在DRAM中为pva申请denoise算法所需内存*/
+            utils::addThread(tid, "algorithm");
+            /*线程启动时在DRAM中为pva申请算法所需内存*/
             denoiseDataAlloc();
-        }
-
-        if (task_id == 1) {
-            pid_t tid = gettid();
-            utils::addThread(tid, "trail");
-
-            /** only alloc once */
             TrailDataAlloc();
         }
 
@@ -461,7 +453,6 @@ void CloudManager::algoProcess(int32_t task_id)
                     if(task_id == 0){
                         /*拷贝整帧数据到denoise算法的PVA buffer中*/
                         memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
-
                         auto denoise_start = std::chrono::steady_clock::now();
                         denoiseProcPva();
                         auto denoise_end = std::chrono::steady_clock::now();
@@ -469,13 +460,10 @@ void CloudManager::algoProcess(int32_t task_id)
                         std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
                         memcpy((uint8_t *)&algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
                         //algo_func_.denoiseMaskMemcpy(0, (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
-                    }
 
-                    if(task_id == 1){
                         /** Data initialization */
                         memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                         memcpy(RefIn_h, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-
                         /** Process */
                         auto trail_start = std::chrono::steady_clock::now();
                         trail_main();
@@ -513,11 +501,8 @@ void CloudManager::algoProcess(int32_t task_id)
             }
         }
         if (task_id == 0) {
-            denoiseDataFree();
-        }
-
-        if (task_id == 1) {
             /** memory release */
+            denoiseDataFree();
             TrailDataFree();
         }
     }
