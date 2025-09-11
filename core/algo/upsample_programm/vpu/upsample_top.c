@@ -1,39 +1,48 @@
-/*
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+/*******************************************************************************
+ * \addtogroup upsample_programm
+ * \{
+ * \file upsample_top.c
+ * \brief
+ * \version 0.1
+ * \date 2025-09-11
  *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
-
-/** [tile_buffer_allocation] */
-#include "../upsample_commom_param.h"
-
+ * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
+ *
+ * \details
+ * #### Modification History :
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.1 | 2025-09-11 | Init version |
+ *
+ ******************************************************************************/
+/******************************************************************************/
+/*                         Include dependant headers                          */
+/******************************************************************************/
 #include <cupva_device.h> /* Main device-side header file */
 #include <cupva_device_debug.h>
-#include <string.h>
 
+/******************************************************************************/
+/*                      Include headers of the component                      */
+/******************************************************************************/
+#include "../upsample_commom_param.h"
+
+/** Use double buffer, the vertical halo is 1 */
 VMEM(B, uint16_t, inputDistBufferVMEM,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
 VMEM(A, uint8_t, inputRefBufferVMEM,
     RDF_DOUBLE(uint8_t,TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
 
+/** Output and raw data do not use halo */
 VMEM(A, uint16_t, inputDistRawBufferVMEM, RDF_DOUBLE(uint16_t,TILE_WIDTH, TILE_HEIGHT));
 VMEM(A, uint8_t, inputRefRawBufferVMEM, RDF_DOUBLE(uint8_t,TILE_WIDTH, TILE_HEIGHT));
-/** Output do not use halo */
+
 VMEM(C, uint16_t, outputDistUpBufferVMEM, RDF_DOUBLE(uint16_t,TILE_WIDTH, TILE_HEIGHT));
 VMEM(C, uint8_t, outputRefUpBufferVMEM, RDF_DOUBLE(uint8_t,TILE_WIDTH, TILE_HEIGHT));
 
-/** [declare_algorithm_params] */
+/** declare algorithm params */
 VMEM(C, int, algorithmParams, sizeof(InsertParam_t));
 
-/* The handles that will be used for triggering and syncing tile transfers are declared
- * for both incoming source and outgoing destination data flows.
- * Host side code will use these handles when configuring the RDFs.
- */
-/** declare_df_handles */
+/** declare dataflow handles */
 VMEM(C, RasterDataFlowHandler, InputDistDataFlowHandler);
 VMEM(C, RasterDataFlowHandler, InputRefDataFlowHandler);
 VMEM(C, RasterDataFlowHandler, InputDistRawDataFlowHandler);
@@ -41,6 +50,9 @@ VMEM(C, RasterDataFlowHandler, InputRefRawDataFlowHandler);
 VMEM(C, RasterDataFlowHandler, OutputDistUpDataFlowHandler);
 VMEM(C, RasterDataFlowHandler, OutputRefUpDataFlowHandler);
 
+/**
+ * \brief  Upsample processing main function in device-side
+*/
 CUPVA_VPU_MAIN()
 {
     InsertParam_t *upsample_Param = (InsertParam_t *)algorithmParams;
@@ -88,21 +100,13 @@ CUPVA_VPU_MAIN()
 
                 for (int row_idx = 0; row_idx < TILE_WIDTH; ++row_idx)
                 {
-                    /** 初始化，目前不支持memset */
                     int dist_tmp1[5] = {0};
                     int dist_tmp2[5] = {0};
                     int ref_tmp1[5] = {0};
                     int ref_tmp2[5] = {0};
-                    // for(int i = 0; i < window_size; i++){
-                    //     dist_tmp1[i] = 0;
-                    //     dist_tmp2[i] = 0;
-                    //     ref_tmp1[i] = 0;
-                    //     ref_tmp2[i] = 0;
-                    // }
                     int dist_raw = inputDistRawBufferVMEM[srcDistRawOffset + (col_idx - 1) * DistInRawLinePitch + row_idx];
                     int ref_raw = inputRefRawBufferVMEM[srcRefRawOffset + (col_idx - 1) * RefInRawLinePitch + row_idx];
 
-                    // 合并数据提取逻辑
                     if (row_idx > upsample_Param->WH - 1 && row_idx < TILE_WIDTH - upsample_Param->WH) { //中间行
                         const int start_row = row_idx - upsample_Param->WH;
                         for (int i = 0; i < window_size; ++i) {
@@ -146,7 +150,7 @@ CUPVA_VPU_MAIN()
                         dist_ins = (dist1_mid + dist2_mid) >> 1;
                         ref_ins = MIN(ref_tmp1[2], ref_tmp2[2]);
                     }
-                    // 存储结果
+
                     outputDistUpBufferVMEM[dstDistOffset + (col_idx - 1) * DistOutUpLinePitch + row_idx] = dist_ins;
                     outputRefUpBufferVMEM[dstRefOffset + (col_idx - 1) * RefOutUpLinePitch + row_idx] = ref_ins;
                 }

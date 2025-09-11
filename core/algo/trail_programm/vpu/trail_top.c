@@ -1,5 +1,29 @@
+/*******************************************************************************
+ * \addtogroup trail_programm
+ * \{
+ * \file trail_top.c
+ * \brief
+ * \version 0.1
+ * \date 2025-09-11
+ *
+ * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
+ *
+ * \details
+ * #### Modification History :
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.1 | 2025-09-11 | Init version |
+ *
+ ******************************************************************************/
+/******************************************************************************/
+/*                         Include dependant headers                          */
+/******************************************************************************/
+#include <cupva_device.h>
+
+/******************************************************************************/
+/*                      Include headers of the component                      */
+/******************************************************************************/
 #include "../trail_common_param.h"
-#include <cupva_device.h> /* Main device-side header file */
 
 /** Use double buffer, the vertical halo is 2 */
 VMEM(A, uint16_t, inputDistBufferVMEM,
@@ -7,18 +31,37 @@ VMEM(A, uint16_t, inputDistBufferVMEM,
 /** Output do not use halo */
 VMEM(B, uint8_t, outputValidBufferVMEM,
     RDF_DOUBLE(int,TILE_WIDTH, TILE_HEIGHT));
-
-/** declare_algorithm_params */
+/** declare algorithm params */
 VMEM(C, int, algorithmParams, sizeof(TrailParam_t));
-
-/** declare_df_handles */
+/** declare dataflow handles */
 VMEM(C, RasterDataFlowHandler, sourceDistDataFlowHandler);
 VMEM(C, RasterDataFlowHandler, destinationDataFlowHandler);
 
+/**
+ * \brief  Limit value to minimum and maximum
+ * \param[in] val : Value to be limited
+ *                Range: 0 - 2^32-1. Accuracy: 1.
+ * \param[in] min_val : Minimum value
+ *                Range: 0 - 2^32-1. Accuracy: 1.
+ * \param[in] max_val : Maximum value
+ *                Range: 0 - 2^32-1. Accuracy: 1.
+ * \return Limited value
+*/
 int clamp(int val, int min_val, int max_val) {
     return MAX(min_val, MIN(val, max_val));
 }
 
+/**
+ * \brief  Horizontal trail remove judge function
+ *
+ * \param[in] dist_tmp : Distance input array
+ *                Range: 0 - 2^32-1. Accuracy: 1.
+ * \param[in] dist_trail : Reflectance input array
+ * \param[out] Hortrail_judge : Horizontal trail success flag
+ *                Range: 0-1. Accuracy: 1.
+ * \param[out] wall_judge : Horizontal trail success flag
+ *                Range: 0-1. Accuracy: 1.
+ */
 void HorTrailRemove(int* dist_tmp, int dist_trail, int* Hortrail_judge, int* wall_judge, const TrailParam_t *trail_Param)
 {
     int weight[5] = {1,2,0,2,1};
@@ -115,6 +158,15 @@ void HorTrailRemove(int* dist_tmp, int dist_trail, int* Hortrail_judge, int* wal
     }
 }
 
+/**
+ * \brief  verital trail remove judge function
+ *
+ * \param[in] dist_trail : Reflectance input array
+ * \param[out] Hortrail_judge : Horizontal trail success flag
+ *                Range: 0-1. Accuracy: 1.
+ * \param[out] wall_judge : Horizontal trail success flag
+ *                Range: 0-1. Accuracy: 1.
+ */
 int VerTrailRemove(int dist_trail, int* dist_longit, int wall_judge, int near_cnt_h, int near_dist_th, const TrailParam_t *trail_Param)
 {
     int Vertrail_judge = 0;
@@ -158,6 +210,9 @@ int VerTrailRemove(int dist_trail, int* dist_longit, int wall_judge, int near_cn
     return Vertrail_judge;
 }
 
+/**
+ * \brief  Trail processing main function in device-side
+*/
 CUPVA_VPU_MAIN()
 {
     TrailParam_t *trail_Param = (TrailParam_t *)algorithmParams;
@@ -182,9 +237,9 @@ CUPVA_VPU_MAIN()
         const int HL = 5;
         const int VerticalRange = 4;
         /** Process the columns except for "halo" */
-        for (int col_idx = 2; col_idx < TILE_HEIGHT + 2; ++col_idx) //95
+        for (int col_idx = 2; col_idx < TILE_HEIGHT + 2; ++col_idx) /**< 95 */
         {
-            const int near_threshold = trail_Param->near_cnt_th_h; //3
+            const int near_threshold = trail_Param->near_cnt_th_h; /**< 3 */
             const int bypass_distance = trail_Param->BypassDis;
 
             /** Trail process, judge current point based on 5*9 neighbor */
@@ -223,9 +278,11 @@ CUPVA_VPU_MAIN()
                     for (int k = 0; k <= row_range_up + row_range_down; ++k)
                     {
                         const int buf_idx = start_idx + k;
-                        dist_longit[buf_idx] = inputDistBufferVMEM[col_idx * srcDistLinePitch + srcDistOffset + row_idx - row_range_up + k];
+                        dist_longit[buf_idx] =
+                            inputDistBufferVMEM[col_idx * srcDistLinePitch + srcDistOffset + row_idx - row_range_up + k];
                     }
-                    int Vertrail_judge = VerTrailRemove(dist_trail, dist_longit, wall_judge, near_cnt_h, near_dist_th, trail_Param);
+                    int Vertrail_judge =
+                            VerTrailRemove(dist_trail, dist_longit, wall_judge, near_cnt_h, near_dist_th, trail_Param);
                     if(Vertrail_judge == 1)
                     {
                         outputValidBufferVMEM[(col_idx - 2) * dstLinePitch + row_idx + dstOffset] = 1;
