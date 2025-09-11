@@ -3162,7 +3162,7 @@ void AlgoFunction::rainEnhance(int spray_col,
                         }
                     }
                 }
-                //雨雾标记读取 第二回波    
+                //雨雾标记读取 第二回波
             }
         }
     }
@@ -3313,123 +3313,6 @@ int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
     int proc_col = -1;
     switch (task_id)
     {
-        case DENOISE_ALGO: {
-        static bool first{true};
-
-        if (first) {
-            pid_t tid = gettid();
-            utils::addThread(tid, "Denoise_Algo");
-            first = false;
-        }
-
-        circularCalcIdx(rear1, buffer_size_denoise);
-        circularCalcIdx(basic_rear, denoise_valid_size);
-
-        //去噪
-        int denoise_col_in = col_idx - DenoiseInDelayCol;
-        if (denoise_col_in >= 0 && denoise_col_in < VIEW_W){
-            memcpy(dist_wave0_buffer1[rear1], pstFrameBuffer->dist0[denoise_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(dist_wave1_buffer1[rear1], pstFrameBuffer->dist1[denoise_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(refl_wave0_buffer1[rear1], pstFrameBuffer->ref0[denoise_col_in], sizeof(uint8_t) * VIEW_H);
-            memcpy(refl_wave1_buffer1[rear1], pstFrameBuffer->ref1[denoise_col_in], sizeof(uint8_t) * VIEW_H);
-            memcpy(attr_wave0_buffer1[rear1], pstFrameBuffer->att0[denoise_col_in], sizeof(uint8_t) * VIEW_H);
-            memcpy(attr_wave1_buffer1[rear1], pstFrameBuffer->att1[denoise_col_in], sizeof(uint8_t) * VIEW_H);
-            memcpy(high_wave0_buffer1[rear1], pstFrameBuffer->high0[denoise_col_in], sizeof(int) * VIEW_H);
-            memcpy(high_wave1_buffer1[rear1], pstFrameBuffer->high1[denoise_col_in], sizeof(int) * VIEW_H);
-        }
-        else {
-            //超过最大列，帧间buffer补0
-            memset(dist_wave0_buffer1[rear1], 0, sizeof(uint16_t) * VIEW_H);
-            memset(dist_wave1_buffer1[rear1], 0, sizeof(uint16_t) * VIEW_H);
-            memset(refl_wave0_buffer1[rear1], 0, sizeof(uint8_t) * VIEW_H);
-            memset(refl_wave1_buffer1[rear1], 0, sizeof(uint8_t) * VIEW_H);
-            memset(attr_wave0_buffer1[rear1], 0, sizeof(uint8_t) * VIEW_H);
-            memset(attr_wave1_buffer1[rear1], 0, sizeof(uint8_t) * VIEW_H);
-            memset(high_wave0_buffer1[rear1], 0, sizeof(int) * VIEW_H);
-            memset(high_wave1_buffer1[rear1], 0, sizeof(int) * VIEW_H);
-        }
-        memset(denoise_valid_buffer[basic_rear], 0, sizeof(int) * VIEW_H);
-
-        int ValidMask[VIEW_H][15] = { 0 };
-        int denoise_col = denoise_col_in - DenoiseDelayCol;
-        int denoise_col_buffer = matlabMod(rear1 + 1 - DenoiseDelayCol - 1, buffer_size_denoise);
-        int denoise_col_neib_buf[5];//索引
-        for (int i = 0; i < 5; i++) {
-            denoise_col_neib_buf[i] = matlabMod(denoise_col_buffer + 1 - 2 + i - 1, buffer_size_denoise);
-        }
-        int denoise_col_valid = matlabMod(basic_rear + 1 - DenoiseDelayCol - 1, denoise_valid_size);
-        int denoise_col_neib_vld[5];//索引
-        for (int i = 0; i < 5; i++) {
-            denoise_col_neib_vld[i] = matlabMod(denoise_col_valid + 1 - 2 + i - 1, denoise_valid_size);
-        }
-        int denoise_col_out = denoise_col - DenoiseOutDelayCol;
-        int denoise_col_out_vld = matlabMod(denoise_col_valid + 1 - DenoiseOutDelayCol - 1, denoise_valid_size);
-        int denoise_col_out_buf = matlabMod(denoise_col_buffer + 1 - DenoiseOutDelayCol - 1, buffer_size_denoise);
-
-        // 去噪算法
-        denoiseProcessing(denoise_col_buffer, denoise_col_valid, denoise_col_neib_buf,
-            denoise_col_neib_vld, denoise_col);
-
-        if(denoise_col_out >= 0 && denoise_col_out < VIEW_W)
-        {
-            for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
-                int valid_tmp = denoise_valid_buffer[denoise_col_out_vld][row_idx];
-                if (valid_tmp != 1)
-                {
-                    dist_wave0_buffer1[denoise_col_out_buf][row_idx] = 0;
-                    refl_wave0_buffer1[denoise_col_out_buf][row_idx] = 0;
-                    high_wave0_buffer1[denoise_col_out_buf][row_idx] = 0;
-                    attr_wave0_buffer1[denoise_col_out_buf][row_idx] = 0;
-                }
-            }
-
-            //传递给整帧数据输出
-            memcpy(stFilterFrmBuffer.dist_wave0[denoise_col_out], dist_wave0_buffer1[denoise_col_out_buf], sizeof(uint16_t) * VIEW_H);
-            memcpy(stFilterFrmBuffer.dist_wave1[denoise_col_out], dist_wave1_buffer1[denoise_col_out_buf], sizeof(uint16_t) * VIEW_H);
-            memcpy(stFilterFrmBuffer.refl_wave0[denoise_col_out], refl_wave0_buffer1[denoise_col_out_buf], sizeof(uint8_t) * VIEW_H);
-            memcpy(stFilterFrmBuffer.refl_wave1[denoise_col_out], refl_wave1_buffer1[denoise_col_out_buf], sizeof(uint8_t) * VIEW_H);
-            // proc_col = denoise_col_out;
-        }
-        // if(denoise_col_out >= VIEW_W)
-        // {
-        //     proc_col = VIEW_W - 1;
-        // }
-
-        circularCalcIdx(rear2, buffer_size_trail);
-        //拖点数据
-        int trail_col_in = col_idx - TrailInDelayCol;
-        if (trail_col_in >= 0 && trail_col_in < VIEW_W) {
-            memcpy(dist_wave0_buffer2[rear2], pstFrameBuffer->dist0[trail_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(refl_wave0_buffer2[rear2], pstFrameBuffer->ref0[trail_col_in], sizeof(uint8_t) * VIEW_H);
-        }
-        else {
-            memset(dist_wave0_buffer2[rear2], 0, sizeof(uint16_t) * VIEW_H);
-            memset(refl_wave0_buffer2[rear2], 0, sizeof(uint8_t) * VIEW_H);
-        }
-
-        //线程二：：：：拖点
-        int trail_col = trail_col_in - TrailDelayCol;  // 目标列偏移计算‌
-        int trail_col_buffer = matlabMod(rear2 + 1 - TrailDelayCol - 1, buffer_size_trail);  // 环形缓冲区计算‌
-        int trail_col_neib_buf[5] = { 0 };
-        for (int i = 0; i < 5; i++) {
-            trail_col_neib_buf[i] = matlabMod((trail_col_buffer + 1 - trail_Param.half_HL + i) - 1, buffer_size_trail);
-        }
-        int trail_mask_out[VIEW_H] = { 0 };
-
-        trailRemove(trail_col, trail_col_buffer, trail_col_neib_buf, trail_mask_out);
-
-        if(trail_col >= 0 && trail_col < VIEW_W)
-        {
-            memcpy(trail_mask_out_frm[trail_col], trail_mask_out, sizeof(trail_mask_out));
-            proc_col = trail_col;
-        }
-        if(trail_col >= VIEW_W)
-        {
-            proc_col = VIEW_W - 1;
-        }
-
-        
-        } break;
         case STRAY_ALGO:
         {
             static bool first{true};
@@ -3446,7 +3329,7 @@ int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
                         uint16_t dist_line[VIEW_H];
                         uint16_t col_pos = col_idx / gnd_step;
                         memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
-    
+
                         int surface_id = pstFrameBuffer->surface_id.load();
                         int real_col;
                         if(0 == surface_id)
@@ -3457,7 +3340,7 @@ int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
                         {
                             real_col = UP_VIEW_W - (col_idx << 1) - 1;
                         }
-    
+
                         for(int row = 0; row < VIEW_H; ++row){
                             int idx = row * GND_VIEW_W + col_pos;
                             dist_wave0_buffer6[idx] = dist_line[row];
@@ -3472,7 +3355,7 @@ int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
                     }
                 }
                 circularCalcIdx(rear3, buffer_size_stray);
-    
+
                 int stray_col_in = col_idx - StrayInDelayCol;
                 if (stray_col_in >= 0 && stray_col_in < VIEW_W){
                     memcpy(dist_wave0_buffer3[rear3], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
@@ -3529,14 +3412,14 @@ int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
                 }
                 int stray_mark_out0[VIEW_H] = { 0 };
                 int stray_mark_out1[VIEW_H] = { 0 };
-    
+
                 //杂散删除 初始化输出
                 if(0 == col_idx){
                     memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
                     RainWall_out = {0, 0, 0};
                 }
                 strayDelete(stray_col, stray_col_buffer, stray_col_neib_buf, stray_mark_out0, stray_mark_out1);
-    
+
                 if(stray_col >= 0 && stray_col < VIEW_W){
                     memcpy(stray_mask_out_frm0[stray_col], stray_mark_out0, sizeof(stray_mark_out0));
                     memcpy(stray_mask_out_frm1[stray_col], stray_mark_out1, sizeof(stray_mark_out1));
@@ -3569,7 +3452,7 @@ int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
                         rain_wave1_buffer4[rear4][i] = att1 >> 7;
                         head_wave0_buffer4[rear4][i] = (att0 >> 1) & 0x01;
                         head_wave1_buffer4[rear4][i] = (att1 >> 1) & 0x01;
-                        tail_wave0_buffer4[rear4][i] = (att0 >> 2) & 0x01;  
+                        tail_wave0_buffer4[rear4][i] = (att0 >> 2) & 0x01;
                         tail_wave1_buffer4[rear4][i] = (att1 >> 2) & 0x01;
                         rain_final0_buffer[rear4][i] = att0 >> 7;
                         rain_final1_buffer[rear4][i] = att1 >> 7;
@@ -3601,7 +3484,7 @@ int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
                 int spray_mark_out0[VIEW_H]{ 0 };
                 int spray_mark_out1[VIEW_H]{ 0 };
                 rainEnhance(spray_col, spray_col_buffer, spray_col_neib_buf, spray_mark_out0, spray_mark_out1);
-    
+
                 int spray_out_col = spray_col - SprayFilterDelayCol - SprayOutDelayCol;
                 if (spray_out_col >= 0 && spray_out_col < VIEW_W) {
                     memcpy(spray_mark_out_frm0[spray_out_col], spray_mark_out0, sizeof(spray_mark_out0));
