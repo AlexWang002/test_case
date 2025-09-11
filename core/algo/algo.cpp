@@ -84,7 +84,7 @@ void AlgoFunction::trailRemove(int trail_col,
         if (dist_trail <= 0 || dist_trail >= bypass_distance) continue;
         int trail_refer_mask = 0;
 
-        near_dist_th = clamp(std::round((dist_trail *  trail_Param.dist_th_ratio) >> 3), 2, 20);
+        near_dist_th = clamp(((dist_trail * trail_Param.dist_th_ratio) >> 3), 2, 20);
         int dist_tmp[HL];
         for (int i = 0; i < HL; ++i) {
             dist_tmp[i] = dist_wave0_buffer2[trail_col_neib_buf[i]][row_idx];
@@ -166,7 +166,7 @@ void AlgoFunction::HorTrailRemove(int* dist_tmp,
     int dif_dist_abs[HL-1] = {0};
     int dif2_dist_abs[HL-2] = {0};
     // 计算自适应阈值
-    const int AdjDisThreD = std::max(1, (dist_trail * trail_Param.DisThreRatio) >> 12);
+    const int AdjDisThreD = std::max(1, (dist_trail * trail_Param.DisThreRatio) >> 3);
     int zero_cnt = 0;
     int dif_dist_abs_cnt = 0;
 
@@ -342,7 +342,7 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
     int dist_c2[3] = { dist_tmp2[1], dist_tmp2[2], dist_tmp2[3] };
 
     // 计算距离差值（展开所有计算）
-    if (std::abs(dist_c1[1] - dist_c2[1]) < ((dist_c1[2]*diff_ratio_max) >> 12) && dist_c1[2] > 0)
+    if (std::abs(dist_c1[1] - dist_c2[1]) < ((dist_c1[1]*diff_ratio_max) >> 12) && dist_c1[1] > 0)
     {
         *PLRawFillMask = 1;
         return;
@@ -963,7 +963,7 @@ void AlgoFunction::denoiseProcessing(int denoise_col_buffer,
 
             // 两侧有效性统计
             int valid_pre_2 = ValidMask[params.WinLenH - 1][params.WinLenV]
-                                + ValidMask[params.WinLenH - 1][params.WinLenV];
+                                + ValidMask[params.WinLenH + 1][params.WinLenV];
 
             denoise_refer_mask = (valid_pre_2 >= threshold1)
                                         ? ((valid_cnt > 2) ? 2 : 1)
@@ -994,7 +994,7 @@ void AlgoFunction::denoiseProcessing(int denoise_col_buffer,
                         const int nei_val = dist_neib[h_idx][v_idx];
                         if (std::abs(nei_val - dist_cur) <= diff_th && (valid_neib[h_idx][v_idx] != 6)) {
                             const int zone = noise_params.zone_matrix[v_idx][h_idx];
-                            if (zone > 0 && zone <= 3) {
+                            if (zone > 0) {
                                 NeibValidNum[zone - 1]++;
                                 ValidMask[h_idx][v_idx] = 1;
                             }
@@ -2268,9 +2268,12 @@ void AlgoFunction::rainEnhance(int spray_col,
     int* spray_mark_out0,
     int* spray_mark_out1) {
     if ((spray_col >= 0) && (spray_col < VIEW_W)) {
+        bool MidAreaMask = std::floor((spray_col + 1) / 50) == 7;
+        int rowStep = (MidAreaMask) ? 1 : 2;
+        int rowEnd = MidAreaMask - 1;
         if (algo_Param.SprayRemoveOn) {
             // 预计算行范围
-            for (int row_idx = 0; row_idx < VIEW_H; row_idx++) {
+            for (int row_idx = 0; row_idx < VIEW_H + rowEnd; row_idx = row_idx + rowStep) {
                 int row_range_up = spray_Param.Area_size_y;//bias
                 int row_range_down = spray_Param.Area_size_y;//bias
                 if (row_idx <= spray_Param.Area_size_y - 1)
@@ -2296,8 +2299,8 @@ void AlgoFunction::rainEnhance(int spray_col,
                 int cur_dist_1 = dist_wave0_buffer4[spray_col_buffer][row_idx];
                 int cur_dist_2 = dist_wave1_buffer4[spray_col_buffer][row_idx];
                 /******************接地保护*******************/
-                int zone_idx = std::floor(row_idx / 12);
-                if (row_idx % 12 == 0) //12个通道一个采样
+                int zone_idx = (row_idx + 1) / 12;
+                if ((row_idx + 1) % 12 == 0) //12个通道一个采样
                 {
                     spray_Param.dist_cap_zone[zone_idx][0] = cur_dist_1;
                     spray_Param.dist_cap_zone[zone_idx][1] = cur_dist_2;
@@ -2335,6 +2338,7 @@ void AlgoFunction::rainEnhance(int spray_col,
                 int* local_dist_a;
                 int* local_dist_b;
                 int* local_dist_c;
+				int MmOffsetLen[3] = { 0 };
                 int dist_diff_col[RAIN_SIZE_Y];
                 int dist_diff_row[RAIN_SIZE_Y];
                 int dist_diff_thr;
@@ -2432,12 +2436,18 @@ void AlgoFunction::rainEnhance(int spray_col,
                             local_dist_a = &local_dist_A[0][0];
                             local_dist_b = &local_dist_C[0][0];
                             local_dist_c = &local_dist_E[0][0];
+                            MmOffsetLen[0] = 0;
+                            MmOffsetLen[1] = 2;
+                            MmOffsetLen[2] = 4;
                         }
                         else
                         {
                             local_dist_a = &local_dist_B[0][0];
                             local_dist_b = &local_dist_C[0][0];
                             local_dist_c = &local_dist_D[0][0];
+                            MmOffsetLen[0] = 1;
+                            MmOffsetLen[1] = 2;
+                            MmOffsetLen[2] = 3;
                         }
 
                         dist_diff_col[0] = local_dist_b[3] - local_dist_a[3];
@@ -2483,8 +2493,21 @@ void AlgoFunction::rainEnhance(int spray_col,
                         cond4 = spray_Param.ground_judge_en && cur_ground_1;
                         if ((!cond3) && !cond4)
                         {
-                            rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
-                            rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                            if (MidAreaMask)
+                            {
+                                rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
+                                rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                            }
+                            else
+                            {
+                                for (int i = 0; i < 3; i++)
+                                {
+                                    rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                    rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                    rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                    rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                }
+                            }
                         }
                         else
                         {
@@ -2506,8 +2529,21 @@ void AlgoFunction::rainEnhance(int spray_col,
 
                             if (cond6 && !cond3)
                             {
-                                rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
-                                rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                                if (MidAreaMask)
+                                {
+                                    rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
+                                    rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                                }
+                                else
+                                {
+                                    for (int i = 0; i < 3; i++)
+                                    {
+                                        rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                        rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                        rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                        rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                    }
+                                }
                             }
                             else
                             {
@@ -2634,8 +2670,20 @@ void AlgoFunction::rainEnhance(int spray_col,
 
                                     if (cond0_3 || cond0_0)
                                     {
-                                        rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
-                                        rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                                        if (MidAreaMask)
+                                        {
+                                            rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
+                                            rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                                        }
+                                        else {
+                                            for (int i = 0; i < 3; i++)
+                                            {
+                                                rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                            }
+                                        }
                                     }
                                     else
                                     {
@@ -2651,6 +2699,9 @@ void AlgoFunction::rainEnhance(int spray_col,
                                                 local_ref_mask_b = local_ref_mask_C;
                                                 local_dist_c = &local_dist_E[0][0];
                                                 local_ref_mask_c = local_ref_mask_E;
+                                                MmOffsetLen[0] = 0;
+                                                MmOffsetLen[1] = 2;
+                                                MmOffsetLen[2] = 4;
                                             }
                                             else
                                             {
@@ -2660,6 +2711,9 @@ void AlgoFunction::rainEnhance(int spray_col,
                                                 local_ref_mask_b = local_ref_mask_C;
                                                 local_dist_c = &local_dist_D[0][0];
                                                 local_ref_mask_c = local_ref_mask_D;
+                                                MmOffsetLen[0] = 1;
+                                                MmOffsetLen[1] = 2;
+                                                MmOffsetLen[2] = 3;
                                             }
                                             //第一回波
                                             int sum_count1[3] = { 0 }, sum_dist1[3] = { 0 }, sum_sq1[3] = { 0 };
@@ -2700,8 +2754,21 @@ void AlgoFunction::rainEnhance(int spray_col,
                                             cond2 = spray_Param.local_var_en && ((local_var_1 >= spray_Param.threshold_var && row_idx > 95) ||
                                                 (local_var_1 >= spray_Param.threshold_var2 && row_idx <= 95));
                                             if (cond0_1 || cond1 || cond2 || cond0_2) {
-                                                rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
-                                                rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                                                if (MidAreaMask)
+                                                {
+                                                    rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
+                                                    rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                                                }
+                                                else
+                                                {
+                                                    for (int i = 0; i < 3; i++)
+                                                    {
+                                                        rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                        rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                        rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                        rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                    }
+                                                }
                                             }
 
                                         }
@@ -2754,12 +2821,18 @@ void AlgoFunction::rainEnhance(int spray_col,
                             local_dist_a = &local_dist_A[0][0];
                             local_dist_b = &local_dist_C[0][0];
                             local_dist_c = &local_dist_E[0][0];
+                            MmOffsetLen[0] = 0;
+                            MmOffsetLen[1] = 2;
+                            MmOffsetLen[2] = 4;
                         }
                         else
                         {
                             local_dist_a = &local_dist_B[0][0];
                             local_dist_b = &local_dist_C[0][0];
                             local_dist_c = &local_dist_D[0][0];
+                            MmOffsetLen[0] = 1;
+                            MmOffsetLen[1] = 2;
+                            MmOffsetLen[2] = 3;
                         }
 
                         dist_diff_col[0] = local_dist_b[2] - local_dist_a[2];
@@ -2805,8 +2878,21 @@ void AlgoFunction::rainEnhance(int spray_col,
                         cond4 = spray_Param.ground_judge_en && cur_ground_2;
                         if ((!cond3) && !cond4)
                         {
-                            rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
-                            rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                            if (MidAreaMask)
+                            {
+                                rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
+                                rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                            }
+                            else
+                            {
+                                for (int i = 0; i < 3; i++)
+                                {
+                                    rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                    rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                    rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                    rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                }
+                            }
                         }
                         else
                         {
@@ -2827,8 +2913,21 @@ void AlgoFunction::rainEnhance(int spray_col,
                             cond6 = spray_Param.ground_link_judge_en && ground_link_valid_2;
                             if (cond6 && !cond3)
                             {
-                                rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
-                                rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                                if (MidAreaMask)
+                                {
+                                    rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
+                                    rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                                }
+                                else
+                                {
+                                    for (int i = 0; i < 3; i++)
+                                    {
+                                        rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                        rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                        rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                        rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                    }
+                                }
                             }
                             else
                             {
@@ -2956,8 +3055,21 @@ void AlgoFunction::rainEnhance(int spray_col,
 
                                     if (cond0_3 || cond0_0)
                                     {
-                                        rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
-                                        rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                                        if (MidAreaMask)
+                                        {
+                                            rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
+                                            rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                                        }
+                                        else
+                                        {
+                                            for (int i = 0; i < 3; i++)
+                                            {
+                                                rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                            }
+                                        }
                                     }
                                     else
                                     {
@@ -2972,6 +3084,9 @@ void AlgoFunction::rainEnhance(int spray_col,
                                                 local_ref_mask_b = local_ref_mask_C;
                                                 local_dist_c = &local_dist_E[0][0];
                                                 local_ref_mask_c = local_ref_mask_E;
+                                                MmOffsetLen[0] = 0;
+                                                MmOffsetLen[1] = 2;
+                                                MmOffsetLen[2] = 4;
                                             }
                                             else
                                             {
@@ -2981,6 +3096,9 @@ void AlgoFunction::rainEnhance(int spray_col,
                                                 local_ref_mask_b = local_ref_mask_C;
                                                 local_dist_c = &local_dist_D[0][0];
                                                 local_ref_mask_c = local_ref_mask_D;
+                                                MmOffsetLen[0] = 1;
+                                                MmOffsetLen[1] = 2;
+                                                MmOffsetLen[2] = 3;
                                             }
                                             //第一回波
                                             int sum_count2[3] = { 0 }, sum_dist2[3] = { 0 }, sum_sq2[3] = { 0 };
@@ -3021,8 +3139,21 @@ void AlgoFunction::rainEnhance(int spray_col,
                                             cond2 = spray_Param.local_var_en && ((local_var_2 >= spray_Param.threshold_var && row_idx > 95) ||
                                                 (local_var_2 >= spray_Param.threshold_var2 && row_idx <= 95));
                                             if (cond0_1 || cond1 || cond2 || cond0_2) {
-                                                rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
-                                                rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                                                if (MidAreaMask)
+                                                {
+                                                    rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
+                                                    rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                                                }
+                                                else
+                                                {
+                                                    for (int i = 0; i < 3; i++)
+                                                    {
+                                                        rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                        rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                        rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                        rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -3031,7 +3162,7 @@ void AlgoFunction::rainEnhance(int spray_col,
                         }
                     }
                 }
-                //雨雾标记读取 第二回波
+                //雨雾标记读取 第二回波    
             }
         }
     }
@@ -3177,7 +3308,7 @@ void AlgoFunction::rainEnhance(int spray_col,
  * @return int process column of point cloud
  *                  Range: 0 - 759. Accuracy: 1.
  */
-int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, int task_id)
+int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
 {
     int proc_col = -1;
     switch (task_id)
@@ -3297,37 +3428,7 @@ int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, in
             proc_col = VIEW_W - 1;
         }
 
-        // 地面拟合
-        if(col_idx >= 0 && col_idx < VIEW_W){
-            if((col_idx % gnd_step) == 0){
-                uint16_t dist_line[VIEW_H];
-                uint16_t col_pos = col_idx / gnd_step;
-                memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
-
-                int surface_id = pstFrameBuffer->surface_id.load();
-                int real_col;
-                if(0 == surface_id)
-                {
-                    real_col = (col_idx << 1);
-                }
-                else
-                {
-                    real_col = UP_VIEW_W - (col_idx << 1) - 1;
-                }
-
-                for(int row = 0; row < VIEW_H; ++row){
-                    int idx = row * GND_VIEW_W + col_pos;
-                    dist_wave0_buffer6[idx] = dist_line[row];
-                    int dist = dist_line[row];
-                    X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
-                    Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
-                    Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
-                }
-                if(col_idx == (VIEW_W - gnd_step)){
-                    selectGroundFitFunc(best_model_fit);
-                }
-            }
-        }
+        
         } break;
         case STRAY_ALGO:
         {
@@ -3338,80 +3439,108 @@ int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, in
                 utils::addThread(tid, "Stray_Algo");
                 first = false;
             }
-            circularCalcIdx(rear3, buffer_size_stray);
-
-            int stray_col_in = col_idx - StrayInDelayCol;
-            if (stray_col_in >= 0 && stray_col_in < VIEW_W){
-                memcpy(dist_wave0_buffer3[rear3], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(dist_wave1_buffer3[rear3], pstFrameBuffer->dist1[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(refl_wave0_buffer3[rear3], pstFrameBuffer->ref0[stray_col_in], sizeof(uint8_t) * VIEW_H);
-                memcpy(refl_wave1_buffer3[rear3], pstFrameBuffer->ref1[stray_col_in], sizeof(uint8_t) * VIEW_H);
-                memcpy(grnd_wave0_buffer3[rear3], pstFrameBuffer->gnd_mark0[stray_col_in], sizeof(uint8_t) * VIEW_H);
-                memcpy(grnd_wave1_buffer3[rear3], pstFrameBuffer->gnd_mark1[stray_col_in], sizeof(uint8_t) * VIEW_H);
-                memcpy(high_wave0_buffer3[rear3], pstFrameBuffer->high0[stray_col_in], sizeof(int) * VIEW_H);
-                memcpy(high_wave1_buffer3[rear3], pstFrameBuffer->high1[stray_col_in], sizeof(int) * VIEW_H);
-                for(int i = 0; i < VIEW_H; ++i){
-                    uint8_t att0 = pstFrameBuffer->att0[stray_col_in][i];
-                    uint8_t att1 = pstFrameBuffer->att1[stray_col_in][i];
-                    smlr_wave0_buffer3[rear3][i] = (att0 >> 5) & 0x03;
-                    smlr_wave1_buffer3[rear3][i] = (att1 >> 5) & 0x03;
-                    peak_wave0_buffer3[rear3][i] = (att0 >> 3) & 0x01;
-                    peak_wave1_buffer3[rear3][i] = (att1 >> 3) & 0x01;
-                    crtk_wave0_buffer3[rear3][i] = att0 & 0x01;
-                    crtk_wave1_buffer3[rear3][i] = att1 & 0x01;
-                    rain_wave0_buffer3[rear3][i] = att0 >> 7;
-                    rain_wave1_buffer3[rear3][i] = att1 >> 7;
-                    head_wave0_buffer3[rear3][i] = (att0 >> 1) & 0x01;
-                    head_wave1_buffer3[rear3][i] = (att1 >> 1) & 0x01;
-                    tail_wave0_buffer3[rear3][i] = (att0 >> 2) & 0x01;
-                    tail_wave0_buffer3[rear3][i] = (att1 >> 2) & 0x01;
+            for (int32_t col_idx = 0; col_idx < VIEW_W + max_data_size; ++col_idx){
+                // 地面拟合
+                if(col_idx >= 0 && col_idx < VIEW_W){
+                    if((col_idx % gnd_step) == 0){
+                        uint16_t dist_line[VIEW_H];
+                        uint16_t col_pos = col_idx / gnd_step;
+                        memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+    
+                        int surface_id = pstFrameBuffer->surface_id.load();
+                        int real_col;
+                        if(0 == surface_id)
+                        {
+                            real_col = (col_idx << 1);
+                        }
+                        else
+                        {
+                            real_col = UP_VIEW_W - (col_idx << 1) - 1;
+                        }
+    
+                        for(int row = 0; row < VIEW_H; ++row){
+                            int idx = row * GND_VIEW_W + col_pos;
+                            dist_wave0_buffer6[idx] = dist_line[row];
+                            int dist = dist_line[row];
+                            X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
+                            Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
+                            Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
+                        }
+                        if(col_idx == (VIEW_W - gnd_step)){
+                            selectGroundFitFunc(best_model_fit);
+                        }
+                    }
                 }
-            }
-            else {
-                //超过最大列，帧间buffer补0
-                memset(dist_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-                memset(dist_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-                memset(refl_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(refl_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(grnd_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(grnd_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(high_wave0_buffer3[rear3], 0, sizeof(int) * VIEW_H);
-                memset(high_wave1_buffer3[rear3], 0, sizeof(int) * VIEW_H);
-                memset(smlr_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(smlr_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(peak_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(peak_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(crtk_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(crtk_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(rain_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(rain_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(head_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                memset(head_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-            }
-            int stray_col = stray_col_in - StrayDelayCol;
-            int stray_col_buffer = matlabMod(rear3 + 1 - StrayDelayCol - 1, buffer_size_stray);
-            int stray_col_neib_buf[3];
-            for (int i = 0; i < 3; i++) {
-                stray_col_neib_buf[i] = matlabMod((stray_col_buffer + 1 - 1 + i) - 1, buffer_size_stray);
-            }
-            int stray_mark_out0[VIEW_H] = { 0 };
-            int stray_mark_out1[VIEW_H] = { 0 };
-
-            //杂散删除 初始化输出
-            if(0 == col_idx){
-                memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
-                RainWall_out = {0, 0, 0};
-            }
-            strayDelete(stray_col, stray_col_buffer, stray_col_neib_buf, stray_mark_out0, stray_mark_out1);
-
-            if(stray_col >= 0 && stray_col < VIEW_W){
-                memcpy(stray_mask_out_frm0[stray_col], stray_mark_out0, sizeof(stray_mark_out0));
-                memcpy(stray_mask_out_frm1[stray_col], stray_mark_out1, sizeof(stray_mark_out1));
-                proc_col = stray_col;
-            }
-            if(stray_col >= VIEW_W)
-            {
-                proc_col = VIEW_W - 1;
+                circularCalcIdx(rear3, buffer_size_stray);
+    
+                int stray_col_in = col_idx - StrayInDelayCol;
+                if (stray_col_in >= 0 && stray_col_in < VIEW_W){
+                    memcpy(dist_wave0_buffer3[rear3], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                    memcpy(dist_wave1_buffer3[rear3], pstFrameBuffer->dist1[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                    memcpy(refl_wave0_buffer3[rear3], pstFrameBuffer->ref0[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                    memcpy(refl_wave1_buffer3[rear3], pstFrameBuffer->ref1[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                    memcpy(grnd_wave0_buffer3[rear3], pstFrameBuffer->gnd_mark0[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                    memcpy(grnd_wave1_buffer3[rear3], pstFrameBuffer->gnd_mark1[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                    memcpy(high_wave0_buffer3[rear3], pstFrameBuffer->high0[stray_col_in], sizeof(int) * VIEW_H);
+                    memcpy(high_wave1_buffer3[rear3], pstFrameBuffer->high1[stray_col_in], sizeof(int) * VIEW_H);
+                    for(int i = 0; i < VIEW_H; ++i){
+                        uint8_t att0 = pstFrameBuffer->att0[stray_col_in][i];
+                        uint8_t att1 = pstFrameBuffer->att1[stray_col_in][i];
+                        smlr_wave0_buffer3[rear3][i] = (att0 >> 5) & 0x03;
+                        smlr_wave1_buffer3[rear3][i] = (att1 >> 5) & 0x03;
+                        peak_wave0_buffer3[rear3][i] = (att0 >> 3) & 0x01;
+                        peak_wave1_buffer3[rear3][i] = (att1 >> 3) & 0x01;
+                        crtk_wave0_buffer3[rear3][i] = att0 & 0x01;
+                        crtk_wave1_buffer3[rear3][i] = att1 & 0x01;
+                        rain_wave0_buffer3[rear3][i] = att0 >> 7;
+                        rain_wave1_buffer3[rear3][i] = att1 >> 7;
+                        head_wave0_buffer3[rear3][i] = (att0 >> 1) & 0x01;
+                        head_wave1_buffer3[rear3][i] = (att1 >> 1) & 0x01;
+                        tail_wave0_buffer3[rear3][i] = (att0 >> 2) & 0x01;
+                        tail_wave0_buffer3[rear3][i] = (att1 >> 2) & 0x01;
+                    }
+                }
+                else {
+                    //超过最大列，帧间buffer补0
+                    memset(dist_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                    memset(dist_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                    memset(refl_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(refl_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(grnd_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(grnd_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(high_wave0_buffer3[rear3], 0, sizeof(int) * VIEW_H);
+                    memset(high_wave1_buffer3[rear3], 0, sizeof(int) * VIEW_H);
+                    memset(smlr_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(smlr_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(peak_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(peak_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(crtk_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(crtk_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(rain_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(rain_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(head_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(head_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                }
+                int stray_col = stray_col_in - StrayDelayCol;
+                int stray_col_buffer = matlabMod(rear3 + 1 - StrayDelayCol - 1, buffer_size_stray);
+                int stray_col_neib_buf[3];
+                for (int i = 0; i < 3; i++) {
+                    stray_col_neib_buf[i] = matlabMod((stray_col_buffer + 1 - 1 + i) - 1, buffer_size_stray);
+                }
+                int stray_mark_out0[VIEW_H] = { 0 };
+                int stray_mark_out1[VIEW_H] = { 0 };
+    
+                //杂散删除 初始化输出
+                if(0 == col_idx){
+                    memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
+                    RainWall_out = {0, 0, 0};
+                }
+                strayDelete(stray_col, stray_col_buffer, stray_col_neib_buf, stray_mark_out0, stray_mark_out1);
+    
+                if(stray_col >= 0 && stray_col < VIEW_W){
+                    memcpy(stray_mask_out_frm0[stray_col], stray_mark_out0, sizeof(stray_mark_out0));
+                    memcpy(stray_mask_out_frm1[stray_col], stray_mark_out1, sizeof(stray_mark_out1));
+                }
             }
         }break;
         case RAIN_ALGO:
@@ -3423,64 +3552,61 @@ int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, in
                 utils::addThread(tid, "Rain_Algo");
                 first = false;
             }
-            circularCalcIdx(rear4, buffer_size_spray);
-            int spray_col_in = col_idx - SprayInDelayCol;
-            if (spray_col_in >= 0 && spray_col_in < VIEW_W) {
-                memcpy(dist_wave0_buffer4[rear4], pstFrameBuffer->dist0[spray_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(dist_wave1_buffer4[rear4], pstFrameBuffer->dist1[spray_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(refl_wave0_buffer4[rear4], pstFrameBuffer->ref0[spray_col_in], sizeof(uint8_t) * VIEW_H);
-                memcpy(refl_wave1_buffer4[rear4], pstFrameBuffer->ref1[spray_col_in], sizeof(uint8_t) * VIEW_H);
-                memcpy(grnd_wave0_buffer4[rear4], pstFrameBuffer->gnd_mark0[spray_col_in], sizeof(uint8_t) * VIEW_H);
-                memcpy(grnd_wave1_buffer4[rear4], pstFrameBuffer->gnd_mark1[spray_col_in], sizeof(uint8_t) * VIEW_H);
-                for (int i = 0; i < VIEW_H; ++i) {
-                    uint8_t att0 = pstFrameBuffer->att0[spray_col_in][i];
-                    uint8_t att1 = pstFrameBuffer->att1[spray_col_in][i];
-                    rain_wave0_buffer4[rear4][i] = att0 >> 7;
-                    rain_wave1_buffer4[rear4][i] = att1 >> 7;
-                    head_wave0_buffer4[rear4][i] = (att0 >> 1) & 0x01;
-                    head_wave1_buffer4[rear4][i] = (att1 >> 1) & 0x01;
-                    tail_wave0_buffer4[rear4][i] = (att0 >> 2) & 0x01;
-                    tail_wave1_buffer4[rear4][i] = (att1 >> 2) & 0x01;
-                    rain_final0_buffer[rear4][i] = att0 >> 7;
-                    rain_final1_buffer[rear4][i] = att1 >> 7;
+            for (int32_t col_idx = 0; col_idx < VIEW_W + max_data_size; ++col_idx){
+                circularCalcIdx(rear4, buffer_size_spray);
+                int spray_col_in = col_idx - SprayInDelayCol;
+                if (spray_col_in >= 0 && spray_col_in < VIEW_W) {
+                    memcpy(dist_wave0_buffer4[rear4], pstFrameBuffer->dist0[spray_col_in], sizeof(uint16_t) * VIEW_H);
+                    memcpy(dist_wave1_buffer4[rear4], pstFrameBuffer->dist1[spray_col_in], sizeof(uint16_t) * VIEW_H);
+                    memcpy(refl_wave0_buffer4[rear4], pstFrameBuffer->ref0[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                    memcpy(refl_wave1_buffer4[rear4], pstFrameBuffer->ref1[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                    memcpy(grnd_wave0_buffer4[rear4], pstFrameBuffer->gnd_mark0[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                    memcpy(grnd_wave1_buffer4[rear4], pstFrameBuffer->gnd_mark1[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                    for (int i = 0; i < VIEW_H; ++i) {
+                        uint8_t att0 = pstFrameBuffer->att0[spray_col_in][i];
+                        uint8_t att1 = pstFrameBuffer->att1[spray_col_in][i];
+                        rain_wave0_buffer4[rear4][i] = att0 >> 7;
+                        rain_wave1_buffer4[rear4][i] = att1 >> 7;
+                        head_wave0_buffer4[rear4][i] = (att0 >> 1) & 0x01;
+                        head_wave1_buffer4[rear4][i] = (att1 >> 1) & 0x01;
+                        tail_wave0_buffer4[rear4][i] = (att0 >> 2) & 0x01;  
+                        tail_wave1_buffer4[rear4][i] = (att1 >> 2) & 0x01;
+                        rain_final0_buffer[rear4][i] = att0 >> 7;
+                        rain_final1_buffer[rear4][i] = att1 >> 7;
+                    }
                 }
-            }
-            else {
-                //超过最大列，帧间buffer补0
-                memset(dist_wave0_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-                memset(dist_wave1_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-                memset(refl_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(refl_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(grnd_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(grnd_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(rain_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(rain_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(head_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(head_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(tail_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(tail_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(rain_final0_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                memset(rain_final1_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
-            }
-            int spray_col = spray_col_in - SprayDelayCol;
-            int spray_col_buffer = matlabMod(rear4 + 1 - SprayDelayCol - 1, buffer_size_spray);
-            int spray_col_neib_buf[RAIN_SIZE_X];
-            for (int i = 0; i < RAIN_SIZE_X; i++) {
-                spray_col_neib_buf[i] = matlabMod((spray_col_buffer + 1 - spray_Param.Area_size_x + i) - 1, buffer_size_spray);
-            }
-            int spray_mark_out0[VIEW_H]{ 0 };
-            int spray_mark_out1[VIEW_H]{ 0 };
-            rainEnhance(spray_col, spray_col_buffer, spray_col_neib_buf, spray_mark_out0, spray_mark_out1);
-
-            int spray_out_col = spray_col - SprayFilterDelayCol - SprayOutDelayCol;
-            if (spray_out_col >= 0 && spray_out_col < VIEW_W) {
-                memcpy(spray_mark_out_frm0[spray_out_col], spray_mark_out0, sizeof(spray_mark_out0));
-                memcpy(spray_mark_out_frm1[spray_out_col], spray_mark_out1, sizeof(spray_mark_out1));
-                proc_col = spray_out_col;
-            }
-            if(spray_out_col >= VIEW_W)
-            {
-                proc_col = VIEW_W - 1;
+                else {
+                    //超过最大列，帧间buffer补0
+                    memset(dist_wave0_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
+                    memset(dist_wave1_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
+                    memset(refl_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(refl_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(grnd_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(grnd_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(rain_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(rain_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(head_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(head_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(tail_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(tail_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(rain_final0_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                    memset(rain_final1_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                }
+                int spray_col = spray_col_in - SprayDelayCol;
+                int spray_col_buffer = matlabMod(rear4 + 1 - SprayDelayCol - 1, buffer_size_spray);
+                int spray_col_neib_buf[RAIN_SIZE_X];
+                for (int i = 0; i < RAIN_SIZE_X; i++) {
+                    spray_col_neib_buf[i] = matlabMod((spray_col_buffer + 1 - spray_Param.Area_size_x + i) - 1, buffer_size_spray);
+                }
+                int spray_mark_out0[VIEW_H]{ 0 };
+                int spray_mark_out1[VIEW_H]{ 0 };
+                rainEnhance(spray_col, spray_col_buffer, spray_col_neib_buf, spray_mark_out0, spray_mark_out1);
+    
+                int spray_out_col = spray_col - SprayFilterDelayCol - SprayOutDelayCol;
+                if (spray_out_col >= 0 && spray_out_col < VIEW_W) {
+                    memcpy(spray_mark_out_frm0[spray_out_col], spray_mark_out0, sizeof(spray_mark_out0));
+                    memcpy(spray_mark_out_frm1[spray_out_col], spray_mark_out1, sizeof(spray_mark_out1));
+                }
             }
         }break;
         default:
