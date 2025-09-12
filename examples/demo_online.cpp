@@ -310,9 +310,17 @@ void saveRawData(const void* kMipiData, uint32_t length, int32_t fileCounter) {
  * \brief Point cloud process
  ******************************************************************************/
 void processPointCloud(void) {
+    using namespace robosense::msop;
     int32_t frame_seq{0};
     while (!is_exit) {
-            using namespace robosense::msop;
+        LidarPointCloudPackets* lidar_cloud;
+        const bool kState = stuffed_cloud_queue_.popWait(lidar_cloud, 1000000);
+        if (!kState) {
+            std::cout << "processPointCloud data timeout" << std::endl;
+            continue;
+        }
+
+        if (lidar_cloud && save_pcd) {
             std::string fileName = "./pcd_files/" + std::to_string(lidar_cloud->frame_timestamp) + "_" +
                                     std::to_string(lidar_cloud->frame_seq) + ".pcd";
 
@@ -341,6 +349,7 @@ void processPointCloud(void) {
             free(lidar_cloud->lidar_parameter);
             free(lidar_cloud);
             lidar_cloud = nullptr;
+            }
     }
 }
 

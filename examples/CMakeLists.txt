@@ -12,7 +12,7 @@ message("=============================================================")
 
 
 if(COMPILE_ARM_VERSION)
-    add_executable(rs_demo_online demo_online.cpp ${CMAKE_SOURCE_DIR}/core/utils/sync_queue.h)
+    add_executable(rs_demo_online demo_online.cpp rs_msop_parse.cpp ${CMAKE_SOURCE_DIR}/core/utils/sync_queue.h)
     target_link_libraries(rs_demo_online  "-Wl,-unresolved-symbols=ignore-in-shared-libs"
         lidar_robosense_SDK
         ${CMAKE_SOURCE_DIR}/3rdparty/dimw/lib/libsensor_ipcclient.so
