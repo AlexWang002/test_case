@@ -1,16 +1,33 @@
-/*
- * Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
+/*******************************************************************************
+ * \addtogroup denoise_programm
+ * \{
+ * \file denoise.cpp
+ * \brief
+ * \version 0.1
+ * \date 2025-09-11
  *
- * NVIDIA CORPORATION and its licensors retain all intellectual property
- * and proprietary rights in and to this software, related documentation
- * and any modifications thereto.  Any use, reproduction, disclosure or
- * distribution of this software and related documentation without an express
- * license agreement from NVIDIA CORPORATION is strictly prohibited.
- */
+ * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
+ *
+ * \details
+ * #### Modification History :
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.1 | 2025-09-11 | Init version |
+ *
+ ******************************************************************************/
+
+/******************************************************************************/
+/*                         Include dependant headers                          */
+/******************************************************************************/
+
+/******************************************************************************/
+/*                      Include headers of the component                      */
+/******************************************************************************/
 #include "denoise.h"
-#include "../denoise_common_param.h"
 
-
+/******************************************************************************/
+/*                  Using namespace, type or template alias                   */
+/******************************************************************************/
 using namespace cupva;
 
 PVA_DECLARE_EXECUTABLE(denoise_dev)
@@ -116,5 +133,4 @@ int denoiseProcPva()
     }
     return 0;
 }
-// [submit_wait_write]
 
