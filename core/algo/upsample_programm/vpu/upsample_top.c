@@ -90,6 +90,11 @@ CUPVA_VPU_MAIN()
         cupvaRasterDataFlowTrig(InputRefDataFlowHandler);
         cupvaRasterDataFlowSync(InputRefRawDataFlowHandler);
         cupvaRasterDataFlowTrig(InputRefRawDataFlowHandler);
+
+        for(int i = 0; i < TILE_HEIGHT * TILE_WIDTH; i++){
+            outputDistUpBufferVMEM[dstDistOffset + i] = 0;
+            outputRefUpBufferVMEM[dstRefOffset + i] = 0;
+        }
 #ifdef ALGO_ON
         /** Process the columns except for "halo" */
         for (int col_idx = 1; col_idx < TILE_HEIGHT + 1; ++col_idx) //95
