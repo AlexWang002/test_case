@@ -77,7 +77,7 @@ void HorTrailRemove(int* dist_tmp, int dist_trail, int* Hortrail_judge, int* wal
     int dif_dist_abs[4] = {0};
     int dif2_dist_abs[3] = {0};
     // 计算自适应阈值
-    const int AdjDisThreD = max(1, (dist_trail * trail_Param->DisThreRatio) / 4096);
+    const int AdjDisThreD = max(1, ((dist_trail * trail_Param->DisThreRatio) >> 12));
     int zero_cnt = 0;
     int dif_dist_abs_cnt = 0;
 
@@ -139,7 +139,7 @@ void HorTrailRemove(int* dist_tmp, int dist_trail, int* Hortrail_judge, int* wal
     for (int i = 0; i < HL; i++) {
         weighted_sum += weight[i] * dif_distC_abs[i];
     }
-    int distdiff_mean = round(weighted_sum / 4.0);
+    int distdiff_mean = weighted_sum >> 2;
     bool con2 = (distdiff_mean > AdjDisThreD) && (distdiff_mean < D_H);
 
     if (con0 && (con1 || con2)) {

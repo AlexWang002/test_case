@@ -2299,8 +2299,8 @@ void AlgoFunction::rainEnhance(int spray_col,
                 int cur_dist_1 = dist_wave0_buffer4[spray_col_buffer][row_idx];
                 int cur_dist_2 = dist_wave1_buffer4[spray_col_buffer][row_idx];
                 /******************接地保护*******************/
-                int zone_idx = (row_idx + 1) / 12;
-                if ((row_idx + 1) % 12 == 0) //12个通道一个采样
+                int zone_idx = row_idx / 12;
+                if (row_idx % 12 == 0) //12个通道一个采样
                 {
                     spray_Param.dist_cap_zone[zone_idx][0] = cur_dist_1;
                     spray_Param.dist_cap_zone[zone_idx][1] = cur_dist_2;
