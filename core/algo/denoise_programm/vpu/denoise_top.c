@@ -102,7 +102,7 @@ CUPVA_VPU_MAIN()
                 /*计算当前点在halo buffer中的索引*/
                 const int cur_idx = (src_offset + (col + KERNEL_RADIUS_HEIGHT/2) * src_line_pitch + (row + KERNEL_RADIUS_WIDTH)) % src_circular_buf_len;
                 const int dist_cur = input_dist_vmem[cur_idx];
-                const int valid_cur = output_mask[(col + 2) * TILE_WIDTH + row] = 1;
+                const int valid_cur = output_mask[(col + 2) * TILE_WIDTH + row];
 
                 const int block_id = (row + BlockSize) / BlockSize - 1;
                 const int dist_seg = (dist_cur / dist_seg_div);
