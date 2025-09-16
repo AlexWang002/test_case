@@ -115,6 +115,16 @@ int denoiseProcPva()
                             .dst(denoise_mask_buffer_d, TILE_WIDTH, VIEW_HEIGHT, TILE_WIDTH)
                             .tileBuffer(output_mask_vmem)
                             .tile(TILE_WIDTH, TILE_HEIGHT);
+        
+        /*传输最后4列mask数据*/
+        RasterDataFlow &dst_last_mask_dataflow   = prog.addDataFlowHead<RasterDataFlow>();   //向CmdProgram中添加一个RasterDataFlow
+        auto dst_last_mask_dataflow_handler      = prog["dst_last_mask_dataflow_handler"];        //数据流的传输由句柄触发
+        int *output_last_mask_vmem               = prog["output_last_mask_vmem"].ptr<int>();
+
+        dst_last_mask_dataflow.handler(dst_last_mask_dataflow_handler)
+                            .dst(denoise_valid_buffer_d, TILE_WIDTH, 4, TILE_WIDTH)
+                            .tileBuffer(output_last_mask_vmem)
+                            .tile(TILE_WIDTH, 4);
 
         prog.compileDataFlows();
 

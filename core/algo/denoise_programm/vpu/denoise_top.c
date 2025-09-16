@@ -34,10 +34,14 @@ VMEM(A, int, col_idx);
 VMEM(B, int, output_mask_vmem,
         RDF_SINGLE(int, TILE_WIDTH, TILE_HEIGHT + 4));
 
+VMEM(B, int, output_last_mask_vmem,
+        RDF_SINGLE(int, TILE_WIDTH, 4));
+
 VMEM(C, int, algorithmParams, sizeof(NoiseParam_t));
 
 VMEM_RDF_UNIFIED(A, src_dist_dataflow_handler);
 VMEM_RDF_UNIFIED(B, dst_mask_dataflow_handler);
+VMEM_RDF_UNIFIED(B, dst_last_mask_dataflow_handler);
 
 void memcpyPVA(uint8_t *dst, uint8_t *src, uint32_t size)
 {
@@ -70,11 +74,11 @@ CUPVA_VPU_MAIN()
     int32_t dst_line_pitch       = cupvaRasterDataFlowGetLinePitch(dst_mask_dataflow_handler);
     int32_t src_circular_buf_len = cupvaRasterDataFlowGetCbLen(src_dist_dataflow_handler);
 
-    //printf("src_line_pitch: %d\n", src_line_pitch);
-
     cupvaRasterDataFlowOpen(src_dist_dataflow_handler, &input_dist_vmem[0]);
-
     cupvaRasterDataFlowOpen(dst_mask_dataflow_handler, &output_mask_vmem[0]);
+    cupvaRasterDataFlowOpen(dst_last_mask_dataflow_handler, &output_last_mask_vmem[0]);
+
+    int *output_last_mask  = (int *)cupvaRasterDataFlowAcquire(dst_last_mask_dataflow_handler);
 
     for (int tile_idx = 0; tile_idx < TILE_CNT; tile_idx ++) {
         uint16_t *input_dist  = (uint16_t *)cupvaRasterDataFlowAcquire(src_dist_dataflow_handler);
@@ -88,7 +92,8 @@ CUPVA_VPU_MAIN()
         memsetPVA((uint8_t *)&output_mask[TILE_WIDTH * 4], 0, TILE_WIDTH * TILE_HEIGHT * sizeof(int));
 
 #if ALGO_ENABLE
-        for (int col = 0; col < TILE_HEIGHT; col ++) {
+        int col_cnt = (tile_idx == TILE_CNT - 1) ? (TILE_HEIGHT + 2) : TILE_HEIGHT;
+        for (int col = 0; col < col_cnt; col ++) {
             const int win_len_h = params->win_len_h;
             const int win_len_v = params->win_len_v;
             const int HL = 2* params->win_len_h + 1;
@@ -207,14 +212,21 @@ CUPVA_VPU_MAIN()
             }
         }
 
+        if (tile_idx == (TILE_CNT - 1)) {
+            memcpyPVA((uint8_t *)output_last_mask, (uint8_t *)&output_mask[TILE_WIDTH * TILE_HEIGHT], 4 * TILE_WIDTH * sizeof(int));
+        }
+
 #endif
         cupvaRasterDataFlowRelease(src_dist_dataflow_handler);
         cupvaRasterDataFlowRelease(dst_mask_dataflow_handler);
     }
 
+    cupvaRasterDataFlowRelease(dst_last_mask_dataflow_handler);
+
     /*Close*/
     cupvaRasterDataFlowClose(src_dist_dataflow_handler);
     cupvaRasterDataFlowClose(dst_mask_dataflow_handler);
+    cupvaRasterDataFlowClose(dst_last_mask_dataflow_handler);
 
     return 0;
 }
