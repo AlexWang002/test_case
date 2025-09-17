@@ -122,7 +122,7 @@ int denoiseProcPva()
         int *output_last_mask_vmem               = prog["output_last_mask_vmem"].ptr<int>();
 
         dst_last_mask_dataflow.handler(dst_last_mask_dataflow_handler)
-                            .dst(denoise_valid_buffer_d, TILE_WIDTH, 4, TILE_WIDTH)
+                            .dst(denoise_mask_buffer_d, TILE_WIDTH, 4, TILE_WIDTH)
                             .tileBuffer(output_last_mask_vmem)
                             .tile(TILE_WIDTH, 4);
 
