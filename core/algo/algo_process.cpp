@@ -486,7 +486,7 @@ void CloudManager::algoProcess(int32_t task_id)
                             auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
                             std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
                             memcpy(algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
-                            memcpy(algo_func_.denoise_mask_out_frm[(algo_func_.VIEW_W - 4) * algo_func_.VIEW_H], (uint8_t *)denoise_mask_buffer_h, 4 * algo_func_.VIEW_H * sizeof(int)); // 拷贝最后4列
+                            memcpy(algo_func_.denoise_mask_out_frm[algo_func_.VIEW_W - 4], (uint8_t *)denoise_mask_buffer_h, 4 * algo_func_.VIEW_H * sizeof(int)); // 拷贝最后4列
                         }
                         else {
                             for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
