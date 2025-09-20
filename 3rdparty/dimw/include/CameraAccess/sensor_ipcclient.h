@@ -21,7 +21,7 @@ public:
      * @param irdLoger [in] irdLoger：log指针，默认为nullptr
      * @return 0：success ，-1：faild 
      */
-    ClientErrorCode init(uint32_t &mask, dimw::dilog::Logger::ptr irdLoger = nullptr);
+    ClientErrorCode init(uint32_t &mask, uint32_t frameTimeout = RADAR_OR_LIDAR_FRAME_TIMEOUT, dimw::dilog::Logger::ptr irdLoger = nullptr);
 
     /**
      * @brief：使能数据同步操作，成功或者超时后返回
@@ -30,13 +30,22 @@ public:
     ClientErrorCode start(void);
 
     /**
-     * @brief：获取一帧camera数据，和 ReleaseFrame 配对使用;
+     * @brief：获取一帧radar/lidar数据(以NvSciBufObj对象格式获取)，和 ReleaseFrame 配对使用;
+     * @param[in] sensor ：指定要获取图像的摄像头通道
+     * @param[out] frameobj ：获取到一帧数据信息，NvSciBufObj obj 中包radar/lidar 真实的radar/lidar数据，请勿修改frameobj
+     * 中任何参数的值 通过NvSciBufObjGetConstCpuPtr可获取内存地址 \return :0：success ;<0:失败，根据 ClientErrorCode
+     * 定义查看具体原因。
+     */
+    ClientErrorCode getFrameObj(const SensorType &sensor, FrameBufObj &frameobj);
+
+    /**
+     * @brief：获取一帧radar/lidar数据（自动从NvSciBufObj对象解析出cpu data/size数据），和 ReleaseFrame 配对使用;
      * @param[in] sensor ：指定要获取图像的摄像头通道
      * @param[out] frameobj ：获取到一帧数据信息，NvSciBufObj obj 中包camera 真实的camera数据，请勿修改frameobj
      * 中任何参数的值 通过NvSciBufObjGetConstCpuPtr可获取内存地址 \return :0：success ;<0:失败，根据 ClientErrorCode
      * 定义查看具体原因。
      */
-    ClientErrorCode getFrame(const SensorType &sensor, FrameBufObj &frameobj);
+    ClientErrorCode getFrame(const SensorType &sensor, FrameBufObj &frameobj, bool isGpuToCpu = true);
 
     /**
      * @brief：释放一帧camera数据 和 GetFrame 配对使用
@@ -146,6 +155,52 @@ public:
      * @return ClientErrorCode
      */
     ClientErrorCode getSensorInfo(const SensorType &sensor, SensorInfo &info);
+
+    /**
+     * @brief  获取radar内参状态
+     * @details
+     * @param[in] 
+     * @param[out] radar内参生成状态，状态码见InnerParaState枚举值定义
+     * @return ClientErrorCode
+     */
+    ClientErrorCode getRadarInnerParaState(InnerParaState &state);
+    /**
+     * @brief  获取lidar内参状态
+     * @details
+     * @param[in] 
+     * @param[out] lidar内参生成状态，状态码见InnerParaState枚举值定义
+     * @return ClientErrorCode
+     */
+    ClientErrorCode getLidarInnerParaState(InnerParaState &state);
+
+    /**
+     * @brief 设置某个模组的fsync偏差，groupId：0前视，1周视，2环视，3雷达
+     * 
+     * @param groupId 
+     * @param delayTimeMs 
+     * @return ClientErrorCode 
+     */
+    ClientErrorCode setFsyncDeltaMs(GroupId groupId, uint64_t delayTimeMs);
+
+    /**
+     * @brief 获取所有传感器的类型（相机+雷达）
+     * 
+     * @param allSensorTypeInfo 
+     * @return ClientErrorCode 
+     */
+    ClientErrorCode getAllSensorTypeInfo(std::vector<SensorTypeInfo>& allSensorTypeInfo);
+
+
+    /**
+     * @brief 根据告警的alarmId和alarmObj获取毫米波雷达的二级故障信息
+     * 
+     * @param[in] alarmId 用于标识告警类型
+     * @param[in] alarmObj 用于标识告警Obj
+     * @param[out] address 故障信息数组首地址
+     * @param[out] len 数组有效消息长度
+     * @return ClientErrorCode 
+     */
+    ClientErrorCode getRadarLev2FaultInfo(const uint16_t alarmId, const uint16_t alarmObj, uint16_t* address, uint16_t& len);
 
 private:
     AppType m_appType;
