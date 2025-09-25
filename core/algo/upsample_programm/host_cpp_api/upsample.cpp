@@ -56,6 +56,7 @@ uint16_t *DistOutUp_h = nullptr;
 uint8_t *RefOutUp_d = nullptr;
 uint8_t *RefOutUp_h = nullptr;
 
+Stream upsample_stream;
 namespace {
     InsertParam_t Up_param = DEFAULT_UP_PARAM;
 }
@@ -81,6 +82,8 @@ void upsampleDataAlloc()
 
     RefOutUp_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
     RefOutUp_h = (uint8_t *)mem::GetHostPointer(RefOutUp_d);
+
+    upsample_stream = Stream::Create(PVA0, VPU0);
 }
 
 /**
@@ -171,9 +174,9 @@ void upsample_main()
         Fence fence{sync};
         /** 将Fence封装在cmd中，与CmdProgram一起提交到PVA */
         CmdRequestFences rf{fence};
-        Stream stream = Stream::Create(PVA0, VPU0);
+        
         CmdStatus status[2];
-        stream.submit({&prog, &rf}, status);
+        upsample_stream.submit({&prog, &rf}, status);
         /** 等待Fence失效 */
         fence.wait();
         /** 将结果写入数组 */
