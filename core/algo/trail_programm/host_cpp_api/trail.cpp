@@ -47,6 +47,7 @@ uint8_t *ValidOut_d = nullptr;
 uint8_t *ValidOut_h = nullptr;
 
 uint8_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH] = {0};
+Stream Trail_stream;
 namespace
 {
     TrailParam_t TrailParams = DEFAULT_TRAIL_PARAM;
@@ -61,6 +62,8 @@ void TrailDataAlloc()
 
     ValidOut_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT* VIEW_WIDTH * sizeof(uint8_t));
     ValidOut_h = (uint8_t *)mem::GetHostPointer(ValidOut_d);
+
+    Trail_stream = Stream::Create(PVA0, VPU0);
 }
 
 /**
@@ -111,9 +114,9 @@ void trail_main()
         Fence fence{sync};
         CmdRequestFences rf{fence};
         /** Bind trail algorithm to VPU0 */
-        Stream stream = Stream::Create(PVA0, VPU0);
+        
         CmdStatus status[2];
-        stream.submit({&prog, &rf}, status);
+        Trail_stream.submit({&prog, &rf}, status);
         fence.wait();
         memcpy(&TrailMask[0][0], ValidOut_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
         cupva::Error statusCode = CheckCommandStatus(status[0]);

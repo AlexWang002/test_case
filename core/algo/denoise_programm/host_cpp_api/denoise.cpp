@@ -38,6 +38,7 @@ uint16_t *denoise_dist_buffer_h = nullptr;
 int *denoise_mask_buffer_d = nullptr;
 int *denoise_mask_buffer_h = nullptr;
 
+Stream denoise_stream;
 namespace {
     NoiseParam_t NoiseParams = DEFAULT_DENOISE_PARAM;
 }
@@ -51,6 +52,8 @@ int denoiseDataAlloc()
 
         denoise_mask_buffer_d = (int *)mem::Alloc(TILE_WIDTH * VIEW_HEIGHT * sizeof(int));
         denoise_mask_buffer_h = (int *)mem::GetHostPointer(denoise_mask_buffer_d);
+
+        denoise_stream = Stream::Create(PVA0, VPU0);
     }
     catch (cupva::Exception const &e)
     {
@@ -86,9 +89,6 @@ int denoiseProcPva()
         //构建可执行文件
         Executable exec = Executable::Create(PVA_EXECUTABLE_DATA(denoise_dev),
                                              PVA_EXECUTABLE_SIZE(denoise_dev));
-
-
-        Stream stream = Stream::Create(PVA0, VPU0);
 
         CmdProgram prog = CmdProgram::Create(exec);
 
@@ -133,7 +133,7 @@ int denoiseProcPva()
         CmdRequestFences rf{fence};
 
         CmdStatus status[2];
-        stream.submit({&prog, &rf}, status);
+        denoise_stream.submit({&prog, &rf}, status);
         fence.wait();
     }
     catch (cupva::Exception const &e)
