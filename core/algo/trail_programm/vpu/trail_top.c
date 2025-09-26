@@ -21,6 +21,12 @@ VMEM(C, int, algorithmParams, sizeof(TrailParam_t));
 VMEM_RDF_UNIFIED(A, sourceDistDataFlowHandler);
 VMEM_RDF_UNIFIED(B, destinationDataFlowHandler);
 
+dvshortx weight[5];
+dvshortx dif_distC_abs[5];
+dvshortx zero_flag[5];
+// dvshortx dif_distC_ver_abs[9];
+dvshortx dist_tmp[5];
+// dvshortx dist_longit[9];
 /**
  * 初始化函数：为所有瓦片配置AGEN和计算参数
  * @param input_dist: 输入距离数据缓冲区
@@ -85,7 +91,7 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *output_valid,
 dvshortx dv_HorTrailRemove(dvshortx dist_tmp[5], dvshortx dist_trail,
                           const TrailParam_t *trail_Param) {
     // 权重向量初始化（[1,2,0,2,1]）
-    dvshortx weight[5];
+    // dvshortx weight[5];
     weight[0].lo = replicateh(1);
     weight[0].hi = replicateh(1);
     weight[1].lo = replicateh(1);
@@ -98,8 +104,8 @@ dvshortx dv_HorTrailRemove(dvshortx dist_tmp[5], dvshortx dist_trail,
     weight[4].hi = replicateh(1);
 
     // 计算每个邻域与当前点的差异绝对值（处理0值无效点）
-    dvshortx dif_distC_abs[5];
-    dvshortx zero_flag[5];  // 标记当前位置是否为0（1=0，0=有效）
+    // dvshortx dif_distC_abs[5];
+    // dvshortx zero_flag[5];  // 标记当前位置是否为0（1=0，0=有效）
     for (int i = 0; i < 5; i++) {
         zero_flag[i] = (dist_tmp[i] == 0);
         // 无效点（0值）的差异绝对值设为65535，有效点取实际差异绝对值 // 差异 = 邻域 - 当前
@@ -136,14 +142,14 @@ dvshortx dv_HorTrailRemove(dvshortx dist_tmp[5], dvshortx dist_trail,
                      (dif_distC_abs[3] < trail_Param->D_H);
     dvshortx con1_3 = (dif_dist_abs_cnt > 3);
     dvshortx con1 = (con1_1 & con1_2) | con1_3;
-    
+
     // 条件2：加权平均差异在阈值范围内
     dvshortx sum_step1 = dvadd3(dvmulh(weight[0], dif_distC_abs[0], VPU_TRUNC_0),
-                                dvmulh(weight[1], dif_distC_abs[1], VPU_TRUNC_0), 
+                                dvmulh(weight[1], dif_distC_abs[1], VPU_TRUNC_0),
                                 dvmulh(weight[2], dif_distC_abs[2], VPU_TRUNC_0));
-    dvshortx weighted_sum = dvadd3(sum_step1, 
+    dvshortx weighted_sum = dvadd3(sum_step1,
                                  dvmulh(weight[3], dif_distC_abs[3], VPU_TRUNC_0),
-                                 dvmulh(weight[4], dif_distC_abs[4], VPU_TRUNC_0));                
+                                 dvmulh(weight[4], dif_distC_abs[4], VPU_TRUNC_0));
 
     // dvshortx weighted_sum = dvadd3(dvadd3(dvmulh(weight[0], dif_distC_abs[0], VPU_TRUNC_0),
     //                                    dvmulh(weight[1], dif_distC_abs[1], VPU_TRUNC_0),
@@ -174,17 +180,17 @@ dvshortx dv_VerTrailRemove(dvshortx dist_trail, dvshortx dist_longit[9],
     // 计算垂直邻域与当前点的差异绝对值（处理0值无效点）
     dvshortx dif_distC_ver_abs[9];
     for (int i = 0; i < 9; i++) {
-        dvshortx zero_flag = (dist_longit[i] == 0);  // 标记0值  
+        dvshortx zero_flag = (dist_longit[i] == 0);  // 标记0值
         // 无效点差异绝对值设为65535，有效点取邻域 - 当前
         dif_distC_ver_abs[i] = dvmux(zero_flag, 65535, dvabsdif(dist_longit[i], dist_trail));
     }
 
     // 统计垂直近邻数和垂直计数
     dvshortx near_cnt_v;// 近邻数（差异 < near_dist_th）
-    near_cnt_v.lo = replicateh(0);  
+    near_cnt_v.lo = replicateh(0);
     near_cnt_v.hi = replicateh(0);
     dvshortx ver_cnt;// 垂直计数（差异 < 2*SlopDifThre）
-    ver_cnt.lo = replicateh(0);     
+    ver_cnt.lo = replicateh(0);
     ver_cnt.hi = replicateh(0);
     for (int i = 0; i < 9; i++) {
         near_cnt_v += (dif_distC_ver_abs[i] < near_dist_th);
@@ -221,7 +227,7 @@ void trail_remove_exec(TrailParam_t *trail_Param, TrailConfig_t *config) {
     chess_loop_range(6, )                                            // 循环范围提示
     chess_unroll_loop(2) {                                           // 循环展开2次
         // 1. 加载水平5邻域距离数据（col_idx-2 到 col_idx+2）
-        dvshortx dist_tmp[5];
+        // dvshortx dist_tmp[5];
         dist_tmp[0] = dvushort_load(input_dist_agen);  // col_idx - 2
         dist_tmp[1] = dvushort_load(input_dist_agen);  // col_idx - 1
         dist_tmp[2] = dvushort_load(input_dist_agen);  // center（当前点）
@@ -239,7 +245,7 @@ void trail_remove_exec(TrailParam_t *trail_Param, TrailConfig_t *config) {
         near_dist_th = dvmin(near_dist_th, 20);  // 阈值上限：20
 
         // 4. 计算水平近邻计数（相邻差异 < 阈值的次数）
-        vshortx v_near_cnt_h = replicateh(0);  
+        vshortx v_near_cnt_h = replicateh(0);
         dvshortx near_cnt_h = deposit_lo(v_near_cnt_h);
         near_cnt_h += (dvabsdif(dist_tmp[1], dist_tmp[0]) < near_dist_th);
         near_cnt_h += (dvabsdif(dist_tmp[2], dist_tmp[1]) < near_dist_th);
@@ -264,11 +270,11 @@ void trail_remove_exec(TrailParam_t *trail_Param, TrailConfig_t *config) {
 
         // 8. 计算墙判断标志
         dvshortx dif2_dist_abs[3];  // 二阶差异绝对值
-        dif2_dist_abs[0] = dvabsdif(dvabsdif(dist_tmp[1], dist_tmp[0]), 
+        dif2_dist_abs[0] = dvabsdif(dvabsdif(dist_tmp[1], dist_tmp[0]),
                                    dvabsdif(dist_tmp[2], dist_tmp[1]));
-        dif2_dist_abs[1] = dvabsdif(dvabsdif(dist_tmp[2], dist_tmp[1]), 
+        dif2_dist_abs[1] = dvabsdif(dvabsdif(dist_tmp[2], dist_tmp[1]),
                                    dvabsdif(dist_tmp[3], dist_tmp[2]));
-        dif2_dist_abs[2] = dvabsdif(dvabsdif(dist_tmp[3], dist_tmp[2]), 
+        dif2_dist_abs[2] = dvabsdif(dvabsdif(dist_tmp[3], dist_tmp[2]),
                                    dvabsdif(dist_tmp[4], dist_tmp[3]));
         dvshortx sum_dif2_dist_abs = dvadd3(dif2_dist_abs[0], dif2_dist_abs[1], dif2_dist_abs[2]);
         dvshortx wall_judge = (sum_dif2_dist_abs > trail_Param->SlopDifThre) &
@@ -309,7 +315,7 @@ CUPVA_VPU_MAIN() {
     cupvaRasterDataFlowOpen(destinationDataFlowHandler, outputValidBufferVMEM);
 
     // 循环处理所有瓦片
-    for (int TileIdx = 0; TileIdx < TILE_COUNT; TileIdx++) 
+    for (int TileIdx = 0; TileIdx < TILE_COUNT; TileIdx++)
     {
         void *pSrcTile = cupvaRasterDataFlowAcquire(sourceDistDataFlowHandler);
         void *pDstTile = cupvaRasterDataFlowAcquire(destinationDataFlowHandler);
