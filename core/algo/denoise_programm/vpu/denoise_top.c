@@ -26,22 +26,130 @@
 #include "../denoise_common_param.h"
 
 /** [declare_algorithm_params] */
-VMEM(C, uint16_t, input_dist_vmem,
-        RDF_CIRCULAR(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
+
+
 
 VMEM(A, int, col_idx);
 
-VMEM(B, int, output_mask_vmem,
-        RDF_SINGLE(int, TILE_WIDTH, TILE_HEIGHT + 4));
+//uint8_t output_mask[TILE_WIDTH * (TILE_HEIGHT + 4)];
+VMEM(A, uint8_t, output_mask,
+        RDF_SINGLE(uint8_t, TILE_WIDTH, TILE_HEIGHT + 4));
 
-VMEM(B, int, output_last_mask_vmem,
-        RDF_SINGLE(int, TILE_WIDTH, 4));
+VMEM(B, uint8_t, output_mask_vmem,
+    RDF_DOUBLE(uint8_t, TILE_WIDTH, TILE_HEIGHT));
+
+VMEM(B, uint8_t, output_last_mask_vmem,
+        RDF_SINGLE(uint8_t, TILE_WIDTH, 2));
 
 VMEM(C, int, algorithmParams, sizeof(NoiseParam_t));
+VMEM(C, uint16_t, input_dist_vmem,
+        RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
 
-VMEM_RDF_UNIFIED(A, src_dist_dataflow_handler);
-VMEM_RDF_UNIFIED(B, dst_mask_dataflow_handler);
+VMEM(C, RasterDataFlowHandler, src_dist_dataflow_handler);
+VMEM(B, RasterDataFlowHandler, dst_mask_dataflow_handler);
 VMEM_RDF_UNIFIED(B, dst_last_mask_dataflow_handler);
+
+uint16_t threshold_32[32];
+uint16_t threshold1_32[32];
+uint16_t threshold2_32[32];
+uint16_t dist_seg_32[32];
+
+typedef struct {
+    // load
+    AgenCFG threshold;
+    AgenCFG threshold1;
+    AgenCFG threshold2;
+
+    // store
+    AgenCFG dist_seg;
+
+    AgenCFG input_dist;       // 水平5邻域距离数据的AGEN配置
+    AgenCFG input_longit;     // 垂直9邻域距离数据的AGEN配置
+    AgenCFG output_valid;     // 输出有效缓冲区的AGEN配置
+    int32_t niter;            // 总迭代次数（= 横向向量数 × 瓦片高度）
+    int32_t vecw;             // 向量宽度（pva_elementsof(dvshortx)）
+} DenoiseConfig_t;
+
+
+void agenConfig(uint16_t *threshold_32, uint16_t *threshold1_32, uint16_t *threshold2_32, uint16_t *dist_seg_32, DenoiseConfig_t *config) {
+    // 获取向量宽度（每个dvshortx包含的元素数）
+    config->vecw = pva_elementsof(dvshortx);
+    int32_t vecw = config->vecw;
+
+    // 1. 
+    AgenWrapper threshold_wrapper;
+    threshold_wrapper.size = sizeof(uint16_t);       
+    threshold_wrapper.n1   = 570;                      
+    threshold_wrapper.s1   = 0;                  
+    agen threshold_agen = init((dvushort *)threshold_32);
+    INIT_AGEN3(threshold_agen, threshold_wrapper);      
+    config->threshold = extract_agen_cfg(threshold_agen);
+
+    AgenWrapper threshold1_wrapper;
+    threshold1_wrapper.size = sizeof(uint16_t);       
+    threshold1_wrapper.n1   = 570;                      
+    threshold1_wrapper.s1   = 0;                  
+    agen threshold1_agen = init((dvushort *)threshold1_32);
+    INIT_AGEN3(threshold1_agen, threshold1_wrapper);      
+    config->threshold1 = extract_agen_cfg(threshold1_agen);
+
+    AgenWrapper threshold2_wrapper;
+    threshold2_wrapper.size = sizeof(uint16_t);       
+    threshold2_wrapper.n1   = 570;                      
+    threshold2_wrapper.s1   = 0;                  
+    agen threshold2_agen = init((dvushort *)threshold2_32);
+    INIT_AGEN3(threshold2_agen, threshold2_wrapper);      
+    config->threshold2 = extract_agen_cfg(threshold2_agen);
+
+    AgenWrapper dist_seg_wrapper;
+    dist_seg_wrapper.size = sizeof(uint16_t);      
+    dist_seg_wrapper.n1   = 570;                    
+    dist_seg_wrapper.s1   = 0;                 
+    agen dist_seg_agen = init((dvushort *)dist_seg_32);
+    INIT_AGEN3(dist_seg_agen, dist_seg_wrapper);      
+    config->dist_seg = extract_agen_cfg(dist_seg_agen);
+}
+
+/**
+ * 初始化函数：为所有瓦片配置AGEN和计算参数
+ * @param input_dist: 输入距离数据缓冲区
+ * @param output_valid: 输出有效缓冲区
+ * @param input_line_pitch: 输入行间距
+ * @param dst_line_pitch: 输出行间距
+ * @param config: 输出的配置结构体
+ */
+void agenInit(uint16_t *input_dist, uint16_t *mask, int32_t input_line_pitch, DenoiseConfig_t *config) {
+    // 获取向量宽度（每个dvshortx包含的元素数）
+    config->vecw = pva_elementsof(dvshortx);
+    int32_t vecw = config->vecw;
+    //printf("[vecw] %d\n", vecw);
+
+    // 1. 配置水平5邻域距离数据的3维AGEN
+    AgenWrapper input_wrapper;
+    input_wrapper.size = sizeof(uint16_t);       // 元素大小：16位无符号整数
+    input_wrapper.n1   = 5;                      // 第一维度：水平5邻域（col_idx-2到+2）
+    input_wrapper.s1   = input_line_pitch;       // 第一维度步长：行间距（垂直方向跳转）
+    input_wrapper.n2   = TILE_WIDTH / vecw;      // 第二维度：横向向量数（每行按向量拆分）
+    input_wrapper.s2   = vecw;                   // 第二维度步长：向量宽度（水平方向跳转）
+    input_wrapper.n3   = TILE_HEIGHT;            // 第三维度：瓦片高度（处理的总行数）
+    input_wrapper.s3   = input_line_pitch;       // 第三维度步长：行间距（垂直方向每行跳转）
+    agen input_agen = init((dvushort *)input_dist);
+    INIT_AGEN3(input_agen, input_wrapper);       // 初始化3维AGEN
+    config->input_dist = extract_agen_cfg(input_agen);
+
+    AgenWrapper mask_wrapper;
+    mask_wrapper.size = sizeof(uint16_t);
+    mask_wrapper.n1   = TILE_WIDTH / vecw;
+    mask_wrapper.s1   = vecw; // horizontal direction
+    mask_wrapper.n2   = TILE_HEIGHT;
+    mask_wrapper.s2   = TILE_WIDTH; // vertical direction
+    agen output_agen  = init((dvushort *)mask);
+    INIT_AGEN2(output_agen, mask_wrapper);
+    config->output_valid = extract_agen_cfg(output_agen);
+
+    // 计算总迭代次数（横向向量数 × 纵向行数）
+    config->niter = (TILE_WIDTH / vecw) * TILE_HEIGHT;
+}
 
 void memcpyPVA(uint8_t *dst, uint8_t *src, uint32_t size)
 {
@@ -69,163 +177,152 @@ uint16_t absPVA(uint16_t v1, uint16_t v2)
 CUPVA_VPU_MAIN()
 {
     NoiseParam_t *params = (NoiseParam_t *)algorithmParams;
+    DenoiseConfig_t config;
 
     int32_t src_line_pitch       = cupvaRasterDataFlowGetLinePitch(src_dist_dataflow_handler); // src_line_pitch的值为192：每一列（192）上下各补0个点
     int32_t dst_line_pitch       = cupvaRasterDataFlowGetLinePitch(dst_mask_dataflow_handler);
-    int32_t src_circular_buf_len = cupvaRasterDataFlowGetCbLen(src_dist_dataflow_handler);
 
-    cupvaRasterDataFlowOpen(src_dist_dataflow_handler, &input_dist_vmem[0]);
-    cupvaRasterDataFlowOpen(dst_mask_dataflow_handler, &output_mask_vmem[0]);
+    cupvaRasterDataFlowTrig(src_dist_dataflow_handler);
     cupvaRasterDataFlowOpen(dst_last_mask_dataflow_handler, &output_last_mask_vmem[0]);
 
-    int *output_last_mask  = (int *)cupvaRasterDataFlowAcquire(dst_last_mask_dataflow_handler);
+    uint8_t *output_last_mask  = (uint8_t *)cupvaRasterDataFlowAcquire(dst_last_mask_dataflow_handler);
+    int32_t src_offset = 0;
+    int32_t dst_offset = 0;
+
+    dvshortx vec0, vec128, vec200, vec300;
+    vec0.lo = replicateh(0);
+    vec0.hi = replicateh(0);
+    vec128.lo = replicateh(128);
+    vec128.hi = replicateh(128);
+    vec200.lo = replicateh(200);
+    vec200.hi = replicateh(200);
+    vec300.lo = replicateh(300);
+    vec300.hi = replicateh(300);
 
     for (int tile_idx = 0; tile_idx < TILE_CNT; tile_idx ++) {
-        uint16_t *input_dist  = (uint16_t *)cupvaRasterDataFlowAcquire(src_dist_dataflow_handler);
-        int *output_mask  = (int *)cupvaRasterDataFlowAcquire(dst_mask_dataflow_handler);
-
-        int32_t src_offset = input_dist - &input_dist_vmem[0];
+        cupvaRasterDataFlowSync(src_dist_dataflow_handler);
+        cupvaRasterDataFlowTrig(src_dist_dataflow_handler);
+#if 1 
+        agenInit(input_dist_vmem + src_offset, input_dist_vmem + dst_offset, src_line_pitch, &config);
+        agenConfig(threshold_32, threshold1_32, threshold2_32, dist_seg_32, &config);
 
         /*将上一个tile的最后4列mask值拷贝到最前面，作为当前tile的首4列*/
-        memcpyPVA((uint8_t *)output_mask, (uint8_t *)&output_mask[TILE_WIDTH * TILE_HEIGHT], TILE_WIDTH * 4 * sizeof(int));
+        memcpy((uint8_t *)output_mask, (uint8_t *)&output_mask[TILE_WIDTH * TILE_HEIGHT], TILE_WIDTH * 4 * sizeof(uint8_t));
         /*mask标志位清0*/
-        memsetPVA((uint8_t *)&output_mask[TILE_WIDTH * 4], 0, TILE_WIDTH * TILE_HEIGHT * sizeof(int));
+        memset((uint8_t *)&output_mask[TILE_WIDTH * 4], 0, TILE_WIDTH * TILE_HEIGHT * sizeof(uint8_t));
 
-#if ALGO_ENABLE
-        int col_cnt = (tile_idx == TILE_CNT - 1) ? (TILE_HEIGHT + 2) : TILE_HEIGHT;
-        for (int col = 0; col < col_cnt; col ++) {
-            const int win_len_h = params->win_len_h;
-            const int win_len_v = params->win_len_v;
-            const int HL = 2* params->win_len_h + 1;
-            const int HV = 2* params->win_len_v + 1;
+        
+        agen threshold_agen = init_agen_from_cfg(config.threshold);
+        agen threshold1_agen = init_agen_from_cfg(config.threshold1);
+        agen threshold2_agen = init_agen_from_cfg(config.threshold2);
+        agen dist_seg_agen = init_agen_from_cfg(config.dist_seg);
 
-            /*预加载常用参数*/
-            const int dist_seg_div = 12000;
+        agen input_agen = init_agen_from_cfg(config.input_dist);
+        agen mask_agen  = init_agen_from_cfg(config.output_valid);
+        int32_t niter = config.niter;
 
-            /*主处理循环*/
-            for (int row = 0; row < TILE_WIDTH; row ++) {
-                /*计算当前点在halo buffer中的索引*/
-                const int cur_idx = (src_offset + (col + KERNEL_RADIUS_HEIGHT/2) * src_line_pitch + (row + KERNEL_RADIUS_WIDTH)) % src_circular_buf_len;
-                const int dist_cur = input_dist_vmem[cur_idx];
-                const int valid_cur = output_mask[(col + 2) * TILE_WIDTH + row];
+        //printf("[tile] %d, [1st dist] %d\n", tile_idx, input_dist_vmem[src_offset + 2 * src_line_pitch]);
 
-                const int block_id = (row + BlockSize) / BlockSize - 1;
-                const int dist_seg = (dist_cur / dist_seg_div);
-                const int region = params->region_list[block_id] - 1;
-                const int threshold = params->denoise_point[dist_seg][region][0];
-                const int threshold1 = params->denoise_point[dist_seg][region][1];
-                const int threshold2 = params->denoise_point[dist_seg][region][2];
+        for (int32_t i = 0; i < niter; i ++) chess_prepare_for_pipelining
+        chess_unroll_loop(2)
+        {
+            dvshortx dist0 = dvushort_load(input_agen); // col_idx - 2
+            dvshortx dist1 = dvushort_load(input_agen); // col_idx - 1
+            dvshortx dist2 = dvushort_load(input_agen); // center
+            dvshortx dist3 = dvushort_load(input_agen); // col_idx + 1
+            dvshortx dist4 = dvushort_load(input_agen); // col_idx + 2
 
-                if (dist_cur > 8000 || (valid_cur != 1 && dist_cur > 0)) {
-                    int denoise_refer_mask = 0;
-                    const int diff_th = params->denoise_offset[dist_seg]; // 数组访问优化
+            //dvshortx dist_diff = dvabsdif(dist2, dist3); // dvshort: 32 x 16bit(unsigned)
+            //dvshortx res = dvmulh(dist2, xx, VPU_TRUNC_0);
+            //diff_th = dvCmpLE(vec1, dist2);
+            dvshortx dist_seg, cmp_mask, diff_th;
+            dist_seg.lo = replicateh(0);
+            dist_seg.hi = replicateh(0);
 
-                    int valid_mask[5][3] = {0};
-                    /*邻域有效性统计优化*/
-                    int valid_cnt = 0;
-                    for (int c = -win_len_h; c <= win_len_h; c++) {
-                        int neib_col = col + c;
-                        int neib_idx = (src_offset + (neib_col + KERNEL_RADIUS_HEIGHT/2) * src_line_pitch + (row + KERNEL_RADIUS_WIDTH)) % src_circular_buf_len;
+            /*获取dist_seg*/
+            for (int k = 1; k <= 3; k ++) {
+                cmp_mask = dist2 >= (k * 12000);
+                dist_seg = dvmux(cmp_mask, dist_seg + 1, dist_seg);
+            }
+            vstore(dist_seg, dist_seg_agen);
+            
+            /*计算threshold, threshold1, threshold2*/
+            int start_row = (i % 6) * 32;
+            int idx = 0;
+            for (int row = start_row; row < (start_row + 32); row ++) {
+                int block_id = (row + 24) / 24 - 1;
+                int region = params->region_list[block_id] - 1;
+                threshold_32[idx] = params->denoise_point[dist_seg_32[idx]][region][0];
+                threshold1_32[idx] = params->denoise_point[dist_seg_32[idx]][region][1];
+                threshold2_32[idx] = params->denoise_point[dist_seg_32[idx]][region][2];
+                idx ++;
+            }
 
-                        bool is_valid = absPVA(input_dist_vmem[neib_idx], dist_cur) <= diff_th;
-                        valid_mask[c + win_len_h][win_len_v] = is_valid;
-                        valid_cnt += is_valid;
-                    }
+            dvshortx threshold = dvushort_load(threshold_agen);
+            dvshortx threshold1 = dvushort_load(threshold1_agen);
+            dvshortx threshold2 = dvushort_load(threshold2_agen);
 
-                    /*两侧有效性统计*/
-                    int valid_pre_2 = valid_mask[win_len_h - 1][win_len_v] + valid_mask[win_len_h + 1][win_len_v];
+            /*获取diff_th*/
+            diff_th = dist_seg;
+            cmp_mask = dist_seg == 0;
+            diff_th = dvmux(cmp_mask, vec128, diff_th);
+            cmp_mask = dist_seg == 1;
+            diff_th = dvmux(cmp_mask, vec200, diff_th);
+            cmp_mask = dist_seg == 2;
+            diff_th = dvmux(cmp_mask, vec200, diff_th);
+            cmp_mask = dist_seg == 3;
+            diff_th = dvmux(cmp_mask, vec300, diff_th);
 
-                    denoise_refer_mask = (valid_pre_2 >= threshold1) ? ((valid_cnt > 2) ? 2 : 1) : 3;
-
-                    if (denoise_refer_mask == 1) {
-                        /*领域窗口构建优化*/
-                        int valid_pre_3 = valid_mask[0][win_len_v] + valid_mask[HL - 1][win_len_v];
-                        int neib_valid_num[3] = {0};
-
-                        for (int r = -win_len_v; r <= win_len_v; r ++) {
-                            if (r == 0 && row != (TILE_WIDTH - 1)) continue;
-                            const int neib_row = row + r;
-                            if (neib_row < 0 || neib_row >= TILE_WIDTH || r == row) continue;
-
-                            int r_loc = r + win_len_v;
-                            for (int c = -win_len_h; c <= win_len_h; c ++) {
-                                int c_loc = c + win_len_h;
-                                
-                                const int neib_col = col + c;
-                                int neib_idx = (src_offset + (neib_col + KERNEL_RADIUS_HEIGHT/2) * src_line_pitch + (neib_row + KERNEL_RADIUS_WIDTH)) % src_circular_buf_len;
-
-                                int dist_neib = input_dist_vmem[neib_idx];
-                                int valid_neib = output_mask[(neib_col + 2) * TILE_WIDTH + neib_row];
-
-                                /*有效性判断*/
-                                if (absPVA(dist_neib, dist_cur) <= diff_th && (valid_neib != 6)) {
-                                    const int zone = params->zone_matrix[r_loc][c_loc];
-                                    if (zone > 0) {
-                                        neib_valid_num[zone - 1] ++;
-                                        valid_mask[c_loc][r_loc] = 1;
-                                    }
-                                }
-                            }
-                        }
-
-                        /*去噪条件判断优化*/
-                        bool cond = ((neib_valid_num[0] + valid_pre_2) >= threshold
-                                    || (row == (TILE_WIDTH - 1) && valid_pre_2 >= threshold1)
-                                    || (neib_valid_num[0] + valid_pre_2 >= threshold)
-                                    || (valid_pre_3 + valid_pre_2 >= threshold2));
-
-                        if (cond) {
-                            output_mask[(col + 2) * TILE_WIDTH + row] = 1;
-
-                            /*传播有效标记优化*/
-                            for (int r = -win_len_v; r <= win_len_v; r ++) {
-                                if (r == 0 && row != (TILE_WIDTH - 1)) continue;
-                                const int r_loc = r + win_len_v;
-                                const int r_idx = row + r;
-                                if (r_idx < 0 || r_idx >= TILE_WIDTH) continue;
-
-                                for (int c = -win_len_h; c <= win_len_h; c ++) {
-                                    const int c_loc = c + win_len_h;
-                                    const int c_idx = col + c;
-
-                                    if (1 == valid_mask[c_loc][r_loc]) {
-                                        output_mask[(c_idx + 2) * TILE_WIDTH + r_idx] = 1;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else if (denoise_refer_mask == 2) {
-                        /*直接对左右补点优化*/
-                        output_mask[(col + 2) * TILE_WIDTH + row] = 1;
-
-                        for (int c = -win_len_h; c <= win_len_h; c ++) {
-                            const int c_loc = c + win_len_h;
-                            const int c_idx = col + c;
-
-                            if (valid_mask[c_loc][win_len_v] == 1) {
-                                output_mask[(c_idx + 2) * TILE_WIDTH + row] = 1;
-                            }
-                        }
-                    }
+            dvshortx valid_mask[5][3];
+            for (int m = 0; m < 5; m ++) {
+                for (int n = 0; n < 3; n ++) {
+                    valid_mask[m][n] = vec0;
                 }
             }
+
+            dvshortx valid_cnt = vec0;
+
+            /*邻域有效性统计优化*/
+            cmp_mask = (dvabsdif(dist2, dist1) <= diff_th);
+            valid_mask[1][1] = cmp_mask;
+            valid_cnt += cmp_mask;
+
+            cmp_mask = (dvabsdif(dist2, dist2) <= diff_th);
+            valid_mask[2][1] = cmp_mask;
+            valid_cnt += cmp_mask;
+
+            cmp_mask = (dvabsdif(dist2, dist3) <= diff_th);
+            valid_mask[3][1] = cmp_mask;
+            valid_cnt += cmp_mask;
+
+            /*两侧有效性统计*/
+            dvshortx valid_pre_2 = valid_mask[1][1] + valid_mask[3][1];
+
+            dvshortx denoise_refer_mask = vec0;
+            denoise_refer_mask = dvmux(valid_pre_2 >= threshold1, dvmux(valid_cnt > 2, denoise_refer_mask + 2, denoise_refer_mask + 1), denoise_refer_mask + 3);
+
+
+            //vstore(denoise_refer_mask, mask_agen);
         }
 
+
+        memcpy(&output_mask_vmem[dst_offset], output_mask, TILE_HEIGHT * TILE_WIDTH * sizeof(uint8_t));
+
         if (tile_idx == (TILE_CNT - 1)) {
-            memcpyPVA((uint8_t *)output_last_mask, (uint8_t *)&output_mask[TILE_WIDTH * TILE_HEIGHT], 4 * TILE_WIDTH * sizeof(int));
+            memcpy(output_last_mask, &output_mask[TILE_WIDTH * TILE_HEIGHT], 2 * TILE_WIDTH * sizeof(uint8_t));
         }
 
 #endif
-        cupvaRasterDataFlowRelease(src_dist_dataflow_handler);
-        cupvaRasterDataFlowRelease(dst_mask_dataflow_handler);
-    }
+        src_offset = cupvaRasterDataFlowGetOffset(src_dist_dataflow_handler, src_offset);
+        dst_offset = cupvaRasterDataFlowGetOffset(dst_mask_dataflow_handler, dst_offset);
 
+        cupvaRasterDataFlowSync(dst_mask_dataflow_handler);
+        cupvaRasterDataFlowTrig(dst_mask_dataflow_handler);
+    }
+    cupvaRasterDataFlowSync(dst_mask_dataflow_handler);
     cupvaRasterDataFlowRelease(dst_last_mask_dataflow_handler);
 
     /*Close*/
-    cupvaRasterDataFlowClose(src_dist_dataflow_handler);
-    cupvaRasterDataFlowClose(dst_mask_dataflow_handler);
     cupvaRasterDataFlowClose(dst_last_mask_dataflow_handler);
 
     return 0;
