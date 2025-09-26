@@ -13,7 +13,7 @@
 #define VIEW_WIDTH    192
 #define VIEW_HEIGHT   760
 
-#define KERNEL_RADIUS_WIDTH   0
+#define KERNEL_RADIUS_WIDTH   4
 #define KERNEL_RADIUS_HEIGHT  2
 
 #define TILE_COUNT    8

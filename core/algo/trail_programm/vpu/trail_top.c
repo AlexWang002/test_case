@@ -1,7 +1,3 @@
-/**
- * 轨迹移除算法：基于PVA架构的向量化实现
- * 遵循refer_mask示例的初始化-执行分离模式，使用AGEN和向量操作优化性能
- */
 #include "../trail_common_param.h"
 #include <cupva_device.h>
 #include <cupva_device_debug.h>
@@ -21,9 +17,9 @@ VMEM(A, uint16_t, inputDistBufferVMEM,
 VMEM(B, uint16_t, outputValidBufferVMEM,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT));
 VMEM(C, int, algorithmParams, sizeof(TrailParam_t));
-VMEM(C, RasterDataFlowHandler, sourceDistDataFlowHandler);
-VMEM(C, RasterDataFlowHandler, sourceRefDataFlowHandler);
-VMEM(C, RasterDataFlowHandler, destinationDataFlowHandler);
+
+VMEM_RDF_UNIFIED(A, sourceDistDataFlowHandler);
+VMEM_RDF_UNIFIED(B, destinationDataFlowHandler);
 
 /**
  * 初始化函数：为所有瓦片配置AGEN和计算参数
@@ -89,17 +85,17 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *output_valid,
 dvshortx dv_HorTrailRemove(dvshortx dist_tmp[5], dvshortx dist_trail,
                           const TrailParam_t *trail_Param) {
     // 权重向量初始化（[1,2,0,2,1]）
-    vshortx v_w0 = replicateh(1);  // 每个 lane 为 1
-    vshortx v_w1 = replicateh(2);  // 每个 lane 为 2
-    vshortx v_w2 = replicateh(0);  // 每个 lane 为 0
-    vshortx v_w3 = replicateh(2);  // 每个 lane 为 2
-    vshortx v_w4 = replicateh(1);  // 每个 lane 为 1
     dvshortx weight[5];
-    weight[0] = deposit_lo(v_w0);
-    weight[1] = deposit_lo(v_w1);
-    weight[2] = deposit_lo(v_w2);
-    weight[3] = deposit_lo(v_w3);
-    weight[4] = deposit_lo(v_w4);
+    weight[0].lo = replicateh(1);
+    weight[0].hi = replicateh(1);
+    weight[1].lo = replicateh(1);
+    weight[1].hi = replicateh(1);
+    weight[2].lo = replicateh(0);
+    weight[2].hi = replicateh(0);
+    weight[3].lo = replicateh(1);
+    weight[3].hi = replicateh(1);
+    weight[4].lo = replicateh(1);
+    weight[4].hi = replicateh(1);
 
     // 计算每个邻域与当前点的差异绝对值（处理0值无效点）
     dvshortx dif_distC_abs[5];
@@ -184,10 +180,12 @@ dvshortx dv_VerTrailRemove(dvshortx dist_trail, dvshortx dist_longit[9],
     }
 
     // 统计垂直近邻数和垂直计数
-    vshortx v_near_cnt_v = replicateh(0);  // 垂直近邻数（差异 < near_dist_th）
-    dvshortx near_cnt_v = deposit_lo(v_near_cnt_v);  // 近邻数（差异 < near_dist_th）
-    vshortx v_ver_cnt = replicateh(0);  // 垂直计数（差异 < 2*SlopDifThre）
-    dvshortx ver_cnt = deposit_lo(v_ver_cnt);     // 垂直计数（差异 < 2*SlopDifThre）
+    dvshortx near_cnt_v;// 近邻数（差异 < near_dist_th）
+    near_cnt_v.lo = replicateh(0);  
+    near_cnt_v.hi = replicateh(0);
+    dvshortx ver_cnt;// 垂直计数（差异 < 2*SlopDifThre）
+    ver_cnt.lo = replicateh(0);     
+    ver_cnt.hi = replicateh(0);
     for (int i = 0; i < 9; i++) {
         near_cnt_v += (dif_distC_ver_abs[i] < near_dist_th);
         ver_cnt += (dif_distC_ver_abs[i] < (trail_Param->SlopDifThre * 2));
@@ -298,37 +296,38 @@ CUPVA_VPU_MAIN() {
     // 获取输入/输出行间距
     uint16_t srcDistLinePitch = cupvaRasterDataFlowGetLinePitch(sourceDistDataFlowHandler);
     uint16_t dstLinePitch = cupvaRasterDataFlowGetLinePitch(destinationDataFlowHandler);
+    // int32_t offset           = KERNEL_RADIUS_HEIGHT * srcDistLinePitch + 4;
+    int32_t offset_v         = KERNEL_RADIUS_HEIGHT * srcDistLinePitch;
+    int32_t offset_h         = KERNEL_RADIUS_WIDTH;
 
     // 初始化地址生成器和配置参数
     trail_remove_init(inputDistBufferVMEM, outputValidBufferVMEM,
                      srcDistLinePitch, dstLinePitch, &config);
 
     // 触发输入数据流传输
-    cupvaRasterDataFlowTrig(sourceDistDataFlowHandler);
-    cupvaRasterDataFlowTrig(sourceRefDataFlowHandler);  // 参考数据暂不使用
+    cupvaRasterDataFlowOpen(sourceDistDataFlowHandler, inputDistBufferVMEM);
+    cupvaRasterDataFlowOpen(destinationDataFlowHandler, outputValidBufferVMEM);
 
     // 循环处理所有瓦片
-    for (int TileIdx = 0; TileIdx < TILE_COUNT; TileIdx++) {
-        // 同步当前瓦片数据并触发下一个瓦片的传输
-        cupvaRasterDataFlowSync(sourceDistDataFlowHandler);
-        cupvaRasterDataFlowTrig(sourceDistDataFlowHandler);
-        cupvaRasterDataFlowSync(sourceRefDataFlowHandler);
-        cupvaRasterDataFlowTrig(sourceRefDataFlowHandler);
+    for (int TileIdx = 0; TileIdx < TILE_COUNT; TileIdx++) 
+    {
+        void *pSrcTile = cupvaRasterDataFlowAcquire(sourceDistDataFlowHandler);
+        void *pDstTile = cupvaRasterDataFlowAcquire(destinationDataFlowHandler);
+        /** Update agen base address */
+        cupvaModifyAgenCfgBase(&config.input_dist, (uint16_t *)pSrcTile + offset_h);
+        cupvaModifyAgenCfgBase(&config.input_longit, (uint16_t *)pSrcTile + offset_v);
+        cupvaModifyAgenCfgBase(&config.output_valid, pDstTile);
 
         // 执行当前瓦片的轨迹移除计算
         trail_remove_exec(trail_Param, &config);
 
-        // 更新缓冲区偏移（获取下一个瓦片的起始地址）
-        (void)cupvaRasterDataFlowGetOffset(sourceDistDataFlowHandler, 0);
-        (void)cupvaRasterDataFlowGetOffset(sourceRefDataFlowHandler, 0);
-        (void)cupvaRasterDataFlowGetOffset(destinationDataFlowHandler, 0);
-
         // 同步输出数据流并触发下一个瓦片的输出
-        cupvaRasterDataFlowSync(destinationDataFlowHandler);
-        cupvaRasterDataFlowTrig(destinationDataFlowHandler);
+        cupvaRasterDataFlowRelease(sourceDistDataFlowHandler);
+        cupvaRasterDataFlowRelease(destinationDataFlowHandler);
     }
 
     // 等待最后一个瓦片的输出完成
-    cupvaRasterDataFlowSync(destinationDataFlowHandler);
+    cupvaRasterDataFlowClose(sourceDistDataFlowHandler);
+    cupvaRasterDataFlowClose(destinationDataFlowHandler);
     return 0;
 }
