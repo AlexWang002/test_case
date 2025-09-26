@@ -12,7 +12,7 @@ typedef struct {
     AgenCFG input_longit;     // 垂直9邻域距离数据的AGEN配置
     AgenCFG output_valid;     // 输出有效缓冲区的AGEN配置
     int32_t niter;            // 总迭代次数（= 横向向量数 × 瓦片高度）
-    int32_t vecw;             // 向量宽度（pva_elementsof(dvushort)）
+    int32_t vecw;             // 向量宽度（pva_elementsof(dvshortx)）
 } TrailConfig_t;
 
 // VMEM缓冲区定义
@@ -37,30 +37,30 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *output_valid,
                       int32_t input_line_pitch, int32_t dst_line_pitch,
                       TrailConfig_t *config) {
     // 获取向量宽度（每个dvshortx包含的元素数）
-    config->vecw = pva_elementsof(dvushort);
+    config->vecw = pva_elementsof(dvshortx);
     int32_t vecw = config->vecw;
 
-    // 1. 配置水平5邻域距离数据的3维AGEN
+    // 1. 配置垂直5邻域距离数据的3维AGEN
     AgenWrapper input_wrapper;
     input_wrapper.size = sizeof(uint16_t);       // 元素大小：16位无符号整数
-    input_wrapper.n1   = 5;                      // 第一维度：水平5邻域（col_idx-2到+2）
+    input_wrapper.n1   = 5;                      // 第一维度：垂直5邻域（row_idx-2到+2）
     input_wrapper.s1   = input_line_pitch;       // 第一维度步长：行间距（垂直方向跳转）
     input_wrapper.n2   = TILE_WIDTH / vecw;      // 第二维度：横向向量数（每行按向量拆分）
     input_wrapper.s2   = vecw;                   // 第二维度步长：向量宽度（水平方向跳转）
     input_wrapper.n3   = TILE_HEIGHT;            // 第三维度：瓦片高度（处理的总行数）
     input_wrapper.s3   = input_line_pitch;       // 第三维度步长：行间距（垂直方向每行跳转）
-    agen input_agen = init((dvushort *)input_dist);
+    agen input_agen = init((dvshortx *)input_dist);
     INIT_AGEN3(input_agen, input_wrapper);       // 初始化3维AGEN
     config->input_dist = extract_agen_cfg(input_agen);
 
-    // 2. 配置垂直9邻域数据的2维AGEN
+    // 2. 配置水平9邻域数据的2维AGEN
     AgenWrapper longit_wrapper;
     longit_wrapper.size = sizeof(uint16_t);      // 元素大小：16位无符号整数
-    longit_wrapper.n1   = 9;                     // 第一维度：垂直9邻域（row_idx-4到+4）
-    longit_wrapper.s1   = 1;                     // 第一维度步长：1（相邻行）
+    longit_wrapper.n1   = 9;                     // 第一维度：水平9邻域（row_idx-4到+4）
+    longit_wrapper.s1   = 1;                     // 第一维度步长：1
     longit_wrapper.n2   = TILE_WIDTH / vecw;     // 第二维度：横向向量数
     longit_wrapper.s2   = vecw;                  // 第二维度步长：向量宽度
-    agen longit_agen = init((dvushort *)input_dist);
+    agen longit_agen = init((dvshortx *)input_dist);
     INIT_AGEN2(longit_agen, longit_wrapper);     // 初始化2维AGEN
     config->input_longit = extract_agen_cfg(longit_agen);
 
@@ -71,7 +71,7 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *output_valid,
     output_wrapper.s1   = vecw;                  // 第一维度步长：向量宽度
     output_wrapper.n2   = TILE_HEIGHT;           // 第二维度：瓦片高度
     output_wrapper.s2   = dst_line_pitch;        // 第二维度步长：输出行间距
-    agen output_agen = init((dvushort *)output_valid);
+    agen output_agen = init((dvshortx *)output_valid);
     INIT_AGEN2(output_agen, output_wrapper);     // 初始化2维AGEN
     config->output_valid = extract_agen_cfg(output_agen);
 
@@ -86,40 +86,46 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *output_valid,
  * @param trail_Param: 算法阈值参数
  * @return: 水平轨迹判断结果向量（1=是轨迹，0=非轨迹）
  */
-dvushort dv_HorTrailRemove(dvushort dist_tmp[5], dvushort dist_trail,
+dvshortx dv_HorTrailRemove(dvshortx dist_tmp[5], dvshortx dist_trail,
                           const TrailParam_t *trail_Param) {
     // 权重向量初始化（[1,2,0,2,1]）
-    dvushort weight[5];
-    weight[0] = replicateh(1);   // 每个lane均为1
-    weight[1] = replicateh(2);   // 每个lane均为2
-    weight[2] = replicateh(0);   // 每个lane均为0
-    weight[3] = replicateh(2);   // 每个lane均为2
-    weight[4] = replicateh(1);   // 每个lane均为1
+    vshortx v_w0 = replicateh(1);  // 每个 lane 为 1
+    vshortx v_w1 = replicateh(2);  // 每个 lane 为 2
+    vshortx v_w2 = replicateh(0);  // 每个 lane 为 0
+    vshortx v_w3 = replicateh(2);  // 每个 lane 为 2
+    vshortx v_w4 = replicateh(1);  // 每个 lane 为 1
+    dvshortx weight[5];
+    weight[0] = deposit_lo(v_w0);
+    weight[1] = deposit_lo(v_w1);
+    weight[2] = deposit_lo(v_w2);
+    weight[3] = deposit_lo(v_w3);
+    weight[4] = deposit_lo(v_w4);
 
     // 计算每个邻域与当前点的差异绝对值（处理0值无效点）
-    dvushort dif_distC_abs[5];
-    dvushort zero_flag[5];  // 标记当前位置是否为0（1=0，0=有效）
+    dvshortx dif_distC_abs[5];
+    dvshortx zero_flag[5];  // 标记当前位置是否为0（1=0，0=有效）
     for (int i = 0; i < 5; i++) {
         zero_flag[i] = (dist_tmp[i] == 0);
         // 无效点（0值）的差异绝对值设为65535，有效点取实际差异绝对值 // 差异 = 邻域 - 当前
-        dif_distC_abs[i] = vmux(zero_flag[i], 65535, dvabsdif(dist_tmp[i], dist_trail));
+        dif_distC_abs[i] = dvmux(zero_flag[i], 65535, dvabsdif(dist_tmp[i], dist_trail));
         // 无效点的权重置0
-        weight[i] = vmux(zero_flag[i], 0, weight[i]);
+        weight[i] = dvmux(zero_flag[i], 0, weight[i]);
     }
 
     // 统计0值数量（用于条件判断）
-    dvushort zero_step1 = vadd3(zero_flag[0], zero_flag[1], zero_flag[2]);
-    dvushort zero_cnt = vadd3(zero_flag[3], zero_flag[4], zero_step1);
-    // dvushort zero_cnt = vadd3(vadd3(zero_flag[0], zero_flag[1],zero_flag[2]), zero_flag[3], zero_flag[4]);
+    dvshortx zero_step1 = dvadd3(zero_flag[0], zero_flag[1], zero_flag[2]);
+    dvshortx zero_cnt = dvadd3(zero_flag[3], zero_flag[4], zero_step1);
+    // dvshortx zero_cnt = vadd3(vadd3(zero_flag[0], zero_flag[1],zero_flag[2]), zero_flag[3], zero_flag[4]);
     // 水平轨迹判断条件
-    dvushort con0 = zero_cnt <= 3;  // 0值数量≤3（有效点足够）
+    dvshortx con0 = zero_cnt <= 3;  // 0值数量≤3（有效点足够）
 
     // 计算相邻点差异及大差异计数
-    dvushort dif_dist_abs[4];  // 相邻差异绝对值
-    dvushort dif_dist_abs_cnt = replicateh(0);  // 大差异计数
-    dvushort mul_result = dvmulh(dist_trail, trail_Param->DisThreRatio, VPU_TRUNC_0);
-    dvushort shift_result = dvsrl(mul_result, 12);
-    dvushort AdjDisThreD = dvmax(shift_result, 1);
+    dvshortx dif_dist_abs[4];  // 相邻差异绝对值
+    vshortx v_dif_dist_abd_cnt = replicateh(0);  // 大差异计数
+    dvshortx dif_dist_abs_cnt = deposit_lo(v_dif_dist_abd_cnt);  // 大差异计数
+    dvshortx mul_result = dvmulh(dist_trail, trail_Param->DisThreRatio, VPU_TRUNC_0);
+    dvshortx shift_result = dvsra(mul_result, 12);
+    dvshortx AdjDisThreD = dvmax(shift_result, 1);
 
     for (int i = 0; i < 4; i++) {
         dif_dist_abs[i] = dvabsdif(dist_tmp[i+1], dist_tmp[i]);  // 相邻差异绝对值
@@ -128,28 +134,28 @@ dvushort dv_HorTrailRemove(dvushort dist_tmp[5], dvushort dist_trail,
     }
 
     // 条件1：(左右邻域差异超标) 或 (大差异数>3)
-    dvushort con1_1 = (dif_distC_abs[1] > AdjDisThreD) &
+    dvshortx con1_1 = (dif_distC_abs[1] > AdjDisThreD) &
                      (dif_distC_abs[1] < trail_Param->D_H);
-    dvushort con1_2 = (dif_distC_abs[3] > AdjDisThreD) &
+    dvshortx con1_2 = (dif_distC_abs[3] > AdjDisThreD) &
                      (dif_distC_abs[3] < trail_Param->D_H);
-    dvushort con1_3 = (dif_dist_abs_cnt > 3);
-    dvushort con1 = (con1_1 & con1_2) | con1_3;
+    dvshortx con1_3 = (dif_dist_abs_cnt > 3);
+    dvshortx con1 = (con1_1 & con1_2) | con1_3;
     
     // 条件2：加权平均差异在阈值范围内
-    dvushort sum_step1 = dvadd3(dvmulh(weight[0], dif_distC_abs[0], VPU_TRUNC_0),
+    dvshortx sum_step1 = dvadd3(dvmulh(weight[0], dif_distC_abs[0], VPU_TRUNC_0),
                                 dvmulh(weight[1], dif_distC_abs[1], VPU_TRUNC_0), 
                                 dvmulh(weight[2], dif_distC_abs[2], VPU_TRUNC_0));
-    dvushort weighted_sum = dvadd3(sum_step1, 
+    dvshortx weighted_sum = dvadd3(sum_step1, 
                                  dvmulh(weight[3], dif_distC_abs[3], VPU_TRUNC_0),
                                  dvmulh(weight[4], dif_distC_abs[4], VPU_TRUNC_0));                
 
-    // dvushort weighted_sum = dvadd3(dvadd3(dvmulh(weight[0], dif_distC_abs[0], VPU_TRUNC_0),
+    // dvshortx weighted_sum = dvadd3(dvadd3(dvmulh(weight[0], dif_distC_abs[0], VPU_TRUNC_0),
     //                                    dvmulh(weight[1], dif_distC_abs[1], VPU_TRUNC_0),
     //                                    dvmulh(weight[2], dif_distC_abs[2], VPU_TRUNC_0)),
     //                                    dvmulh(weight[3], dif_distC_abs[3], VPU_TRUNC_0),
     //                                    dvmulh(weight[4], dif_distC_abs[4], VPU_TRUNC_0));
-    dvushort distdiff_mean = dvsrl(weighted_sum, 2);  // 除以4（权重和为6，保持原逻辑）
-    dvushort con2 = (distdiff_mean > AdjDisThreD) &
+    dvshortx distdiff_mean = dvsra(weighted_sum, 2);  // 除以4（权重和为6，保持原逻辑）
+    dvshortx con2 = (distdiff_mean > AdjDisThreD) &
                    (distdiff_mean < trail_Param->D_H);
 
     // 最终水平轨迹判断：con0且(con1或con2)
@@ -166,29 +172,31 @@ dvushort dv_HorTrailRemove(dvushort dist_tmp[5], dvushort dist_trail,
  * @param trail_Param: 算法阈值参数
  * @return: 垂直轨迹判断结果向量（1=是轨迹，0=非轨迹）
  */
-dvushort dv_VerTrailRemove(dvushort dist_trail, dvushort dist_longit[9],
-                          dvushort wall_judge, dvushort near_cnt_h,
-                          dvushort near_dist_th, const TrailParam_t *trail_Param) {
+dvshortx dv_VerTrailRemove(dvshortx dist_trail, dvshortx dist_longit[9],
+                          dvshortx wall_judge, dvshortx near_cnt_h,
+                          dvshortx near_dist_th, const TrailParam_t *trail_Param) {
     // 计算垂直邻域与当前点的差异绝对值（处理0值无效点）
-    dvushort dif_distC_ver_abs[9];
+    dvshortx dif_distC_ver_abs[9];
     for (int i = 0; i < 9; i++) {
-        dvushort zero_flag = (dist_longit[i] == 0);  // 标记0值  
+        dvshortx zero_flag = (dist_longit[i] == 0);  // 标记0值  
         // 无效点差异绝对值设为65535，有效点取邻域 - 当前
-        dif_distC_ver_abs[i] = vmux(zero_flag, 65535, dvabsdif(dist_longit[i], dist_trail));
+        dif_distC_ver_abs[i] = dvmux(zero_flag, 65535, dvabsdif(dist_longit[i], dist_trail));
     }
 
     // 统计垂直近邻数和垂直计数
-    dvushort near_cnt_v = replicateh(0);  // 近邻数（差异 < near_dist_th）
-    dvushort ver_cnt = replicateh(0);     // 垂直计数（差异 < 2*SlopDifThre）
+    vshortx v_near_cnt_v = replicateh(0);  // 垂直近邻数（差异 < near_dist_th）
+    dvshortx near_cnt_v = deposit_lo(v_near_cnt_v);  // 近邻数（差异 < near_dist_th）
+    vshortx v_ver_cnt = replicateh(0);  // 垂直计数（差异 < 2*SlopDifThre）
+    dvshortx ver_cnt = deposit_lo(v_ver_cnt);     // 垂直计数（差异 < 2*SlopDifThre）
     for (int i = 0; i < 9; i++) {
         near_cnt_v += (dif_distC_ver_abs[i] < near_dist_th);
         ver_cnt += (dif_distC_ver_abs[i] < (trail_Param->SlopDifThre * 2));
     }
 
     // 垂直轨迹判断条件
-    dvushort con3 = (near_cnt_h < trail_Param->near_cnt_th_h) &
+    dvshortx con3 = (near_cnt_h < trail_Param->near_cnt_th_h) &
                    (near_cnt_v < trail_Param->near_cnt_th_v);  // 近邻数不足
-    dvushort con4 = wall_judge | (ver_cnt < 3);  // 墙标记或垂直计数不足
+    dvshortx con4 = wall_judge | (ver_cnt < 3);  // 墙标记或垂直计数不足
 
     return con3 & con4;  // 垂直轨迹判断结果
 }
@@ -215,7 +223,7 @@ void trail_remove_exec(TrailParam_t *trail_Param, TrailConfig_t *config) {
     chess_loop_range(6, )                                            // 循环范围提示
     chess_unroll_loop(2) {                                           // 循环展开2次
         // 1. 加载水平5邻域距离数据（col_idx-2 到 col_idx+2）
-        dvushort dist_tmp[5];
+        dvshortx dist_tmp[5];
         dist_tmp[0] = dvushort_load(input_dist_agen);  // col_idx - 2
         dist_tmp[1] = dvushort_load(input_dist_agen);  // col_idx - 1
         dist_tmp[2] = dvushort_load(input_dist_agen);  // center（当前点）
@@ -223,57 +231,58 @@ void trail_remove_exec(TrailParam_t *trail_Param, TrailConfig_t *config) {
         dist_tmp[4] = dvushort_load(input_dist_agen);  // col_idx + 2
 
         // 2. 过滤无效点（距离<=0 或 >=bypass_distance）
-        dvushort valid_flag = (dist_tmp[2] > 0) &
+        dvshortx valid_flag = (dist_tmp[2] > 0) &
                              (dist_tmp[2] < bypass_distance);
         // if (valid_flag) continue;  // 全无效则跳过当前向量
 
         // 3. 计算近邻距离阈值（自适应调整）
-        dvushort near_dist_th = dvmulh(dist_tmp[2], dist_th_ratio, VPU_TRUNC_7);  // 右移7位（÷128）
+        dvshortx near_dist_th = dvmulh(dist_tmp[2], dist_th_ratio, VPU_TRUNC_7);  // 右移7位（÷128）
         near_dist_th = dvmax(near_dist_th, 2);   // 阈值下限：2
         near_dist_th = dvmin(near_dist_th, 20);  // 阈值上限：20
 
         // 4. 计算水平近邻计数（相邻差异 < 阈值的次数）
-        dvushort near_cnt_h = 0;
+        vshortx v_near_cnt_h = replicateh(0);  
+        dvshortx near_cnt_h = deposit_lo(v_near_cnt_h);
         near_cnt_h += (dvabsdif(dist_tmp[1], dist_tmp[0]) < near_dist_th);
         near_cnt_h += (dvabsdif(dist_tmp[2], dist_tmp[1]) < near_dist_th);
         near_cnt_h += (dvabsdif(dist_tmp[3], dist_tmp[2]) < near_dist_th);
         near_cnt_h += (dvabsdif(dist_tmp[4], dist_tmp[3]) < near_dist_th);
 
         // 5. 轨迹参考掩码判断（近邻计数 >= 阈值则跳过）
-        dvushort trail_refer_mask = (near_cnt_h >= near_threshold);
-        dvushort process_flag = valid_flag & ~trail_refer_mask;  // 需要继续处理的像素
+        dvshortx trail_refer_mask = (near_cnt_h >= near_threshold);
+        dvshortx process_flag = valid_flag & ~trail_refer_mask;  // 需要继续处理的像素
         // if (process_flag) continue;
 
         // 6. 水平轨迹判断
-        dvushort hortrail_judge = dv_HorTrailRemove(dist_tmp, dist_tmp[2], trail_Param);
+        dvshortx hortrail_judge = dv_HorTrailRemove(dist_tmp, dist_tmp[2], trail_Param);
         process_flag &= hortrail_judge;  // 仅保留水平轨迹判断为1的像素
         // if (process_flag) continue;
 
         // 7. 加载垂直9邻域距离数据（row_idx-4 到 row_idx+4）
-        dvushort dist_longit[9];
+        dvshortx dist_longit[9];
         for (int j = 0; j < 9; j++) {
             dist_longit[j] = dvushort_load(input_longit_agen);
         }
 
         // 8. 计算墙判断标志
-        dvushort dif2_dist_abs[3];  // 二阶差异绝对值
+        dvshortx dif2_dist_abs[3];  // 二阶差异绝对值
         dif2_dist_abs[0] = dvabsdif(dvabsdif(dist_tmp[1], dist_tmp[0]), 
                                    dvabsdif(dist_tmp[2], dist_tmp[1]));
         dif2_dist_abs[1] = dvabsdif(dvabsdif(dist_tmp[2], dist_tmp[1]), 
                                    dvabsdif(dist_tmp[3], dist_tmp[2]));
         dif2_dist_abs[2] = dvabsdif(dvabsdif(dist_tmp[3], dist_tmp[2]), 
                                    dvabsdif(dist_tmp[4], dist_tmp[3]));
-        dvushort sum_dif2_dist_abs = vadd3(dif2_dist_abs[0], dif2_dist_abs[1]), dif2_dist_abs[2];
-        dvushort wall_judge = (sum_dif2_dist_abs > trail_Param->SlopDifThre) &
+        dvshortx sum_dif2_dist_abs = dvadd3(dif2_dist_abs[0], dif2_dist_abs[1], dif2_dist_abs[2]);
+        dvshortx wall_judge = (sum_dif2_dist_abs > trail_Param->SlopDifThre) &
                              (dif2_dist_abs[0] > trail_Param->SlopDifThre);
 
         // 9. 垂直轨迹判断
-        dvushort vertrail_judge = dv_VerTrailRemove(dist_tmp[2], dist_longit,
+        dvshortx vertrail_judge = dv_VerTrailRemove(dist_tmp[2], dist_longit,
                                                   wall_judge, near_cnt_h,
                                                   near_dist_th, trail_Param);
 
         // 10. 输出结果：有效轨迹点置1
-        dvushort result = vmux(vertrail_judge & process_flag, 1, 0);
+        dvshortx result = vertrail_judge & process_flag;
         vstore(result, output_valid_agen);
     }
 }
