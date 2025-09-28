@@ -18,7 +18,7 @@ VMEM(B, uint16_t, outputValidBufferVMEM,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT));
 VMEM(C, int, algorithmParams, sizeof(TrailParam_t));
 
-VMEM_RDF_UNIFIED(A, sourceDistDataFlowHandler);
+VMEM(C, RasterDataFlowHandler, sourceDistDataFlowHandler);
 VMEM_RDF_UNIFIED(B, destinationDataFlowHandler);
 
 dvshortx weight[5];
@@ -221,7 +221,6 @@ void trail_remove_exec(TrailParam_t *trail_Param, TrailConfig_t *config) {
     const int32_t near_threshold = trail_Param->near_cnt_th_h;
     const int32_t bypass_distance = trail_Param->BypassDis;
     int32_t dist_th_ratio = (trail_Param->dist_th_ratio) << 4;  // 左移4位（×16）
-
     // 主循环：按向量批次并行处理
     for (int32_t i = 0; i < niter; i++) chess_prepare_for_pipelining  // 流水线优化
     chess_loop_range(6, )                                            // 循环范围提示
@@ -300,40 +299,40 @@ CUPVA_VPU_MAIN() {
     TrailConfig_t config;  // 配置结构体
 
     // 获取输入/输出行间距
-    uint16_t srcDistLinePitch = cupvaRasterDataFlowGetLinePitch(sourceDistDataFlowHandler);
-    uint16_t dstLinePitch = cupvaRasterDataFlowGetLinePitch(destinationDataFlowHandler);
-    // int32_t offset           = KERNEL_RADIUS_HEIGHT * srcDistLinePitch + 4;
-    int32_t offset_v         = KERNEL_RADIUS_HEIGHT * srcDistLinePitch;
-    int32_t offset_h         = KERNEL_RADIUS_HEIGHT * srcDistLinePitch + KERNEL_RADIUS_WIDTH;
+    uint16_t srcDistLinePitch = cupvaRasterDataFlowGetLinePitch(sourceDistDataFlowHandler); //192
+    uint16_t dstLinePitch = cupvaRasterDataFlowGetLinePitch(destinationDataFlowHandler);    //192
 
+    int32_t srcDistOffset = 0;
+    int32_t dstOffset = 0;
     // 初始化地址生成器和配置参数
     trail_remove_init(inputDistBufferVMEM, outputValidBufferVMEM,
                      srcDistLinePitch, dstLinePitch, &config);
 
     // 触发输入数据流传输
-    cupvaRasterDataFlowOpen(sourceDistDataFlowHandler, inputDistBufferVMEM);
     cupvaRasterDataFlowOpen(destinationDataFlowHandler, outputValidBufferVMEM);
+    cupvaRasterDataFlowTrig(sourceDistDataFlowHandler);
 
     // 循环处理所有瓦片
     for (int TileIdx = 0; TileIdx < TILE_COUNT; TileIdx++)
     {
-        void *pSrcTile = cupvaRasterDataFlowAcquire(sourceDistDataFlowHandler);
+        cupvaRasterDataFlowSync(sourceDistDataFlowHandler);
+        cupvaRasterDataFlowTrig(sourceDistDataFlowHandler);
         void *pDstTile = cupvaRasterDataFlowAcquire(destinationDataFlowHandler);
         /** Update agen base address */
-        cupvaModifyAgenCfgBase(&config.input_dist, (uint16_t *)pSrcTile + offset_h);
-        cupvaModifyAgenCfgBase(&config.input_longit, (uint16_t *)pSrcTile + offset_v);
+        cupvaModifyAgenCfgBase(&config.input_dist, inputDistBufferVMEM + srcDistOffset + KERNEL_RADIUS_WIDTH);
+        cupvaModifyAgenCfgBase(&config.input_longit, inputDistBufferVMEM + srcDistOffset + KERNEL_RADIUS_HEIGHT * srcDistLinePitch);
         cupvaModifyAgenCfgBase(&config.output_valid, pDstTile);
 
         // 执行当前瓦片的轨迹移除计算
         trail_remove_exec(trail_Param, &config);
 
+        srcDistOffset = cupvaRasterDataFlowGetOffset(sourceDistDataFlowHandler, srcDistOffset);
+
         // 同步输出数据流并触发下一个瓦片的输出
-        cupvaRasterDataFlowRelease(sourceDistDataFlowHandler);
         cupvaRasterDataFlowRelease(destinationDataFlowHandler);
     }
 
     // 等待最后一个瓦片的输出完成
-    cupvaRasterDataFlowClose(sourceDistDataFlowHandler);
     cupvaRasterDataFlowClose(destinationDataFlowHandler);
     return 0;
 }

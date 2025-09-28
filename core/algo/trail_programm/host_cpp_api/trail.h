@@ -36,10 +36,10 @@
 extern uint16_t *DistIn_d;
 extern uint16_t *DistIn_h;
 
-extern uint8_t *ValidOut_d;
-extern uint8_t *ValidOut_h;
+extern uint16_t *ValidOut_d;
+extern uint16_t *ValidOut_h;
 
-extern uint8_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH];
+extern uint16_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH];
 
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
