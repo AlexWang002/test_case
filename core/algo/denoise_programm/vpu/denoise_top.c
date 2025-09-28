@@ -27,7 +27,7 @@
 
 /** [declare_algorithm_params] */
 VMEM(A, int, col_idx);
-VMEM(A, uint16_t, vpu_mask_vmem,
+VMEM(B, uint16_t, vpu_mask_vmem,
     RDF_SINGLE(uint16_t, TILE_WIDTH + 2, TILE_HEIGHT + 4));
 
 VMEM(B, uint16_t, output_mask_vmem,
