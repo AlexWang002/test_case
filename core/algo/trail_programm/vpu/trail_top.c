@@ -51,7 +51,7 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *output_valid,
     input_wrapper.s2   = vecw;                   // 第二维度步长：向量宽度（水平方向跳转）
     input_wrapper.n3   = TILE_HEIGHT;            // 第三维度：瓦片高度（处理的总行数）
     input_wrapper.s3   = input_line_pitch;       // 第三维度步长：行间距（垂直方向每行跳转）
-    agen input_agen = init((dvshortx *)input_dist);
+    agen input_agen = init((dvshortx *)NULL);
     INIT_AGEN3(input_agen, input_wrapper);       // 初始化3维AGEN
     config->input_dist = extract_agen_cfg(input_agen);
 
@@ -62,7 +62,7 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *output_valid,
     longit_wrapper.s1   = 1;                     // 第一维度步长：1
     longit_wrapper.n2   = TILE_WIDTH / vecw;     // 第二维度：横向向量数
     longit_wrapper.s2   = vecw;                  // 第二维度步长：向量宽度
-    agen longit_agen = init((dvshortx *)input_dist);
+    agen longit_agen = init((dvshortx *)NULL);
     INIT_AGEN2(longit_agen, longit_wrapper);     // 初始化2维AGEN
     config->input_longit = extract_agen_cfg(longit_agen);
 
@@ -304,7 +304,7 @@ CUPVA_VPU_MAIN() {
     uint16_t dstLinePitch = cupvaRasterDataFlowGetLinePitch(destinationDataFlowHandler);
     // int32_t offset           = KERNEL_RADIUS_HEIGHT * srcDistLinePitch + 4;
     int32_t offset_v         = KERNEL_RADIUS_HEIGHT * srcDistLinePitch;
-    int32_t offset_h         = KERNEL_RADIUS_WIDTH;
+    int32_t offset_h         = KERNEL_RADIUS_HEIGHT * srcDistLinePitch + KERNEL_RADIUS_WIDTH;
 
     // 初始化地址生成器和配置参数
     trail_remove_init(inputDistBufferVMEM, outputValidBufferVMEM,
