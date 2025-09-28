@@ -27,7 +27,7 @@
 
 /** [declare_algorithm_params] */
 VMEM(A, int, col_idx);
-VMEM(B, uint16_t, vpu_mask_vmem,
+VMEM(A, uint16_t, vpu_mask_vmem,
     RDF_SINGLE(uint16_t, TILE_WIDTH + 2, TILE_HEIGHT + 4));
 
 VMEM(B, uint16_t, output_mask_vmem,
@@ -48,6 +48,9 @@ uint16_t threshold_32[32];
 uint16_t threshold1_32[32];
 uint16_t threshold2_32[32];
 uint16_t dist_seg_32[32];
+
+dvshortx dist[5][3];
+dvshortx vec0;
 
 typedef struct {
     AgenCFG threshold;
@@ -249,16 +252,8 @@ CUPVA_VPU_MAIN()
     int32_t src_offset = 0;
     int32_t dst_offset = 0;
 
-    dvshortx vec0, vec128, vec200, vec300;
-
     vec0.lo = replicateh(0);
     vec0.hi = replicateh(0);
-    vec128.lo = replicateh(128);
-    vec128.hi = replicateh(128);
-    vec200.lo = replicateh(200);
-    vec200.hi = replicateh(200);
-    vec300.lo = replicateh(300);
-    vec300.hi = replicateh(300);
 
     for (int tile_idx = 0; tile_idx < TILE_CNT; tile_idx ++) {
         cupvaRasterDataFlowSync(src_dist_dataflow_handler);
@@ -301,7 +296,6 @@ CUPVA_VPU_MAIN()
         for (int32_t i = 0; i < niter; i ++) chess_prepare_for_pipelining
         chess_unroll_loop(2)
         {
-            dvshortx dist[5][3];
             for (int r = 0; r < 3; r ++) {
                 for (int c = 0; c < 5; c ++) {
                     dist[c][r] = dvushort_load(input_agen);
@@ -340,13 +334,13 @@ CUPVA_VPU_MAIN()
             /*获取diff_th*/
             diff_th = dist_seg;
             cmp_mask = dist_seg == 0;
-            diff_th = dvmux(cmp_mask, vec128, diff_th);
+            diff_th = dvmux(cmp_mask, vec0 + 128, diff_th);
             cmp_mask = dist_seg == 1;
-            diff_th = dvmux(cmp_mask, vec200, diff_th);
+            diff_th = dvmux(cmp_mask, vec0 + 200, diff_th);
             cmp_mask = dist_seg == 2;
-            diff_th = dvmux(cmp_mask, vec200, diff_th);
+            diff_th = dvmux(cmp_mask, vec0 + 200, diff_th);
             cmp_mask = dist_seg == 3;
-            diff_th = dvmux(cmp_mask, vec300, diff_th);
+            diff_th = dvmux(cmp_mask, vec0 + 300, diff_th);
 
             dvshortx valid_mask[5][3];
             for (int m = 0; m < 5; m ++) {
