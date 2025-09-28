@@ -35,8 +35,8 @@ PVA_DECLARE_EXECUTABLE(denoise_dev)
 uint16_t *denoise_dist_buffer_d = nullptr;
 uint16_t *denoise_dist_buffer_h = nullptr;
 
-uint8_t *denoise_mask_buffer_d = nullptr;
-uint8_t *denoise_mask_buffer_h = nullptr;
+uint16_t *denoise_mask_buffer_d = nullptr;
+uint16_t *denoise_mask_buffer_h = nullptr;
 
 Stream denoise_stream;
 namespace {
@@ -50,8 +50,8 @@ int denoiseDataAlloc()
         denoise_dist_buffer_d = (uint16_t *)mem::Alloc(TILE_WIDTH * VIEW_HEIGHT * sizeof(uint16_t));
         denoise_dist_buffer_h = (uint16_t *)mem::GetHostPointer(denoise_dist_buffer_d);
 
-        denoise_mask_buffer_d = (uint8_t *)mem::Alloc(TILE_WIDTH * VIEW_HEIGHT * sizeof(uint8_t));
-        denoise_mask_buffer_h = (uint8_t *)mem::GetHostPointer(denoise_mask_buffer_d);
+        denoise_mask_buffer_d = (uint16_t *)mem::Alloc(TILE_WIDTH * VIEW_HEIGHT * sizeof(uint16_t));
+        denoise_mask_buffer_h = (uint16_t *)mem::GetHostPointer(denoise_mask_buffer_d);
 
         denoise_stream = Stream::Create(PVA0, VPU0);
     }
@@ -84,7 +84,7 @@ int denoiseProcPva()
     try
     {
         /*host端mask缓冲区清0*/
-        memset(denoise_mask_buffer_h, 0, TILE_WIDTH * VIEW_HEIGHT);
+        memset(denoise_mask_buffer_h, 0, TILE_WIDTH * VIEW_HEIGHT * sizeof(uint16_t));
 
         //构建可执行文件
         Executable exec = Executable::Create(PVA_EXECUTABLE_DATA(denoise_dev),
@@ -109,17 +109,17 @@ int denoiseProcPva()
         /*pva将计算好的mask结果传回host端（分为8个tile）*/
         RasterDataFlow &dst_mask_dataflow   = prog.addDataFlowHead<RasterDataFlow>();   //向CmdProgram中添加一个RasterDataFlow
         auto dst_mask_dataflow_handler      = prog["dst_mask_dataflow_handler"];        //数据流的传输由句柄触发
-        uint8_t *output_mask_vmem               = prog["output_mask_vmem"].ptr<uint8_t>();
+        uint16_t *output_mask_vmem          = prog["output_mask_vmem"].ptr<uint16_t>();
 
         dst_mask_dataflow.handler(dst_mask_dataflow_handler)
                             .dst(denoise_mask_buffer_d, TILE_WIDTH, VIEW_HEIGHT, TILE_WIDTH)
                             .tileBuffer(output_mask_vmem)
                             .tile(TILE_WIDTH, TILE_HEIGHT);
 
-        /*传输最后4列mask数据*/
+        /*传输最后2列mask数据*/
         RasterDataFlow &dst_last_mask_dataflow   = prog.addDataFlowHead<RasterDataFlow>();   //向CmdProgram中添加一个RasterDataFlow
         auto dst_last_mask_dataflow_handler      = prog["dst_last_mask_dataflow_handler"];        //数据流的传输由句柄触发
-        uint8_t *output_last_mask_vmem               = prog["output_last_mask_vmem"].ptr<uint8_t>();
+        uint16_t *output_last_mask_vmem          = prog["output_last_mask_vmem"].ptr<uint16_t>();
 
         dst_last_mask_dataflow.handler(dst_last_mask_dataflow_handler)
                             .dst(denoise_mask_buffer_d, TILE_WIDTH, 2, TILE_WIDTH)

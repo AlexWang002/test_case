@@ -9,7 +9,7 @@
 #define VIEW_HEIGHT     760
 #define TOTAL_HEIGHT    760
 
-#define KERNEL_RADIUS_WIDTH     0
+#define KERNEL_RADIUS_WIDTH     1
 #define KERNEL_RADIUS_HEIGHT    2
 
 #define TILE_CNT 8

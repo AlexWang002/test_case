@@ -38,8 +38,8 @@
 extern uint16_t *denoise_dist_buffer_d; 
 extern uint16_t *denoise_dist_buffer_h;
 
-extern uint8_t *denoise_mask_buffer_d;
-extern uint8_t *denoise_mask_buffer_h;
+extern uint16_t *denoise_mask_buffer_d;
+extern uint16_t *denoise_mask_buffer_h;
 
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
