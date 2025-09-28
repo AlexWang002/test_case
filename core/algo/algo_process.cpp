@@ -473,59 +473,64 @@ void CloudManager::algoProcess(int32_t task_id)
             if (cacl_done_[task_id].load() == 0) {
                 bool isLostPkt = false;
                 AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
-                if (recvEnoughData(frame_buffer)) {
-                    auto start = std::chrono::steady_clock::now();
-                    /*PVA以整帧为单位执行denoise算法*/
-                    if(task_id == 0){
-                        if (algo_func_.algo_Param.DenoiseOn) {
-                            /*拷贝整帧数据到denoise算法的PVA buffer中*/
-                            memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
-                            auto denoise_start = std::chrono::steady_clock::now();
-                            denoiseProcPva();
-                            auto denoise_end = std::chrono::steady_clock::now();
-                            auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
-                            std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
-                            memcpy(algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[2 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 2) * algo_func_.VIEW_H * sizeof(uint16_t));
-                            memcpy(algo_func_.denoise_mask_out_frm[algo_func_.VIEW_W - 2], (uint8_t *)denoise_mask_buffer_h, 2 * algo_func_.VIEW_H * sizeof(uint16_t)); // 拷贝最后2列
-                        }
-                        else {
-                            for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
-                                for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
-                                    algo_func_.denoise_mask_out_frm[cc][rr] = 1;
+                for (int32_t col = 0; col < algo_func_.VIEW_W + algo_func_.max_data_size; ++col) {
+                    if (recvEnoughData(col, frame_buffer)) {
+                        auto start = std::chrono::steady_clock::now();
+                        /*PVA以整帧为单位执行denoise算法*/
+                        if(task_id == 0){
+                            if(col == algo_func_.VIEW_W + algo_func_.max_data_size - 1){
+                                if (algo_func_.algo_Param.DenoiseOn) {
+                                    /*拷贝整帧数据到denoise算法的PVA buffer中*/
+                                    memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)frame_buffer->dist0[0],  algo_func_.VIEW_H * algo_func_.VIEW_W * sizeof(uint16_t));
+                                    auto denoise_start = std::chrono::steady_clock::now();
+                                    denoiseProcPva();
+                                    auto denoise_end = std::chrono::steady_clock::now();
+                                    auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
+                                    std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
+                                    memcpy(algo_func_.denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[4 * algo_func_.VIEW_H], (algo_func_.VIEW_W - 4) * algo_func_.VIEW_H * sizeof(int));
+                                    memcpy(algo_func_.denoise_mask_out_frm[algo_func_.VIEW_W - 4], (uint8_t *)denoise_mask_buffer_h, 4 * algo_func_.VIEW_H * sizeof(int)); // 拷贝最后4列
+                                }
+                                else {
+                                    for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
+                                        for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
+                                            algo_func_.denoise_mask_out_frm[cc][rr] = 1;
+                                        }
+                                    }
+                                }
+        
+                                if (algo_func_.algo_Param.TrailRemoveOn) {
+                                    /** Data initialization */
+                                    memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    /** Process */
+                                    auto trail_start = std::chrono::steady_clock::now();
+                                    trail_main();
+                                    auto trail_end = std::chrono::steady_clock::now();
+                                    auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
+                                    std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
+                                    /** Mask copy */
+                                    memcpy(algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(uint8_t) *algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                }
+                                else{
+                                    for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
+                                        for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
+                                            algo_func_.trail_mask_out_frm[cc][rr] = 0;
+                                        }
+                                    }
                                 }
                             }
-                        }
-
-                        if (algo_func_.algo_Param.TrailRemoveOn) {
-                            /** Data initialization */
-                            memcpy(DistIn_h, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                            /** Process */
-                            auto trail_start = std::chrono::steady_clock::now();
-                            trail_main();
-                            auto trail_end = std::chrono::steady_clock::now();
-                            auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
-                            std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
-                            /** Mask copy */
-                            memcpy(algo_func_.trail_mask_out_frm[0], TrailMask, sizeof(uint8_t) *algo_func_.VIEW_W * algo_func_.VIEW_H);
                         }
                         else{
-                            for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
-                                for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
-                                    algo_func_.trail_mask_out_frm[cc][rr] = 0;
-                                }
-                            }
+                            algo_func_.pcAlgoMainFunc(col, frame_buffer, task_id);
                         }
+                        auto end = std::chrono::steady_clock::now();
+                        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+                        total_time += duration;
+                    } else {
+                        isLostPkt = true;
+                        break;
                     }
-                    else{
-                        algo_func_.pcAlgoMainFunc(frame_buffer, task_id);
-                    }
-                    auto end = std::chrono::steady_clock::now();
-                    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                    total_time += duration;
-                } else {
-                    isLostPkt = true;
-                    //break;
                 }
+
                 if (total_time.count() > kCalcTimeout_) {
                     LogError("ERROR: algoProcess calc time out :{} thread:{}", total_time.count(), task_id);
                 }
@@ -759,16 +764,16 @@ bool CloudManager::sendEnoughData(int32_t col)
  * \param[in] frame_buffer: frame point cloud data buffer
  *               Range: 0~2^32 -1. Accuracy: 1.
  */
-bool CloudManager::recvEnoughData(AlgoFunction::tstFrameBuffer* frame_buffer)
+bool CloudManager::recvEnoughData(int32_t col, AlgoFunction::tstFrameBuffer* frame_buffer)
 {
     std::unique_lock<std::mutex> lock(mtx_recv_);
     // 等待前置列就绪
-    int32_t required_col = algo_func_.VIEW_W - 1;
-    // if (col >= algo_func_.VIEW_W - 1) {
-    //     required_col = algo_func_.VIEW_W - 1;
-    // } else {
-    //     required_col = col;
-    // }
+    int32_t required_col;
+    if (col >= algo_func_.VIEW_W - 1) {
+        required_col = algo_func_.VIEW_W - 1;
+    } else {
+        required_col = col;
+    }
 
     if (frame_buffer != nullptr && frame_buffer->frame_droped.load()) {
         return false;

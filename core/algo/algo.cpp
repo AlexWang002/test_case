@@ -1409,144 +1409,299 @@ void AlgoFunction::highCalcFunc(uint16_t *dist0,uint16_t *dist1, int col,
     for (int row_idx = 1; row_idx < VIEW_H - 1; row_idx++) {
         // 当前点数据
         int dist_cur = dist0[row_idx];
-        int x_cur = proj_dist0[row_idx];
         int z_cur = fit_high0[row_idx];
         int dist_cur2 = dist1[row_idx];
-        int x_cur2 = proj_dist1[row_idx];
         int z_cur2 = fit_high1[row_idx];
-
-        // 下邻点数据 (row_idx-1)
-        int dist_down = dist0[row_idx-1];
-        int x_down = proj_dist0[row_idx-1];
-        int z_down = fit_high0[row_idx-1];
-        int dist_down2 = dist1[row_idx-1];
-        int x_down2 = proj_dist1[row_idx-1];
-        int z_down2 = fit_high1[row_idx-1];
-
-        // 上邻点数据 (row_idx+1)
-        int dist_up = dist0[row_idx+1];
-        int x_up = proj_dist0[row_idx+1];
-        int z_up = fit_high0[row_idx+1];
-        int dist_up2 = dist1[row_idx+1];
-        int x_up2 = proj_dist1[row_idx+1];
-        int z_up2 = fit_high1[row_idx+1];
-
-        // 计算邻近标志
-        bool near_up_1 = (dist_up > 0) && (dist_up - dist_cur > 0) && (dist_up - dist_cur <= dist_diff_th);
-        bool near_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur > 0) && (dist_up2 - dist_cur <= dist_diff_th);
-        bool near_down_1 = (dist_down > 0) && (dist_cur - dist_down > 0) && (dist_cur - dist_down <= dist_diff_th);
-        bool near_down_2 = (dist_down2 > 0) && (dist_cur - dist_down2 > 0) && (dist_cur - dist_down2 <= dist_diff_th);
-
-        // 计算邻近标志 (第二回波)
-        bool near2_up_1 = (dist_up > 0) && (dist_up - dist_cur2 > 0) && (dist_up - dist_cur2 <= dist_diff_th);
-        bool near2_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur2 > 0) && (dist_up2 - dist_cur2 <= dist_diff_th);
-        bool near2_down_1 = (dist_down > 0) && (dist_cur2 - dist_down > 0) && (dist_cur2 - dist_down <= dist_diff_th);
-        bool near2_down_2 = (dist_down2 > 0) && (dist_cur2 - dist_down2 > 0) && (dist_cur2 - dist_down2 <= dist_diff_th);
-
-        // 计算平坦标志 (第一回波)
-        int dz_up = std::abs(z_up - z_cur);
-        int dz_down = std::abs(z_down - z_cur);
-        int dx_up = std::abs(x_up - x_cur);
-        int dx_down = std::abs(x_down - x_cur);
-        int dz_down2 = std::abs(z_down2 - z_cur);
-        int dx_down2 = std::abs(x_down2 - x_cur);
-        int dz_up2 = std::abs(z_up2 - z_cur);
-        int dx_up2 = std::abs(x_up2 - x_cur);
-
-        bool flat_flag11 = (dz_up * 2 <= dx_up) && (dz_down * 2 <= dx_down);
-        bool flat_flag12 = (dz_up * 2 <= dx_up) && (dz_down2 * 2 <= dx_down2);
-        bool flat_flag21 = (dz_up2 * 2 <= dx_up2) && (dz_down * 2 <= dx_down);
-        bool flat_flag22 = (dz_up2 * 2 <= dx_up2) && (dz_down2 * 2 <= dx_down2);
-
-        // 计算平坦标志 (第二回波)
-        int dz2_up = std::abs(z_up - z_cur2);
-        int dz2_down = std::abs(z_down - z_cur2);
-        int dx2_up = std::abs(x_up - x_cur2);
-        int dx2_down = std::abs(x_down - x_cur2);
-        int dz2_down2 = std::abs(z_down2 - z_cur2);
-        int dx2_down2 = std::abs(x_down2 - x_cur2);
-        int dz2_up2 = std::abs(z_up2 - z_cur2);
-        int dx2_up2 = std::abs(x_up2 - x_cur2);
-
-        bool flat2_flag11 = (dz2_up * 2 <= dx2_up) && (dz2_down * 2 <= dx2_down);
-        bool flat2_flag12 = (dz2_up * 2 <= dx2_up) && (dz2_down2 * 2 <= dx2_down2);
-        bool flat2_flag21 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down * 2 <= dx2_down);
-        bool flat2_flag22 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down2 * 2 <= dx2_down2);
-
-        // 计算角度标志 (第一回波)
-        bool angle_flag11 = std::abs(z_up + z_down - 2*z_cur) <= delta_z_th;
-        bool angle_flag12 = std::abs(z_up + z_down2 - 2*z_cur) <= delta_z_th;
-        bool angle_flag21 = std::abs(z_up2 + z_down - 2*z_cur) <= delta_z_th;
-        bool angle_flag22 = std::abs(z_up2 + z_down2 - 2*z_cur) <= delta_z_th;
-
-        // 计算角度标志 (第二回波)
-        bool angle2_flag11 = std::abs(z_up + z_down - 2*z_cur2) <= delta_z_th;
-        bool angle2_flag12 = std::abs(z_up + z_down2 - 2*z_cur2) <= delta_z_th;
-        bool angle2_flag21 = std::abs(z_up2 + z_down - 2*z_cur2) <= delta_z_th;
-        bool angle2_flag22 = std::abs(z_up2 + z_down2 - 2*z_cur2) <= delta_z_th;
-
-        // ROI标志
+        bool ground_flag;
+        bool ground_flag2;
         bool roi_flag = (dist_cur > 0) && (dist_cur <= dist_max_th) && (std::abs(z_cur) <= z_th);
         bool roi_flag2 = (dist_cur2 > 0) && (dist_cur2 <= dist_max_th) && (std::abs(z_cur2) <= z_th);
+        int x_cur = proj_dist0[row_idx];
+        int x_cur2 = proj_dist1[row_idx];
 
-        // 组合标志 (第一回波)
-        bool flag_11 = near_up_1 && near_down_1 && flat_flag11 && angle_flag11;
-        bool flag_21 = near_up_1 && near_down_2 && flat_flag12 && angle_flag12;
-        bool flag_12 = near_up_2 && near_down_1 && flat_flag21 && angle_flag21;
-        bool flag_22 = near_up_2 && near_down_2 && flat_flag22 && angle_flag22;
+        // 下邻点数据 (row_idx-1)
+        int dist_down = dist0[row_idx - 1];
+        int x_down = proj_dist0[row_idx - 1];
+        int z_down = fit_high0[row_idx - 1];
+        int dist_down2 = dist1[row_idx - 1];
+        int x_down2 = proj_dist1[row_idx - 1];
+        int z_down2 = fit_high1[row_idx - 1];
 
-        // 组合标志 (第二回波)
-        bool flag2_11 = near2_up_1 && near2_down_1 && flat2_flag11 && angle2_flag11;
-        bool flag2_21 = near2_up_1 && near2_down_2 && flat2_flag12 && angle2_flag12;
-        bool flag2_12 = near2_up_2 && near2_down_1 && flat2_flag21 && angle2_flag21;
-        bool flag2_22 = near2_up_2 && near2_down_2 && flat2_flag22 && angle2_flag22;
+        // 上邻点数据 (row_idx+1)
+        int dist_up = dist0[row_idx + 1];
+        int x_up = proj_dist0[row_idx + 1];
+        int z_up = fit_high0[row_idx + 1];
+        int dist_up2 = dist1[row_idx + 1];
+        int x_up2 = proj_dist1[row_idx + 1];
+        int z_up2 = fit_high1[row_idx + 1];
 
-        // 地面标志计算
-        bool ground_flag = roi_flag && (flag_11 || flag_12 || flag_21 || flag_22) ||
-                          (std::abs(z_cur) < 20 && dist_cur < 4000);
+        if ((std::abs(z_cur) < 20 && dist_cur < 4000)|| roi_flag)
+        {
+            // 计算邻近标志
+            bool near_up_1 = (dist_up > 0) && (dist_up - dist_cur > 0) && (dist_up - dist_cur <= dist_diff_th);
+            bool near_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur > 0) && (dist_up2 - dist_cur <= dist_diff_th);
+            bool near_down_1 = (dist_down > 0) && (dist_cur - dist_down > 0) && (dist_cur - dist_down <= dist_diff_th);
+            bool near_down_2 = (dist_down2 > 0) && (dist_cur - dist_down2 > 0) && (dist_cur - dist_down2 <= dist_diff_th);
+           
+            // 计算平坦标志 (第一回波)
+            int dz_up = std::abs(z_up - z_cur);
+            int dz_down = std::abs(z_down - z_cur);
+            int dx_up = std::abs(x_up - x_cur);
+            int dx_down = std::abs(x_down - x_cur);
+            int dz_down2 = std::abs(z_down2 - z_cur);
+            int dx_down2 = std::abs(x_down2 - x_cur);
+            int dz_up2 = std::abs(z_up2 - z_cur);
+            int dx_up2 = std::abs(x_up2 - x_cur);
 
-        bool ground_flag2 = !ground_flag && roi_flag2 &&
-                           (flag2_11 || flag2_12 || flag2_21 || flag2_22) ||
-                           (std::abs(z_cur2) < 20 && dist_cur2 < 4000);
+            bool flat_flag11 = (dz_up * 2 <= dx_up) && (dz_down * 2 <= dx_down);
+            bool flat_flag12 = (dz_up * 2 <= dx_up) && (dz_down2 * 2 <= dx_down2);
+            bool flat_flag21 = (dz_up2 * 2 <= dx_up2) && (dz_down * 2 <= dx_down);
+            bool flat_flag22 = (dz_up2 * 2 <= dx_up2) && (dz_down2 * 2 <= dx_down2);
 
-        // 更新地面标记 (当前行)
-        if (ground_flag) gnd_mark0[row_idx] |= 1;
-        if (ground_flag2) {
-            gnd_mark1[row_idx] |= 1;
-            gnd_mark0[row_idx] = 0; // 第一回波标记置0
+            // 计算角度标志 (第一回波)
+            bool angle_flag11 = std::abs(z_up + z_down - 2 * z_cur) <= delta_z_th;
+            bool angle_flag12 = std::abs(z_up + z_down2 - 2 * z_cur) <= delta_z_th;
+            bool angle_flag21 = std::abs(z_up2 + z_down - 2 * z_cur) <= delta_z_th;
+            bool angle_flag22 = std::abs(z_up2 + z_down2 - 2 * z_cur) <= delta_z_th;
+
+            // 组合标志 (第一回波)
+            bool flag_11 = near_up_1 && near_down_1 && flat_flag11 && angle_flag11;
+            bool flag_21 = near_up_1 && near_down_2 && flat_flag12 && angle_flag12;
+            bool flag_12 = near_up_2 && near_down_1 && flat_flag21 && angle_flag21;
+            bool flag_22 = near_up_2 && near_down_2 && flat_flag22 && angle_flag22;
+
+            bool ground_flag = roi_flag && (flag_11 || flag_12 || flag_21 || flag_22) ||
+                (std::abs(z_cur) < 20 && dist_cur < 4000);
+            if (!ground_flag && (roi_flag2 || (std::abs(z_cur2) < 20 && dist_cur2 < 4000)))
+            {
+                
+                // 计算邻近标志 (第二回波)
+                bool near2_up_1 = (dist_up > 0) && (dist_up - dist_cur2 > 0) && (dist_up - dist_cur2 <= dist_diff_th);
+                bool near2_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur2 > 0) && (dist_up2 - dist_cur2 <= dist_diff_th);
+                bool near2_down_1 = (dist_down > 0) && (dist_cur2 - dist_down > 0) && (dist_cur2 - dist_down <= dist_diff_th);
+                bool near2_down_2 = (dist_down2 > 0) && (dist_cur2 - dist_down2 > 0) && (dist_cur2 - dist_down2 <= dist_diff_th);
+                // 计算平坦标志 (第二回波)
+                int dz2_up = std::abs(z_up - z_cur2);
+                int dz2_down = std::abs(z_down - z_cur2);
+                int dx2_up = std::abs(x_up - x_cur2);
+                int dx2_down = std::abs(x_down - x_cur2);
+                int dz2_down2 = std::abs(z_down2 - z_cur2);
+                int dx2_down2 = std::abs(x_down2 - x_cur2);
+                int dz2_up2 = std::abs(z_up2 - z_cur2);
+                int dx2_up2 = std::abs(x_up2 - x_cur2);
+
+                bool flat2_flag11 = (dz2_up * 2 <= dx2_up) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag12 = (dz2_up * 2 <= dx2_up) && (dz2_down2 * 2 <= dx2_down2);
+                bool flat2_flag21 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag22 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down2 * 2 <= dx2_down2);
+                // 计算角度标志 (第二回波)
+                bool angle2_flag11 = std::abs(z_up + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag12 = std::abs(z_up + z_down2 - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag21 = std::abs(z_up2 + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag22 = std::abs(z_up2 + z_down2 - 2 * z_cur2) <= delta_z_th;
+                // 组合标志 (第二回波)
+                bool flag2_11 = near2_up_1 && near2_down_1 && flat2_flag11 && angle2_flag11;
+                bool flag2_21 = near2_up_1 && near2_down_2 && flat2_flag12 && angle2_flag12;
+                bool flag2_12 = near2_up_2 && near2_down_1 && flat2_flag21 && angle2_flag21;
+                bool flag2_22 = near2_up_2 && near2_down_2 && flat2_flag22 && angle2_flag22;
+
+                bool ground_flag2 = !ground_flag && roi_flag2 &&
+                    (flag2_11 || flag2_12 || flag2_21 || flag2_22) ||
+                    (std::abs(z_cur2) < 20 && dist_cur2 < 4000);
+
+                // 更新地面标记 (当前行)
+                if (ground_flag) gnd_mark0[row_idx] |= 1;
+                if (ground_flag2) {
+                    gnd_mark1[row_idx] |= 1;
+                    gnd_mark0[row_idx] = 0; // 第一回波标记置0
+                }
+
+                // 更新 row_idx-1 的第一回波标记 (gnd_mark_line(row_idx-1))
+                if ((ground_flag && (flag_11 || flag_12)) ||
+                    (ground_flag2 && (flag2_11 || flag2_12))) {
+                    gnd_mark0[row_idx - 1] |= 1;
+                }
+
+                // 更新 row_idx+1 的第一回波标记 (gnd_mark_line(row_idx+1))
+                if ((ground_flag && (flag_11 || flag_21)) ||
+                    (ground_flag2 && (flag2_11 || flag2_21))) {
+                    gnd_mark0[row_idx + 1] |= 1;
+                }
+
+                // 更新 row_idx-1 的第二回波标记 (gnd_mark_line2(row_idx-1))
+                if ((ground_flag && (flag_21 || flag_22)) ||
+                    (ground_flag2 && (flag2_21 || flag2_22))) {
+                    gnd_mark1[row_idx - 1] |= 1;
+                }
+                if ((ground_flag && (flag_12 || flag_22)) ||
+                    (ground_flag2 && (flag2_12 || flag2_22))) {
+                    gnd_mark1[row_idx + 1] |= 1;
+                }
+            }
+            else if (ground_flag && (std::abs(z_cur2) < 20 && dist_cur2 < 4000))
+            {
+                gnd_mark0[row_idx] |= 1;
+                bool ground_flag2 = true;
+                gnd_mark1[row_idx] |= 1;
+                gnd_mark0[row_idx] = 0; // 第一回波标记置0
+
+                // 计算邻近标志 (第二回波)
+                bool near2_up_1 = (dist_up > 0) && (dist_up - dist_cur2 > 0) && (dist_up - dist_cur2 <= dist_diff_th);
+                bool near2_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur2 > 0) && (dist_up2 - dist_cur2 <= dist_diff_th);
+                bool near2_down_1 = (dist_down > 0) && (dist_cur2 - dist_down > 0) && (dist_cur2 - dist_down <= dist_diff_th);
+                bool near2_down_2 = (dist_down2 > 0) && (dist_cur2 - dist_down2 > 0) && (dist_cur2 - dist_down2 <= dist_diff_th);
+                // 计算平坦标志 (第二回波)
+                int dz2_up = std::abs(z_up - z_cur2);
+                int dz2_down = std::abs(z_down - z_cur2);
+                int dx2_up = std::abs(x_up - x_cur2);
+                int dx2_down = std::abs(x_down - x_cur2);
+                int dz2_down2 = std::abs(z_down2 - z_cur2);
+                int dx2_down2 = std::abs(x_down2 - x_cur2);
+                int dz2_up2 = std::abs(z_up2 - z_cur2);
+                int dx2_up2 = std::abs(x_up2 - x_cur2);
+
+                bool flat2_flag11 = (dz2_up * 2 <= dx2_up) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag12 = (dz2_up * 2 <= dx2_up) && (dz2_down2 * 2 <= dx2_down2);
+                bool flat2_flag21 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag22 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down2 * 2 <= dx2_down2);
+                // 计算角度标志 (第二回波)
+                bool angle2_flag11 = std::abs(z_up + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag12 = std::abs(z_up + z_down2 - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag21 = std::abs(z_up2 + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag22 = std::abs(z_up2 + z_down2 - 2 * z_cur2) <= delta_z_th;
+                // 组合标志 (第二回波)
+                bool flag2_11 = near2_up_1 && near2_down_1 && flat2_flag11 && angle2_flag11;
+                bool flag2_21 = near2_up_1 && near2_down_2 && flat2_flag12 && angle2_flag12;
+                bool flag2_12 = near2_up_2 && near2_down_1 && flat2_flag21 && angle2_flag21;
+                bool flag2_22 = near2_up_2 && near2_down_2 && flat2_flag22 && angle2_flag22;
+                // 更新 row_idx-1 的第一回波标记 (gnd_mark_line(row_idx-1))
+                if ((flag_11 || flag_12) ||
+                    (flag2_11 || flag2_12)) {
+                    gnd_mark0[row_idx - 1] |= 1;
+                }
+
+                // 更新 row_idx+1 的第一回波标记 (gnd_mark_line(row_idx+1))
+                if ((flag_11 || flag_21) ||
+                    (flag2_11 || flag2_21)) {
+                    gnd_mark0[row_idx + 1] |= 1;
+                }
+
+                // 更新 row_idx-1 的第二回波标记 (gnd_mark_line2(row_idx-1))
+                if ((flag_21 || flag_22) ||
+                    (flag2_21 || flag2_22)) {
+                    gnd_mark1[row_idx - 1] |= 1;
+                }
+                if ((flag_12 || flag_22) ||
+                    (flag2_12 || flag2_22)) {
+                    gnd_mark1[row_idx + 1] |= 1;
+                }
+            }
+            else if(ground_flag)
+            {
+                gnd_mark0[row_idx] |= 1;
+                // 更新 row_idx-1 的第一回波标记 (gnd_mark_line(row_idx-1))
+                if (flag_11 || flag_12) {
+                    gnd_mark0[row_idx - 1] |= 1;
+                }
+                // 更新 row_idx+1 的第一回波标记 (gnd_mark_line(row_idx+1))
+                if (flag_11 || flag_21) {
+                    gnd_mark0[row_idx + 1] |= 1;
+                }
+
+                // 更新 row_idx-1 的第二回波标记 (gnd_mark_line2(row_idx-1))
+                if (flag_21 || flag_22) {
+                    gnd_mark1[row_idx - 1] |= 1;
+                }
+                if (flag_12 || flag_22) {
+                    gnd_mark1[row_idx + 1] |= 1;
+                }
+            }
         }
+        else
+        {
+            ground_flag = false;
+            if (roi_flag2 || (std::abs(z_cur2) < 20 && dist_cur2 < 4000))
+            {
+                // 计算邻近标志 (第二回波)
+                bool near2_up_1 = (dist_up > 0) && (dist_up - dist_cur2 > 0) && (dist_up - dist_cur2 <= dist_diff_th);
+                bool near2_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur2 > 0) && (dist_up2 - dist_cur2 <= dist_diff_th);
+                bool near2_down_1 = (dist_down > 0) && (dist_cur2 - dist_down > 0) && (dist_cur2 - dist_down <= dist_diff_th);
+                bool near2_down_2 = (dist_down2 > 0) && (dist_cur2 - dist_down2 > 0) && (dist_cur2 - dist_down2 <= dist_diff_th);
 
-        // 更新 row_idx-1 的第一回波标记 (gnd_mark_line(row_idx-1))
-        if ((ground_flag && (flag_11 || flag_12)) ||
-            (ground_flag2 && (flag2_11 || flag2_12))) {
-            gnd_mark0[row_idx-1] |= 1;
+                // 计算平坦标志 (第一回波)
+                int dz_up = std::abs(z_up - z_cur);
+                int dz_down = std::abs(z_down - z_cur);
+                int dx_up = std::abs(x_up - x_cur);
+                int dx_down = std::abs(x_down - x_cur);
+                int dz_down2 = std::abs(z_down2 - z_cur);
+                int dx_down2 = std::abs(x_down2 - x_cur);
+                int dz_up2 = std::abs(z_up2 - z_cur);
+                int dx_up2 = std::abs(x_up2 - x_cur);
+
+                // 计算平坦标志 (第二回波)
+                int dz2_up = std::abs(z_up - z_cur2);
+                int dz2_down = std::abs(z_down - z_cur2);
+                int dx2_up = std::abs(x_up - x_cur2);
+                int dx2_down = std::abs(x_down - x_cur2);
+                int dz2_down2 = std::abs(z_down2 - z_cur2);
+                int dx2_down2 = std::abs(x_down2 - x_cur2);
+                int dz2_up2 = std::abs(z_up2 - z_cur2);
+                int dx2_up2 = std::abs(x_up2 - x_cur2);
+
+                bool flat2_flag11 = (dz2_up * 2 <= dx2_up) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag12 = (dz2_up * 2 <= dx2_up) && (dz2_down2 * 2 <= dx2_down2);
+                bool flat2_flag21 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag22 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down2 * 2 <= dx2_down2);
+
+                // 计算角度标志 (第二回波)
+                bool angle2_flag11 = std::abs(z_up + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag12 = std::abs(z_up + z_down2 - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag21 = std::abs(z_up2 + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag22 = std::abs(z_up2 + z_down2 - 2 * z_cur2) <= delta_z_th;
+
+                // 组合标志 (第二回波)
+                bool flag2_11 = near2_up_1 && near2_down_1 && flat2_flag11 && angle2_flag11;
+                bool flag2_21 = near2_up_1 && near2_down_2 && flat2_flag12 && angle2_flag12;
+                bool flag2_12 = near2_up_2 && near2_down_1 && flat2_flag21 && angle2_flag21;
+                bool flag2_22 = near2_up_2 && near2_down_2 && flat2_flag22 && angle2_flag22;
+
+                ground_flag2 = roi_flag2 &&
+                    (flag2_11 || flag2_12 || flag2_21 || flag2_22) ||
+                    (std::abs(z_cur2) < 20 && dist_cur2 < 4000);
+                if (ground_flag2) 
+                {
+                    gnd_mark1[row_idx] |= 1;
+                    gnd_mark0[row_idx] = 0; // 第一回波标记置0
+                    if(flag2_11 || flag2_12)
+                    {
+                        gnd_mark0[row_idx - 1] |= 1;
+                    }
+
+                    if (flag2_11 || flag2_21)
+                    {
+                        gnd_mark0[row_idx + 1] |= 1;
+                    }
+
+                    if(flag2_21 || flag2_22)
+                    {
+                        gnd_mark1[row_idx - 1] |= 1;
+                    }
+
+                    if (flag2_12 || flag2_22)
+                    {
+                        gnd_mark1[row_idx + 1] |= 1;
+                    }
+                }
+            }
         }
-
-        // 更新 row_idx+1 的第一回波标记 (gnd_mark_line(row_idx+1))
-        if ((ground_flag && (flag_11 || flag_21)) ||
-            (ground_flag2 && (flag2_11 || flag2_21))) {
-            gnd_mark0[row_idx+1] |= 1;
-        }
-
-        // 更新 row_idx-1 的第二回波标记 (gnd_mark_line2(row_idx-1))
-        if ((ground_flag && (flag_21 || flag_22)) ||
-            (ground_flag2 && (flag2_21 || flag2_22))) {
-            gnd_mark1[row_idx-1] |= 1;
-        }
-
-        // 更新 row_idx+1 的第二回波标记 (gnd_mark_line2(row_idx+1))
-        if ((ground_flag && (flag_12 || flag_22)) ||
-            (ground_flag2 && (flag2_12 || flag2_22))) {
-            gnd_mark1[row_idx+1] |= 1;
-        }
-
         // 低高度强制标记
         if (std::abs(z_down) < 20 && dist_down < 4000) {
-            gnd_mark0[row_idx-1] = 2;
+            gnd_mark0[row_idx - 1] = 2;
         }
         if (std::abs(z_down2) < 20 && dist_down2 < 4000) {
-            gnd_mark1[row_idx-1] = 2;
+            gnd_mark1[row_idx - 1] = 2;
         }
+
     }
 }
 
@@ -3308,7 +3463,7 @@ void AlgoFunction::rainEnhance(int spray_col,
  * @return int process column of point cloud
  *                  Range: 0 - 759. Accuracy: 1.
  */
-int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
+int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, int task_id)
 {
     int proc_col = -1;
     switch (task_id)
@@ -3322,108 +3477,106 @@ int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
                 utils::addThread(tid, "Stray_Algo");
                 first = false;
             }
-            for (int32_t col_idx = 0; col_idx < VIEW_W + max_data_size; ++col_idx){
-                // 地面拟合
-                if(col_idx >= 0 && col_idx < VIEW_W){
-                    if((col_idx % gnd_step) == 0){
-                        uint16_t dist_line[VIEW_H];
-                        uint16_t col_pos = col_idx / gnd_step;
-                        memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+            // 地面拟合
+            if(col_idx >= 0 && col_idx < VIEW_W){
+                if((col_idx % gnd_step) == 0){
+                    uint16_t dist_line[VIEW_H];
+                    uint16_t col_pos = col_idx / gnd_step;
+                    memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
 
-                        int surface_id = pstFrameBuffer->surface_id.load();
-                        int real_col;
-                        if(0 == surface_id)
-                        {
-                            real_col = (col_idx << 1);
-                        }
-                        else
-                        {
-                            real_col = UP_VIEW_W - (col_idx << 1) - 1;
-                        }
+                    int surface_id = pstFrameBuffer->surface_id.load();
+                    int real_col;
+                    if(0 == surface_id)
+                    {
+                        real_col = (col_idx << 1);
+                    }
+                    else
+                    {
+                        real_col = UP_VIEW_W - (col_idx << 1) - 1;
+                    }
 
-                        for(int row = 0; row < VIEW_H; ++row){
-                            int idx = row * GND_VIEW_W + col_pos;
-                            dist_wave0_buffer6[idx] = dist_line[row];
-                            int dist = dist_line[row];
-                            X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
-                            Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
-                            Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
-                        }
-                        if(col_idx == (VIEW_W - gnd_step)){
-                            selectGroundFitFunc(best_model_fit);
-                        }
+                    for(int row = 0; row < VIEW_H; ++row){
+                        int idx = row * GND_VIEW_W + col_pos;
+                        dist_wave0_buffer6[idx] = dist_line[row];
+                        int dist = dist_line[row];
+                        X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
+                        Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
+                        Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
+                    }
+                    if(col_idx == (VIEW_W - gnd_step)){
+                        selectGroundFitFunc(best_model_fit);
                     }
                 }
-                circularCalcIdx(rear3, buffer_size_stray);
+            }
+            circularCalcIdx(rear3, buffer_size_stray);
 
-                int stray_col_in = col_idx - StrayInDelayCol;
-                if (stray_col_in >= 0 && stray_col_in < VIEW_W){
-                    memcpy(dist_wave0_buffer3[rear3], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                    memcpy(dist_wave1_buffer3[rear3], pstFrameBuffer->dist1[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                    memcpy(refl_wave0_buffer3[rear3], pstFrameBuffer->ref0[stray_col_in], sizeof(uint8_t) * VIEW_H);
-                    memcpy(refl_wave1_buffer3[rear3], pstFrameBuffer->ref1[stray_col_in], sizeof(uint8_t) * VIEW_H);
-                    memcpy(grnd_wave0_buffer3[rear3], pstFrameBuffer->gnd_mark0[stray_col_in], sizeof(uint8_t) * VIEW_H);
-                    memcpy(grnd_wave1_buffer3[rear3], pstFrameBuffer->gnd_mark1[stray_col_in], sizeof(uint8_t) * VIEW_H);
-                    memcpy(high_wave0_buffer3[rear3], pstFrameBuffer->high0[stray_col_in], sizeof(int) * VIEW_H);
-                    memcpy(high_wave1_buffer3[rear3], pstFrameBuffer->high1[stray_col_in], sizeof(int) * VIEW_H);
-                    for(int i = 0; i < VIEW_H; ++i){
-                        uint8_t att0 = pstFrameBuffer->att0[stray_col_in][i];
-                        uint8_t att1 = pstFrameBuffer->att1[stray_col_in][i];
-                        smlr_wave0_buffer3[rear3][i] = (att0 >> 5) & 0x03;
-                        smlr_wave1_buffer3[rear3][i] = (att1 >> 5) & 0x03;
-                        peak_wave0_buffer3[rear3][i] = (att0 >> 3) & 0x01;
-                        peak_wave1_buffer3[rear3][i] = (att1 >> 3) & 0x01;
-                        crtk_wave0_buffer3[rear3][i] = att0 & 0x01;
-                        crtk_wave1_buffer3[rear3][i] = att1 & 0x01;
-                        rain_wave0_buffer3[rear3][i] = att0 >> 7;
-                        rain_wave1_buffer3[rear3][i] = att1 >> 7;
-                        head_wave0_buffer3[rear3][i] = (att0 >> 1) & 0x01;
-                        head_wave1_buffer3[rear3][i] = (att1 >> 1) & 0x01;
-                        tail_wave0_buffer3[rear3][i] = (att0 >> 2) & 0x01;
-                        tail_wave0_buffer3[rear3][i] = (att1 >> 2) & 0x01;
-                    }
+            int stray_col_in = col_idx - StrayInDelayCol;
+            if (stray_col_in >= 0 && stray_col_in < VIEW_W){
+                memcpy(dist_wave0_buffer3[rear3], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(dist_wave1_buffer3[rear3], pstFrameBuffer->dist1[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(refl_wave0_buffer3[rear3], pstFrameBuffer->ref0[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(refl_wave1_buffer3[rear3], pstFrameBuffer->ref1[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(grnd_wave0_buffer3[rear3], pstFrameBuffer->gnd_mark0[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(grnd_wave1_buffer3[rear3], pstFrameBuffer->gnd_mark1[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(high_wave0_buffer3[rear3], pstFrameBuffer->high0[stray_col_in], sizeof(int) * VIEW_H);
+                memcpy(high_wave1_buffer3[rear3], pstFrameBuffer->high1[stray_col_in], sizeof(int) * VIEW_H);
+                for(int i = 0; i < VIEW_H; ++i){
+                    uint8_t att0 = pstFrameBuffer->att0[stray_col_in][i];
+                    uint8_t att1 = pstFrameBuffer->att1[stray_col_in][i];
+                    smlr_wave0_buffer3[rear3][i] = (att0 >> 5) & 0x03;
+                    smlr_wave1_buffer3[rear3][i] = (att1 >> 5) & 0x03;
+                    peak_wave0_buffer3[rear3][i] = (att0 >> 3) & 0x01;
+                    peak_wave1_buffer3[rear3][i] = (att1 >> 3) & 0x01;
+                    crtk_wave0_buffer3[rear3][i] = att0 & 0x01;
+                    crtk_wave1_buffer3[rear3][i] = att1 & 0x01;
+                    rain_wave0_buffer3[rear3][i] = att0 >> 7;
+                    rain_wave1_buffer3[rear3][i] = att1 >> 7;
+                    head_wave0_buffer3[rear3][i] = (att0 >> 1) & 0x01;
+                    head_wave1_buffer3[rear3][i] = (att1 >> 1) & 0x01;
+                    tail_wave0_buffer3[rear3][i] = (att0 >> 2) & 0x01;
+                    tail_wave0_buffer3[rear3][i] = (att1 >> 2) & 0x01;
                 }
-                else {
-                    //超过最大列，帧间buffer补0
-                    memset(dist_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-                    memset(dist_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-                    memset(refl_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(refl_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(grnd_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(grnd_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(high_wave0_buffer3[rear3], 0, sizeof(int) * VIEW_H);
-                    memset(high_wave1_buffer3[rear3], 0, sizeof(int) * VIEW_H);
-                    memset(smlr_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(smlr_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(peak_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(peak_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(crtk_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(crtk_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(rain_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(rain_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(head_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(head_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                }
-                int stray_col = stray_col_in - StrayDelayCol;
-                int stray_col_buffer = matlabMod(rear3 + 1 - StrayDelayCol - 1, buffer_size_stray);
-                int stray_col_neib_buf[3];
-                for (int i = 0; i < 3; i++) {
-                    stray_col_neib_buf[i] = matlabMod((stray_col_buffer + 1 - 1 + i) - 1, buffer_size_stray);
-                }
-                int stray_mark_out0[VIEW_H] = { 0 };
-                int stray_mark_out1[VIEW_H] = { 0 };
+            }
+            else {
+                //超过最大列，帧间buffer补0
+                memset(dist_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                memset(dist_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                memset(refl_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(refl_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(grnd_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(grnd_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(high_wave0_buffer3[rear3], 0, sizeof(int) * VIEW_H);
+                memset(high_wave1_buffer3[rear3], 0, sizeof(int) * VIEW_H);
+                memset(smlr_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(smlr_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(peak_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(peak_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(crtk_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(crtk_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(head_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(head_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+            }
+            int stray_col = stray_col_in - StrayDelayCol;
+            int stray_col_buffer = matlabMod(rear3 + 1 - StrayDelayCol - 1, buffer_size_stray);
+            int stray_col_neib_buf[3];
+            for (int i = 0; i < 3; i++) {
+                stray_col_neib_buf[i] = matlabMod((stray_col_buffer + 1 - 1 + i) - 1, buffer_size_stray);
+            }
+            int stray_mark_out0[VIEW_H] = { 0 };
+            int stray_mark_out1[VIEW_H] = { 0 };
 
-                //杂散删除 初始化输出
-                if(0 == col_idx){
-                    memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
-                    RainWall_out = {0, 0, 0};
-                }
-                strayDelete(stray_col, stray_col_buffer, stray_col_neib_buf, stray_mark_out0, stray_mark_out1);
+            //杂散删除 初始化输出
+            if(0 == col_idx){
+                memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
+                RainWall_out = {0, 0, 0};
+            }
+            strayDelete(stray_col, stray_col_buffer, stray_col_neib_buf, stray_mark_out0, stray_mark_out1);
 
-                if(stray_col >= 0 && stray_col < VIEW_W){
-                    memcpy(stray_mask_out_frm0[stray_col], stray_mark_out0, sizeof(stray_mark_out0));
-                    memcpy(stray_mask_out_frm1[stray_col], stray_mark_out1, sizeof(stray_mark_out1));
-                }
+            if(stray_col >= 0 && stray_col < VIEW_W){
+                memcpy(stray_mask_out_frm0[stray_col], stray_mark_out0, sizeof(stray_mark_out0));
+                memcpy(stray_mask_out_frm1[stray_col], stray_mark_out1, sizeof(stray_mark_out1));
             }
         }break;
         case RAIN_ALGO:
@@ -3435,61 +3588,59 @@ int AlgoFunction::pcAlgoMainFunc(tstFrameBuffer* pstFrameBuffer, int task_id)
                 utils::addThread(tid, "Rain_Algo");
                 first = false;
             }
-            for (int32_t col_idx = 0; col_idx < VIEW_W + max_data_size; ++col_idx){
-                circularCalcIdx(rear4, buffer_size_spray);
-                int spray_col_in = col_idx - SprayInDelayCol;
-                if (spray_col_in >= 0 && spray_col_in < VIEW_W) {
-                    memcpy(dist_wave0_buffer4[rear4], pstFrameBuffer->dist0[spray_col_in], sizeof(uint16_t) * VIEW_H);
-                    memcpy(dist_wave1_buffer4[rear4], pstFrameBuffer->dist1[spray_col_in], sizeof(uint16_t) * VIEW_H);
-                    memcpy(refl_wave0_buffer4[rear4], pstFrameBuffer->ref0[spray_col_in], sizeof(uint8_t) * VIEW_H);
-                    memcpy(refl_wave1_buffer4[rear4], pstFrameBuffer->ref1[spray_col_in], sizeof(uint8_t) * VIEW_H);
-                    memcpy(grnd_wave0_buffer4[rear4], pstFrameBuffer->gnd_mark0[spray_col_in], sizeof(uint8_t) * VIEW_H);
-                    memcpy(grnd_wave1_buffer4[rear4], pstFrameBuffer->gnd_mark1[spray_col_in], sizeof(uint8_t) * VIEW_H);
-                    for (int i = 0; i < VIEW_H; ++i) {
-                        uint8_t att0 = pstFrameBuffer->att0[spray_col_in][i];
-                        uint8_t att1 = pstFrameBuffer->att1[spray_col_in][i];
-                        rain_wave0_buffer4[rear4][i] = att0 >> 7;
-                        rain_wave1_buffer4[rear4][i] = att1 >> 7;
-                        head_wave0_buffer4[rear4][i] = (att0 >> 1) & 0x01;
-                        head_wave1_buffer4[rear4][i] = (att1 >> 1) & 0x01;
-                        tail_wave0_buffer4[rear4][i] = (att0 >> 2) & 0x01;
-                        tail_wave1_buffer4[rear4][i] = (att1 >> 2) & 0x01;
-                        rain_final0_buffer[rear4][i] = att0 >> 7;
-                        rain_final1_buffer[rear4][i] = att1 >> 7;
-                    }
+            circularCalcIdx(rear4, buffer_size_spray);
+            int spray_col_in = col_idx - SprayInDelayCol;
+            if (spray_col_in >= 0 && spray_col_in < VIEW_W) {
+                memcpy(dist_wave0_buffer4[rear4], pstFrameBuffer->dist0[spray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(dist_wave1_buffer4[rear4], pstFrameBuffer->dist1[spray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(refl_wave0_buffer4[rear4], pstFrameBuffer->ref0[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(refl_wave1_buffer4[rear4], pstFrameBuffer->ref1[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(grnd_wave0_buffer4[rear4], pstFrameBuffer->gnd_mark0[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(grnd_wave1_buffer4[rear4], pstFrameBuffer->gnd_mark1[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                for (int i = 0; i < VIEW_H; ++i) {
+                    uint8_t att0 = pstFrameBuffer->att0[spray_col_in][i];
+                    uint8_t att1 = pstFrameBuffer->att1[spray_col_in][i];
+                    rain_wave0_buffer4[rear4][i] = att0 >> 7;
+                    rain_wave1_buffer4[rear4][i] = att1 >> 7;
+                    head_wave0_buffer4[rear4][i] = (att0 >> 1) & 0x01;
+                    head_wave1_buffer4[rear4][i] = (att1 >> 1) & 0x01;
+                    tail_wave0_buffer4[rear4][i] = (att0 >> 2) & 0x01;
+                    tail_wave1_buffer4[rear4][i] = (att1 >> 2) & 0x01;
+                    rain_final0_buffer[rear4][i] = att0 >> 7;
+                    rain_final1_buffer[rear4][i] = att1 >> 7;
                 }
-                else {
-                    //超过最大列，帧间buffer补0
-                    memset(dist_wave0_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-                    memset(dist_wave1_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-                    memset(refl_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(refl_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(grnd_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(grnd_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(rain_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(rain_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(head_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(head_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(tail_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(tail_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(rain_final0_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(rain_final1_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
-                }
-                int spray_col = spray_col_in - SprayDelayCol;
-                int spray_col_buffer = matlabMod(rear4 + 1 - SprayDelayCol - 1, buffer_size_spray);
-                int spray_col_neib_buf[RAIN_SIZE_X];
-                for (int i = 0; i < RAIN_SIZE_X; i++) {
-                    spray_col_neib_buf[i] = matlabMod((spray_col_buffer + 1 - spray_Param.Area_size_x + i) - 1, buffer_size_spray);
-                }
-                int spray_mark_out0[VIEW_H]{ 0 };
-                int spray_mark_out1[VIEW_H]{ 0 };
-                rainEnhance(spray_col, spray_col_buffer, spray_col_neib_buf, spray_mark_out0, spray_mark_out1);
+            }
+            else {
+                //超过最大列，帧间buffer补0
+                memset(dist_wave0_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
+                memset(dist_wave1_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
+                memset(refl_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(refl_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(grnd_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(grnd_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(head_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(head_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(tail_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(tail_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_final0_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_final1_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
+            }
+            int spray_col = spray_col_in - SprayDelayCol;
+            int spray_col_buffer = matlabMod(rear4 + 1 - SprayDelayCol - 1, buffer_size_spray);
+            int spray_col_neib_buf[RAIN_SIZE_X];
+            for (int i = 0; i < RAIN_SIZE_X; i++) {
+                spray_col_neib_buf[i] = matlabMod((spray_col_buffer + 1 - spray_Param.Area_size_x + i) - 1, buffer_size_spray);
+            }
+            int spray_mark_out0[VIEW_H]{ 0 };
+            int spray_mark_out1[VIEW_H]{ 0 };
+            rainEnhance(spray_col, spray_col_buffer, spray_col_neib_buf, spray_mark_out0, spray_mark_out1);
 
-                int spray_out_col = spray_col - SprayFilterDelayCol - SprayOutDelayCol;
-                if (spray_out_col >= 0 && spray_out_col < VIEW_W) {
-                    memcpy(spray_mark_out_frm0[spray_out_col], spray_mark_out0, sizeof(spray_mark_out0));
-                    memcpy(spray_mark_out_frm1[spray_out_col], spray_mark_out1, sizeof(spray_mark_out1));
-                }
+            int spray_out_col = spray_col - SprayFilterDelayCol - SprayOutDelayCol;
+            if (spray_out_col >= 0 && spray_out_col < VIEW_W) {
+                memcpy(spray_mark_out_frm0[spray_out_col], spray_mark_out0, sizeof(spray_mark_out0));
+                memcpy(spray_mark_out_frm1[spray_out_col], spray_mark_out1, sizeof(spray_mark_out1));
             }
         }break;
         default:
