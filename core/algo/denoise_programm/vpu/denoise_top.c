@@ -44,11 +44,6 @@ VMEM(C, RasterDataFlowHandler, src_dist_dataflow_handler);
 VMEM_RDF_UNIFIED(B, dst_mask_dataflow_handler);
 VMEM_RDF_UNIFIED(B, dst_last_mask_dataflow_handler);
 
-uint16_t threshold_32[32];
-uint16_t threshold1_32[32];
-uint16_t threshold2_32[32];
-uint16_t dist_seg_32[32];
-
 dvshortx dist[5][3];
 dvshortx vec0;
 
@@ -262,12 +257,7 @@ CUPVA_VPU_MAIN()
         uint16_t *output_mask  = (uint16_t *)cupvaRasterDataFlowAcquire(dst_mask_dataflow_handler);
 #if 1 
         agenConfig(input_dist_vmem + src_offset, vpu_mask_vmem, output_mask, src_line_pitch, &config);
-        agenConfigVar(threshold_32, threshold1_32, threshold2_32, dist_seg_32, &config);
-        
-        agen threshold_agen = init_agen_from_cfg(config.threshold);
-        agen threshold1_agen = init_agen_from_cfg(config.threshold1);
-        agen threshold2_agen = init_agen_from_cfg(config.threshold2);
-        agen dist_seg_agen = init_agen_from_cfg(config.dist_seg);
+        //agenConfigVar(threshold_32, threshold1_32, threshold2_32, dist_seg_32, &config);
 
         agen input_agen = init_agen_from_cfg(config.input_dist);
         agen output_agen = init_agen_from_cfg(config.output_mask);
@@ -312,24 +302,10 @@ CUPVA_VPU_MAIN()
                 cmp_mask = dist[2][1] >= (k * 12000);
                 dist_seg = dvmux(cmp_mask, dist_seg + 1, dist_seg);
             }
-            
-            vstore(dist_seg, dist_seg_agen);
-            
-            /*计算threshold, threshold1, threshold2*/
-            int start_row = (i % 6) * 32;
-            int idx = 0;
-            for (int row = start_row; row < (start_row + 32); row ++) {
-                int block_id = (row + 24) / 24 - 1;
-                int region = params->region_list[block_id] - 1;
-                threshold_32[idx] = params->denoise_point[dist_seg_32[idx]][region][0];
-                threshold1_32[idx] = params->denoise_point[dist_seg_32[idx]][region][1];
-                threshold2_32[idx] = params->denoise_point[dist_seg_32[idx]][region][2];
-                idx ++;
-            }
 
-            dvshortx threshold = dvushort_load(threshold_agen);
-            dvshortx threshold1 = dvushort_load(threshold1_agen);
-            dvshortx threshold2 = dvushort_load(threshold2_agen);
+            dvshortx threshold = vec0 + 1;
+            dvshortx threshold1 = dist_seg > 0;
+            dvshortx threshold2 = vec0 + 2;
 
             /*获取diff_th*/
             diff_th = dist_seg;
@@ -369,15 +345,13 @@ CUPVA_VPU_MAIN()
             dvshortx cond;
 
             /*领域窗口构建优化*/
-            dvshortx valid_mask2[5][3];
             for (int c = 0; c < 5; c ++) {
                 for (int r = 0; r < 3; r ++) {
-                    valid_mask2[c][r] = valid_mask[c][r];
                     /*有效性判断*/
                     cmp_mask = (dvabsdif(dist[2][1], dist[c][r]) <= diff_th);
                     int zone = params->zone_matrix[r][c];
                     if (zone > 0) {
-                        valid_mask2[c][r] = cmp_mask;
+                        valid_mask[c][r] = cmp_mask;
                     }
                     if (zone == 1) {
                         neib_valid_num +=1;
@@ -396,7 +370,7 @@ CUPVA_VPU_MAIN()
                 for (int c = 0; c < 5; c ++) {
                     dvshortx output_valid = dvushort_load(load_mask_agen);
                     /*传播有效标记优化*/
-                    output_valid = (dist_valid && denoise_refer_mask == 1 && cond && valid_mask2[c][r]) | output_valid;
+                    output_valid = (dist_valid && denoise_refer_mask == 1 && cond && valid_mask[c][r]) | output_valid;
                     if (r == 1) {
                         if (c == 2) {
                             output_valid |= (dist_valid && (denoise_refer_mask == 2 || (denoise_refer_mask == 1 && cond)));
