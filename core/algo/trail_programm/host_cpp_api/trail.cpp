@@ -46,7 +46,6 @@ uint16_t *DistIn_h = nullptr;
 uint16_t *ValidOut_d = nullptr;
 uint16_t *ValidOut_h = nullptr;
 
-uint16_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH] = {0};
 Stream Trail_stream;
 namespace
 {
@@ -113,12 +112,9 @@ void trail_main()
         SyncObj sync = SyncObj::Create();
         Fence fence{sync};
         CmdRequestFences rf{fence};
-        /** Bind trail algorithm to VPU0 */
-        
         CmdStatus status[2];
         Trail_stream.submit({&prog, &rf}, status);
         fence.wait();
-        memcpy(&TrailMask[0][0], ValidOut_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {
