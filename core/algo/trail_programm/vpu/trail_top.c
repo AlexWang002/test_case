@@ -55,13 +55,6 @@ dvshortx zero_flag[5];
 dvshortx dist_tmp[5];
 /**
  * \brief  Agen initialization function
- *
- * \param[in] input_dist : Input distance tile start address for input_wrapper
- *                Range: 0 - 2^16-1. Accuracy: 1.
- * \param[in] intput_dist_longit : Input distance tile start address for longit_wrapper
- *                Range: 0 - 2^16-1. Accuracy: 1.
- * \param[in] output_valid : Output valid tile start address for output_wrapper
- *                Range: 0 - 2^16-1. Accuracy: 1.
  * \param[in] input_line_pitch : Distance linepitch
  *                Range: 200 Accuracy: 1.
  * \param[in] dst_line_pitch : Valid linepitch
@@ -69,8 +62,7 @@ dvshortx dist_tmp[5];
  * \param[in] config : Trail agen configuration
  *                Range: 0-1. Accuracy: 1.
  */
-void trail_remove_init(uint16_t *input_dist, uint16_t *intput_dist_longit, uint16_t *output_valid,
-                      int32_t input_line_pitch, int32_t dst_line_pitch,
+void trail_remove_init(int32_t input_line_pitch, int32_t dst_line_pitch,
                       TrailConfig_t *config) {
     /** Get Vector Width (Number of elements contained in each dvshortx)*/
     config->vecw = pva_elementsof(dvshortx);
@@ -85,7 +77,7 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *intput_dist_longit, uint1
     input_wrapper.s2   = vecw;                   /**< Second-dimension step size: Vector width (horizontal jump) */
     input_wrapper.n3   = TILE_HEIGHT;            /**< Third Dimension: Tile Height (Total Number of Rows Processed) */
     input_wrapper.s3   = input_line_pitch;       /**< Third-dimensional step size: Line spacing (vertical jump per line) */
-    agen input_agen = init((dvushort *)input_dist);
+    agen input_agen = init((dvushort *)NULL);
     INIT_AGEN3(input_agen, input_wrapper);
     config->input_dist = extract_agen_cfg(input_agen);
 
@@ -98,7 +90,7 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *intput_dist_longit, uint1
     longit_wrapper.s2   = vecw;
     longit_wrapper.n3   = TILE_HEIGHT;
     longit_wrapper.s3   = input_line_pitch;
-    agen longit_agen = init((dvushort *)intput_dist_longit);
+    agen longit_agen = init((dvushort *)NULL);
     INIT_AGEN3(longit_agen, longit_wrapper);
     config->input_longit = extract_agen_cfg(longit_agen);
 
@@ -109,7 +101,7 @@ void trail_remove_init(uint16_t *input_dist, uint16_t *intput_dist_longit, uint1
     output_wrapper.s1   = vecw;
     output_wrapper.n2   = TILE_HEIGHT;
     output_wrapper.s2   = dst_line_pitch;
-    agen output_agen = init((dvushort *)output_valid);
+    agen output_agen = init((dvushort *)NULL);
     INIT_AGEN2(output_agen, output_wrapper);
     config->output_valid = extract_agen_cfg(output_agen);
 
@@ -360,6 +352,7 @@ CUPVA_VPU_MAIN() {
 
     cupvaRasterDataFlowTrig(sourceDistDataFlowHandler);
 
+    trail_remove_init(srcDistLinePitch, dstLinePitch, &config);
     for (int TileIdx = 0; TileIdx < TILE_COUNT; TileIdx++)
     {
         for(int i = 0; i < TILE_WIDTH * TILE_HEIGHT; i++){
@@ -369,12 +362,9 @@ CUPVA_VPU_MAIN() {
         cupvaRasterDataFlowTrig(sourceDistDataFlowHandler);
 
         /** Update agen base address */
-        trail_remove_init(&inputDistBufferVMEM[srcDistOffset+ KERNEL_RADIUS_WIDTH],
-                            &inputDistBufferVMEM[srcDistOffset + 2 * srcDistLinePitch],
-                            &outputValidBufferVMEM[dstOffset],
-                            srcDistLinePitch,
-                            dstLinePitch,
-                            &config);
+        cupvaModifyAgenCfgBase(&config.input_dist, &inputDistBufferVMEM[srcDistOffset+ KERNEL_RADIUS_WIDTH]);
+        cupvaModifyAgenCfgBase(&config.input_longit, &inputDistBufferVMEM[srcDistOffset + 2 * srcDistLinePitch]);
+        cupvaModifyAgenCfgBase(&config.output_valid, &outputValidBufferVMEM[dstOffset]);
 
         trail_remove_exec(trail_Param, &config);
 
