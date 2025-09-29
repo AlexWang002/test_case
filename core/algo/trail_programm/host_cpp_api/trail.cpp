@@ -119,15 +119,6 @@ void trail_main()
         Trail_stream.submit({&prog, &rf}, status);
         fence.wait();
         memcpy(&TrailMask[0][0], ValidOut_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
-        int cnt = 0;
-        for (int i = 0; i < VIEW_HEIGHT; i++) {
-            for (int j = 0; j < VIEW_WIDTH; j++) {
-                if (TrailMask[i][j] == 1) {
-                    cnt++;
-                }
-            }
-        }
-        std::cout << "trail count: " << cnt << std::endl;
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {
