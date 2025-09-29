@@ -3,8 +3,8 @@
  * \{
  * \file denoise_top.c
  * \brief
- * \version 0.1
- * \date 2025-09-11
+ * \version 0.2
+ * \date 2025-09-29
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -13,6 +13,10 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
+ * 
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-09-29 | Use vpu's Wide-SIMD vector processor to accelerate denoise algo|
  *
  ******************************************************************************/
 /******************************************************************************/
@@ -44,70 +48,35 @@ VMEM(C, RasterDataFlowHandler, src_dist_dataflow_handler);
 VMEM_RDF_UNIFIED(B, dst_mask_dataflow_handler);
 VMEM_RDF_UNIFIED(B, dst_last_mask_dataflow_handler);
 
-dvshortx dist[5][3];
-dvshortx vec0;
+dvshortx dist[5][3];  // 5*3滑窗dist值
+dvshortx vec0;        // 0向量
 
+/*二维去噪算法AGEN结构体*/
 typedef struct {
-    AgenCFG threshold;
-    AgenCFG threshold1;
-    AgenCFG threshold2;
-    AgenCFG dist_seg;
+    AgenCFG input_dist;       // 输入dist agen
+    AgenCFG output_mask;      // 输出mask agen
+    AgenCFG load_mask;        // 加载vpu_mask agen(包含halo)
+    AgenCFG load_mask2;       // 加载vpu_mask agen2(不包含halo)
+    AgenCFG store_mask;       // 存储vpu_mask agen(包含halo)
 
-    AgenCFG input_dist;
-    AgenCFG output_mask;
-    AgenCFG load_mask;
-    AgenCFG load_mask2;
-    AgenCFG store_mask;
-
-    AgenCFG pre_tile;
-    AgenCFG next_tile;
+    AgenCFG pre_tile;         // 加载前一个tile 后4列 agen
+    AgenCFG next_tile;        // 存储当前tile 前4列agen
 
     int32_t niter;            // 总迭代次数（= 横向向量数 × 瓦片高度）
     int32_t vecw;             // 向量宽度（pva_elementsof(dvshortx)）
 } DenoiseConfig_t;
 
-
-void agenConfigVar(uint16_t *threshold_32, uint16_t *threshold1_32, uint16_t *threshold2_32, uint16_t *dist_seg_32, DenoiseConfig_t *config) {
-    // 获取向量宽度（每个dvshortx包含的元素数）
-    config->vecw = pva_elementsof(dvshortx);
-    int32_t vecw = config->vecw;
-
-    AgenWrapper threshold_wrapper;
-    threshold_wrapper.size = sizeof(uint16_t);       
-    threshold_wrapper.n1   = 570;                      
-    threshold_wrapper.s1   = 0;                  
-    agen threshold_agen = init((dvushort *)threshold_32);
-    INIT_AGEN3(threshold_agen, threshold_wrapper);      
-    config->threshold = extract_agen_cfg(threshold_agen);
-
-    AgenWrapper threshold1_wrapper;
-    threshold1_wrapper.size = sizeof(uint16_t);       
-    threshold1_wrapper.n1   = 570;                      
-    threshold1_wrapper.s1   = 0;
-    agen threshold1_agen = init((dvushort *)threshold1_32);
-    INIT_AGEN3(threshold1_agen, threshold1_wrapper);
-    config->threshold1 = extract_agen_cfg(threshold1_agen);
-
-    AgenWrapper threshold2_wrapper;
-    threshold2_wrapper.size = sizeof(uint16_t);       
-    threshold2_wrapper.n1   = 570;                      
-    threshold2_wrapper.s1   = 0;                  
-    agen threshold2_agen = init((dvushort *)threshold2_32);
-    INIT_AGEN3(threshold2_agen, threshold2_wrapper);      
-    config->threshold2 = extract_agen_cfg(threshold2_agen);
-
-    AgenWrapper dist_seg_wrapper;
-    dist_seg_wrapper.size = sizeof(uint16_t);      
-    dist_seg_wrapper.n1   = 570;                    
-    dist_seg_wrapper.s1   = 0;                 
-    agen dist_seg_agen = init((dvushort *)dist_seg_32);
-    INIT_AGEN3(dist_seg_agen, dist_seg_wrapper);      
-    config->dist_seg = extract_agen_cfg(dist_seg_agen);
-}
-
+/**
+ * 初始化函数：为所有瓦片配置AGEN和计算参数
+ * @param vpu_mask: vpu临时有效缓冲区
+ * @param output_lask_mask: 最后2列输出有效缓冲区
+ * @param config: 输出的配置结构体
+ */
 void agenConfigLast(uint16_t *vpu_mask, uint16_t *output_lask_mask, DenoiseConfig_t *config)
 {
     int32_t vecw = config->vecw;
+
+    /*每一帧的最后2列*/
     AgenWrapper pre_tile_wrapper;
     pre_tile_wrapper.size = sizeof(uint16_t);
     pre_tile_wrapper.n1 = TILE_WIDTH / vecw;
@@ -132,17 +101,17 @@ void agenConfigLast(uint16_t *vpu_mask, uint16_t *output_lask_mask, DenoiseConfi
 /**
  * 初始化函数：为所有瓦片配置AGEN和计算参数
  * @param input_dist: 输入距离数据缓冲区
- * @param output_valid: 输出有效缓冲区
+ * @param vpu_mask: vpu临时有效缓冲区
+ * @param output_mask: 输出有效缓冲区
  * @param input_line_pitch: 输入行间距
- * @param dst_line_pitch: 输出行间距
  * @param config: 输出的配置结构体
  */
 void agenConfig(uint16_t *input_dist, uint16_t *vpu_mask, uint16_t *output_mask, int32_t input_line_pitch, DenoiseConfig_t *config) {
-    // 获取向量宽度（每个dvshortx包含的元素数）
-    config->vecw = pva_elementsof(dvshortx);
+    /*获取向量宽度（每个dvshortx包含的元素数）*/
+    config->vecw = pva_elementsof(dvshortx); // 32
     int32_t vecw = config->vecw;
 
-    // 1. 配置水平5邻域距离数据的3维AGEN
+    /*循环次数：5 * 3 * 6 * 95*/
     AgenWrapper input_wrapper;
     input_wrapper.size = sizeof(uint16_t);
     input_wrapper.n1   = 5;
@@ -157,6 +126,7 @@ void agenConfig(uint16_t *input_dist, uint16_t *vpu_mask, uint16_t *output_mask,
     INIT_AGEN4(input_agen, input_wrapper);
     config->input_dist = extract_agen_cfg(input_agen);
 
+    /*循环次数：6 * 95*/
     AgenWrapper output_wrapper;
     output_wrapper.size = sizeof(uint16_t);
     output_wrapper.n1   = TILE_WIDTH / vecw;
@@ -167,6 +137,7 @@ void agenConfig(uint16_t *input_dist, uint16_t *vpu_mask, uint16_t *output_mask,
     INIT_AGEN2(output_agen, output_wrapper);
     config->output_mask = extract_agen_cfg(output_agen);
 
+    /*循环次数：5 * 3 * 6 * 95*/
     AgenWrapper load_mask_wrapper;
     load_mask_wrapper.size = sizeof(uint16_t);
     load_mask_wrapper.n1 = 5;
@@ -181,6 +152,7 @@ void agenConfig(uint16_t *input_dist, uint16_t *vpu_mask, uint16_t *output_mask,
     INIT_AGEN4(load_agen, load_mask_wrapper);
     config->load_mask = extract_agen_cfg(load_agen);
 
+    /*循环次数：6 * 95*/
     AgenWrapper load_mask_wrapper2;
     load_mask_wrapper2.size = sizeof(uint16_t);
     load_mask_wrapper2.n1 = TILE_WIDTH / vecw;
@@ -191,6 +163,7 @@ void agenConfig(uint16_t *input_dist, uint16_t *vpu_mask, uint16_t *output_mask,
     INIT_AGEN2(load_agen2, load_mask_wrapper2);
     config->load_mask2 = extract_agen_cfg(load_agen2);
 
+    /*循环次数：5 * 3 * 6 * 95*/
     AgenWrapper store_mask_wrapper;
     store_mask_wrapper.size = sizeof(uint16_t);
     store_mask_wrapper.n1 = 5;
@@ -205,6 +178,7 @@ void agenConfig(uint16_t *input_dist, uint16_t *vpu_mask, uint16_t *output_mask,
     INIT_AGEN4(store_agen, store_mask_wrapper);
     config->store_mask = extract_agen_cfg(store_agen);
 
+    /*上个tile的最后4列*/
     AgenWrapper pre_tile_wrapper;
     pre_tile_wrapper.size = sizeof(uint16_t);
     pre_tile_wrapper.n1 = TILE_WIDTH / vecw;
@@ -215,6 +189,7 @@ void agenConfig(uint16_t *input_dist, uint16_t *vpu_mask, uint16_t *output_mask,
     INIT_AGEN2(pre_tile_agen, pre_tile_wrapper);
     config->pre_tile = extract_agen_cfg(pre_tile_agen);
 
+    /*下个tile的前4列*/
     AgenWrapper next_tile_wrapper;
     next_tile_wrapper.size = sizeof(uint16_t);
     next_tile_wrapper.n1 = TILE_WIDTH / vecw;
@@ -225,7 +200,7 @@ void agenConfig(uint16_t *input_dist, uint16_t *vpu_mask, uint16_t *output_mask,
     INIT_AGEN2(next_tile_agen, next_tile_wrapper);
     config->next_tile = extract_agen_cfg(next_tile_agen);
 
-    // 计算总迭代次数（横向向量数 × 纵向行数）
+    /*计算总迭代次数（横向向量数 × 纵向行数）*/
     config->niter = (TILE_WIDTH / vecw) * TILE_HEIGHT;
 }
 
@@ -257,7 +232,6 @@ CUPVA_VPU_MAIN()
         uint16_t *output_mask  = (uint16_t *)cupvaRasterDataFlowAcquire(dst_mask_dataflow_handler);
 #if 1 
         agenConfig(input_dist_vmem + src_offset, vpu_mask_vmem, output_mask, src_line_pitch, &config);
-        //agenConfigVar(threshold_32, threshold1_32, threshold2_32, dist_seg_32, &config);
 
         agen input_agen = init_agen_from_cfg(config.input_dist);
         agen output_agen = init_agen_from_cfg(config.output_mask);
@@ -270,6 +244,7 @@ CUPVA_VPU_MAIN()
 
         int32_t niter = config.niter;
 
+        /*将前一个tile的最后4列mask作为当前tile的头4列mask*/
         for (int32_t i = 0; i < 24; i ++) chess_prepare_for_pipelining
         chess_unroll_loop(2)
         {
@@ -277,6 +252,7 @@ CUPVA_VPU_MAIN()
             vstore(pre_tile_mask, next_agen);
         }
 
+        /*mask值清零*/
         for (int32_t i = 0; i < niter; i ++) chess_prepare_for_pipelining
         chess_unroll_loop(2)
         {
@@ -318,6 +294,7 @@ CUPVA_VPU_MAIN()
             cmp_mask = dist_seg == 3;
             diff_th = dvmux(cmp_mask, vec0 + 300, diff_th);
 
+            /*初始化5*3滑窗的valid_mask*/
             dvshortx valid_mask[5][3];
             for (int m = 0; m < 5; m ++) {
                 for (int n = 0; n < 3; n ++) {
@@ -385,7 +362,7 @@ CUPVA_VPU_MAIN()
             }
         }
 
-        /*去除mask数组的halo*/
+        /*去除mask数组的halo，并传回host端*/
         for (int32_t i = 0; i < niter; i ++) chess_prepare_for_pipelining
         chess_unroll_loop(2)
         {
