@@ -1,6 +1,6 @@
 Algorithm_Switch:
     enable_trail_remove: true
-    enable_denoise: false
+    enable_denoise: true
     enable_high_ref_cross: false
     enable_filter: true
     enable_hor_dist_smooth: false
