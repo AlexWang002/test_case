@@ -3,8 +3,8 @@
  * \{
  * \file denoise.cpp
  * \brief
- * \version 0.1
- * \date 2025-09-11
+ * \version 0.2
+ * \date 2025-09-29
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -13,6 +13,10 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
+ * 
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-09-29 | Use vpu's Wide-SIMD vector processor to accelerate denoise algo|
  *
  ******************************************************************************/
 
@@ -43,6 +47,9 @@ namespace {
     NoiseParam_t NoiseParams = DEFAULT_DENOISE_PARAM;
 }
 
+/**
+ * \brief Alloc memory for denoise processing data structures
+*/
 int denoiseDataAlloc()
 {
     try
@@ -63,6 +70,9 @@ int denoiseDataAlloc()
     return 0;
 }
 
+/**
+ * \brief Free memory for denoise processing data structures
+*/
 int denoiseDataFree()
 {
     try
@@ -78,7 +88,9 @@ int denoiseDataFree()
     return 0;
 }
 
-
+/**
+ * \brief Create and submit pva task for denoise algo
+*/
 int denoiseProcPva()
 {
     try
