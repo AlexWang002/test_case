@@ -298,8 +298,8 @@ void CloudManager::algoFinalProcess(void)
                 for (int col_idx = 0; col_idx < algo_func_.VIEW_W; col_idx++)
                 {
                     // 获取掩码指针
-                    uint8_t* trail_mask_out = algo_func_.trail_mask_out_frm[col_idx];
-                    uint16_t* denoise_mask_out = algo_func_.denoise_mask_out_frm[col_idx];
+                    uint16_t* trail_mask_out = algo_func_.trail_mask_out_frm[col_idx];
+                    int* denoise_mask_out = algo_func_.denoise_mask_out_frm[col_idx];
                     int* stray_mask_out0 = algo_func_.stray_mask_out_frm0[col_idx];
                     int* stray_mask_out1 = algo_func_.stray_mask_out_frm1[col_idx];
                     int* spray_mask_out0 = algo_func_.spray_mark_out_frm0[col_idx];

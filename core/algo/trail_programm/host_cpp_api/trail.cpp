@@ -43,10 +43,10 @@ PVA_DECLARE_EXECUTABLE(trail_dev)
 uint16_t *DistIn_d = nullptr;
 uint16_t *DistIn_h = nullptr;
 
-uint8_t *ValidOut_d = nullptr;
-uint8_t *ValidOut_h = nullptr;
+uint16_t *ValidOut_d = nullptr;
+uint16_t *ValidOut_h = nullptr;
 
-uint8_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH] = {0};
+uint16_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH] = {0};
 Stream Trail_stream;
 namespace
 {
@@ -60,8 +60,8 @@ void TrailDataAlloc()
     DistIn_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
     DistIn_h = (uint16_t *)mem::GetHostPointer(DistIn_d);
 
-    ValidOut_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT* VIEW_WIDTH * sizeof(uint8_t));
-    ValidOut_h = (uint8_t *)mem::GetHostPointer(ValidOut_d);
+    ValidOut_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT* VIEW_WIDTH * sizeof(uint16_t));
+    ValidOut_h = (uint16_t *)mem::GetHostPointer(ValidOut_d);
 
     Trail_stream = Stream::Create(PVA0, VPU0);
 }
@@ -94,7 +94,7 @@ void trail_main()
 
         RasterDataFlow &destinationDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto destinationDataFlowHandler     = prog["destinationDataFlowHandler"];
-        uint8_t *outputValidBufferVMEM       = prog["outputValidBufferVMEM"].ptr<uint8_t>();
+        uint16_t *outputValidBufferVMEM       = prog["outputValidBufferVMEM"].ptr<uint16_t>();
 
         sourceDistDataFlow.handler(sourceDistDataFlowHandler)
             .src(DistIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
@@ -118,7 +118,7 @@ void trail_main()
         CmdStatus status[2];
         Trail_stream.submit({&prog, &rf}, status);
         fence.wait();
-        memcpy(&TrailMask[0][0], ValidOut_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
+        memcpy(&TrailMask[0][0], ValidOut_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {

@@ -1747,7 +1747,7 @@ void AlgoFunction::algoFianlDecision(int col_idx, uint16_t *pu16Dist, uint8_t *p
         memcpy(buffer_refl_wave1, current_refl_wave1, sizeof(uint8_t) * VIEW_H);
 
         // 获取掩码指针
-        uint8_t* trail_mask_out = trail_mask_out_frm[decision_col];
+        uint16_t* trail_mask_out = trail_mask_out_frm[decision_col];
         int* stray_mask_out0 = stray_mask_out_frm0[decision_col];
         int* stray_mask_out1 = stray_mask_out_frm1[decision_col];
         int* spray_mask_out0 = spray_mark_out_frm0[decision_col];
