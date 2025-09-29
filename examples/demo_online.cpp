@@ -1162,9 +1162,9 @@ int32_t main(int32_t argc, char* argv[]) {
                   << ", nrc: " << (uint16_t)nrc << std::endl;
 
         std::this_thread::sleep_for(std::chrono::seconds(2));
-        std::string algo_yaml_path{"./algorithm_switch.yaml"};
+        //std::string algo_yaml_path{"./algorithm_switch.yaml"};
         std::uint8_t interval{0};
-        (void)yaml::readAlgoYaml(algo_yaml_path);
+        //(void)yaml::readAlgoYaml(algo_yaml_path);
 
         std::thread cpu_usage_thread([&]() {
             pthread_setname_np(pthread_self(), "RS-CpuMonitor");
@@ -1182,7 +1182,7 @@ int32_t main(int32_t argc, char* argv[]) {
                 continue;
             }
             interval = 0;
-            (void)yaml::readAlgoYaml(algo_yaml_path);
+            //(void)yaml::readAlgoYaml(algo_yaml_path);
 
             if (utils::algo_threshold != yaml::demo_test_param.cpu_threshold) {
                 utils::algo_threshold = yaml::demo_test_param.cpu_threshold;

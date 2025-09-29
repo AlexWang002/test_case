@@ -206,6 +206,8 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks,
 
   bool config_valid = readConfigJson(configPath, json_data_);
   std::string thread_yaml_path = "./thread_params.yaml";
+  std::string algo_switch_path = "";
+
   if (!config_valid) {
     std::cout << "ReadConfigJson failed! file path: " << configPath << std::endl;
     return LIDAR_SDK_FAILD;
@@ -229,18 +231,36 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks,
     } else {
         LogWarn("ENABLE_MIPI_CRC not found in json file, using default value: {}", enable_mipi_crc_);
     }
+
     if (json_data_.contains("INNER_PARAM_PATH")) {
       config_path_ = json_data_["INNER_PARAM_PATH"].get<std::string>();
       LogInfo("INNER_PARAM_PATH: {}", config_path_);
     } else {
         LogWarn("INNER_PARAM_PATH not found in json file, using default config: {}", config_path_);
     }
+
     if (json_data_.contains("THREAD_CONFIG_FILE")) {
       thread_yaml_path = json_data_["THREAD_CONFIG_FILE"].get<std::string>();
       LogInfo("THREAD_CONFIG_FILE: {}", thread_yaml_path);
     } else {
         LogWarn("THREAD_CONFIG_FILE not found in json file, using default config: {}", thread_yaml_path);
     }
+
+    if (json_data_.contains("ALGO_SWITCH_FILE")) {
+      algo_switch_path = json_data_["ALGO_SWITCH_FILE"].get<std::string>();
+      LogInfo("ALGO_SWITCH_FILE: {}", algo_switch_path);
+
+      if (!yaml::readAlgoYaml(algo_switch_path)) {
+        LogWarn("read algo yaml file failed, using default algo switch!");
+      }
+      else {
+        LogInfo("read algo yaml file succeeded!");
+      }
+    }
+    else {
+      LogWarn("ALGO_SWITCH_FILE not found in json file, using default algo switch!");
+    }
+
   }
 
   if (is_initialized_.load(std::memory_order_seq_cst)) {
@@ -858,6 +878,46 @@ void RSLidarSdkImpl::handleMsopData() {
 }
 
 /**
+ * \brief Deepcopy function of the struct LidarPointCloudPackets.
+ */
+RSLidarSdkImpl::LidarPointCloudPtr RSLidarSdkImpl::deepCopyLidarCloud(const LidarPointCloudPackets* src) {
+    if (!src) {
+      return {nullptr, {}};
+    }
+
+    // Compute the total size of the required memory
+    size_t bufferSize = sizeof(LidarPointCloudPackets) +
+                       (src->packet_num - 1) * sizeof(DataBlock);
+
+    // Malloc memory
+    LidarPointCloudPackets* copy = static_cast<LidarPointCloudPackets*>(malloc(bufferSize));
+    if (!copy) {
+        LogError("Failed to allocate memory for point cloud copy");
+        return {nullptr, {}};
+    }
+
+    // Copy the value of all the members of the struct LidarPointCloudPackets
+    memcpy(copy, src, bufferSize);
+
+    // Deepcopy the value pointed by the lidar_parameter pointer
+    if (src->lidar_parameter && src->lidar_parameter_length > 0) {
+        copy->lidar_parameter = malloc(src->lidar_parameter_length);
+        if (!copy->lidar_parameter) {
+            free(copy);
+            LogError("Failed to allocate memory for lidar parameter copy");
+            return {nullptr, {}};
+        }
+        memcpy(copy->lidar_parameter, src->lidar_parameter, src->lidar_parameter_length);
+    } else {
+        copy->lidar_parameter = nullptr;
+        copy->lidar_parameter_length = 0;
+    }
+
+    // return the unique_ptr with a proper deleter
+    return RSLidarSdkImpl::LidarPointCloudPtr(copy);
+}
+
+/**
  * \brief Split the frame and send it to the callback.
  * \param[in] point_num The number of points in the frame.
  */
@@ -884,17 +944,11 @@ void RSLidarSdkImpl::splitFrame(uint32_t point_num) {
       LogDebug(pointcloud_fps_counter_ptr_->getStatus().c_str());
     }
 
-    // if (std::abs(pointcloud_fps_counter_ptr_->getCurrentFPS() - 10) > 0.2) {
-    //   LogDebug("(splitFrame) fps: {:.3f}", pointcloud_fps_counter_ptr_->getCurrentFPS());
-    //   LogError(pointcloud_fps_counter_ptr_->getStatus().c_str());
-    // }
-    LidarPointCloudPackets* cloud_copy = (LidarPointCloudPackets*)malloc(bufferSize);
+    LidarPointCloudPtr cloud_copy = deepCopyLidarCloud(cloud);
 
     if(cloud_copy) {
       bool override = false;
-      std::unique_lock<std::mutex> lock(decoder_ptr_->mtx_point_cloud_);
-      memcpy(cloud_copy, cloud, bufferSize);
-      point_cloud_queue_.push(LidarPointCloudPtr(cloud_copy), override);
+      point_cloud_queue_.push(std::move(cloud_copy), override);
     } else {
       LogError("Failed to allocate memory for point cloud copy");
     }

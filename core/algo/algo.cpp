@@ -1814,7 +1814,7 @@ void AlgoFunction::algoInit()
     using namespace robosense::lidar::yaml;
 
     if (algo_switch_param.data_valid) {
-        LogDebug("Using algorithm switch in yaml file.");
+        LogInfo("Using algorithm switch in yaml file.");
         algo_Param.TrailRemoveOn = algo_switch_param.enable_trail_remove;
         algo_Param.DenoiseOn = algo_switch_param.enable_denoise;
         algo_Param.StrayRemoveOn = algo_switch_param.enable_stray;
@@ -1824,13 +1824,13 @@ void AlgoFunction::algoInit()
             "Algorithm switch yaml file read FAILED, Using default switch.");
     }
 
-    LogDebug(__FILE__, __LINE__, __func__,
+    LogInfo(__FILE__, __LINE__, __func__,
             "TrailRemoveOn: {}", algo_Param.TrailRemoveOn);
-    LogDebug(__FILE__, __LINE__, __func__,
+    LogInfo(__FILE__, __LINE__, __func__,
             "DenoiseOn: {}", algo_Param.DenoiseOn);
-    LogDebug(__FILE__, __LINE__, __func__,
+    LogInfo(__FILE__, __LINE__, __func__,
             "StrayRemoveOn: {}", algo_Param.StrayRemoveOn);
-    LogDebug(__FILE__, __LINE__, __func__,
+    LogInfo(__FILE__, __LINE__, __func__,
             "SprayRemoveOn: {}", algo_Param.SprayRemoveOn);
 }
 

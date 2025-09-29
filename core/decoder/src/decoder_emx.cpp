@@ -310,8 +310,14 @@ void DecoderRSEMX::setPacketHeader(const RSEMXMsopPkt& pkt) {
     point_cloud_->point_num = 0U;
     point_cloud_->frame_seq = ntohl(pkt.header.frame_cnt);
 
+    static bool lidar_parameter_malloc{false};
+
     if (difop2_received_) {
-        point_cloud_->lidar_parameter = malloc(sizeof(difop2_));
+        if (!lidar_parameter_malloc) {
+            point_cloud_->lidar_parameter = malloc(sizeof(difop2_));
+            lidar_parameter_malloc = true;
+        }
+        memset(point_cloud_->lidar_parameter, 0, sizeof(difop2_));
         memcpy(point_cloud_->lidar_parameter, difop2_, sizeof(difop2_));
         point_cloud_->lidar_parameter_length = sizeof(RSEMXDifop2Pkt);
     } else {
@@ -319,7 +325,7 @@ void DecoderRSEMX::setPacketHeader(const RSEMXMsopPkt& pkt) {
         point_cloud_->lidar_parameter = nullptr;
         point_cloud_->lidar_parameter_length = 0;
     }
-    point_cloud_->return_mode = pkt.header.return_mode;
+    point_cloud_->return_mode = 0x01;
     point_cloud_->sync_status = pkt.header.time_mode;
     point_cloud_->frame_sync = pkt.header.synchronized;
     point_cloud_->mirror_id = pkt.header.surface_id;

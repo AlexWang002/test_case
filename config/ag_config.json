@@ -37,6 +37,7 @@
         "ENABLE_MIPI_CRC": true,
         "INNER_PARAM_PATH": "/osdata/satelite/lidar/",
         "THREAD_CONFIG_FILE": "./thread_params.yaml",
-        "LOG_CONFIG_FILE": "/applog/lidar/rs_lidar_sdk.log"
+        "LOG_CONFIG_FILE": "/applog/lidar/rs_lidar_sdk.log",
+        "ALGO_SWITCH_FILE": "/path/to/algorithm_switch.yaml"
     }
 }

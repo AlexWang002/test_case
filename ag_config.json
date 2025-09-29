@@ -37,6 +37,7 @@
         "ENABLE_MIPI_CRC": true,
         "INNER_PARAM_PATH": "./",
         "THREAD_CONFIG_FILE": "./thread_params.yaml",
-        "LOG_CONFIG_FILE": "./rs_lidar_sdk.log"
+        "LOG_CONFIG_FILE": "./rs_lidar_sdk.log",
+        "ALGO_SWITCH_FILE": "./algorithm_switch.yaml"
     }
 }

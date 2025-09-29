@@ -125,6 +125,8 @@ class RSLidarSdkImpl {
     void handleLidarMipiData();
     bool validateCallbacks();
     bool loadConfiguration(const std::string& configPath);
+
+    LidarPointCloudPtr deepCopyLidarCloud(const LidarPointCloudPackets* src);
 };
 
 } // namespace robosense::lidar
