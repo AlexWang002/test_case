@@ -132,14 +132,14 @@ ErrorCode AlgoYaml::parseYamlFile() {
         } else {
             algo_switch_param.data_valid = false;
         }
-        result = parseTestParam();
+        // result = parseTestParam();
 
-        if (ErrorCode::SUCCESS == result) {
-            demo_test_param = test_param_;
-            demo_test_param.data_valid = true;
-        } else {
-            demo_test_param.data_valid = false;
-        }
+        // if (ErrorCode::SUCCESS == result) {
+        //     demo_test_param = test_param_;
+        //     demo_test_param.data_valid = true;
+        // } else {
+        //     demo_test_param.data_valid = false;
+        // }
     }  catch (const YAML::BadFile& kE) {
         LogError("Error opening file: {}", kE.what());
         return ErrorCode::PARSE_YAML_NODE_FAILED;

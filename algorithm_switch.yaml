@@ -9,15 +9,3 @@ Algorithm_Switch:
     enable_ver_ref_smooth: false
     enable_stray: true
     enable_spray: true
-
-Test_Param:
-    enable_save_pcd: true
-    enable_cpu_monitor: true
-    enable_print_difop2: true
-    enable_mipi_crc_check: true
-    enable_difop2_crc_check: true
-    print_difop2_cycle: 2000     # unit ms
-    cpu_monitor_cycle: 100       # unit ms
-    difop2_crc_check_cycle: 2000 # unit ms
-    cpu_threshold: 65.0
-    save_path: "./"
