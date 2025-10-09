@@ -324,6 +324,7 @@ CUPVA_VPU_MAIN()
             /*领域窗口构建优化*/
             for (int c = 0; c < 5; c ++) {
                 for (int r = 0; r < 3; r ++) {
+                    if (r == 1) continue;
                     /*有效性判断*/
                     cmp_mask = (dvabsdif(dist[2][1], dist[c][r]) <= diff_th);
                     int zone = params->zone_matrix[r][c];
@@ -331,15 +332,15 @@ CUPVA_VPU_MAIN()
                         valid_mask[c][r] = cmp_mask;
                     }
                     if (zone == 1) {
-                        neib_valid_num +=1;
+                        neib_valid_num += cmp_mask;
                     }
                 }
             }
 
             /*去噪条件判断优化*/
             cond = ((neib_valid_num + valid_pre_2 >= threshold)
-                    || (neib_valid_num + valid_pre_2 >= threshold)
-                    || (valid_pre_3 + valid_pre_2 >= threshold2));
+                    | (neib_valid_num + valid_pre_2 >= threshold)
+                    | (valid_pre_3 + valid_pre_2 >= threshold2));
 
             dvshortx center_valid = dist_valid;
 
@@ -347,14 +348,14 @@ CUPVA_VPU_MAIN()
                 for (int c = 0; c < 5; c ++) {
                     dvshortx output_valid = dvushort_load(load_mask_agen);
                     /*传播有效标记优化*/
-                    output_valid = (dist_valid && denoise_refer_mask == 1 && cond && valid_mask[c][r]) | output_valid;
+                    output_valid = (dist_valid & denoise_refer_mask == 1 & cond & valid_mask[c][r]) | output_valid;
                     if (r == 1) {
                         if (c == 2) {
-                            output_valid |= (dist_valid && (denoise_refer_mask == 2 || (denoise_refer_mask == 1 && cond)));
+                            output_valid |= (dist_valid & (denoise_refer_mask == 2 | (denoise_refer_mask == 1 & cond)));
                         }
                         else {
                             /*直接对左右补点优化*/
-                            output_valid |= (denoise_refer_mask == 2 && valid_mask[c][r] && dist_valid);
+                            output_valid |= (denoise_refer_mask == 2 & valid_mask[c][r] & dist_valid);
                         }
                     }
                     vstore(output_valid, store_mask_agen);
