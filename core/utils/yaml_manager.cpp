@@ -132,14 +132,14 @@ ErrorCode AlgoYaml::parseYamlFile() {
         } else {
             algo_switch_param.data_valid = false;
         }
-        result = parseTestParam();
+        // result = parseTestParam();
 
-        if (ErrorCode::SUCCESS == result) {
-            demo_test_param = test_param_;
-            demo_test_param.data_valid = true;
-        } else {
-            demo_test_param.data_valid = false;
-        }
+        // if (ErrorCode::SUCCESS == result) {
+        //     demo_test_param = test_param_;
+        //     demo_test_param.data_valid = true;
+        // } else {
+        //     demo_test_param.data_valid = false;
+        // }
     }  catch (const YAML::BadFile& kE) {
         LogError("Error opening file: {}", kE.what());
         return ErrorCode::PARSE_YAML_NODE_FAILED;
@@ -565,12 +565,8 @@ struct convert<robosense::lidar::yaml::AlgoSwitch> {
         if ((!kNode.IsMap()) ||
             (!kNode["enable_trail_remove"]) ||
             (!kNode["enable_denoise"]) ||
-            (!kNode["enable_high_ref_cross"]) ||
-            (!kNode["enable_filter"]) ||
-            (!kNode["enable_hor_dist_smooth"]) ||
-            (!kNode["enable_hor_ref_smooth"]) ||
-            (!kNode["enable_ver_dist_smooth"]) ||
-            (!kNode["enable_ver_ref_smooth"])) {
+            (!kNode["enable_stray"]) ||
+            (!kNode["enable_spray"])) {
             return false;
         }
         try {   // decode the data of enable_trail_remove
@@ -581,42 +577,6 @@ struct convert<robosense::lidar::yaml::AlgoSwitch> {
         }
         try {   // decode the data of enable_denoise
             rhs.enable_denoise = kNode["enable_denoise"].as<bool>();
-        } catch (const std::exception& kE) {
-            LogError(kE.what());
-            return false;
-        }
-        try {   // decode the data of enable_high_ref_cross
-            rhs.enable_high_ref_cross = kNode["enable_high_ref_cross"].as<bool>();
-        } catch (const std::exception& kE) {
-            LogError(kE.what());
-            return false;
-        }
-        try {   // decode the data of enable_filter
-            rhs.enable_filter = kNode["enable_filter"].as<bool>();
-        } catch (const std::exception& kE) {
-            LogError(kE.what());
-            return false;
-        }
-        try {   // decode the data of enable_hor_dist_smooth
-            rhs.enable_hor_dist_smooth = kNode["enable_hor_dist_smooth"].as<bool>();
-        } catch (const std::exception& kE) {
-            LogError(kE.what());
-            return false;
-        }
-        try {   // decode the data of enable_hor_ref_smooth
-            rhs.enable_hor_ref_smooth = kNode["enable_hor_ref_smooth"].as<bool>();
-        } catch (const std::exception& kE) {
-            LogError(kE.what());
-            return false;
-        }
-        try {   // decode the data of enable_ver_dist_smooth
-            rhs.enable_ver_dist_smooth = kNode["enable_ver_dist_smooth"].as<bool>();
-        } catch (const std::exception& kE) {
-            LogError(kE.what());
-            return false;
-        }
-        try {   // decode the data of enable_ver_ref_smooth
-            rhs.enable_ver_ref_smooth = kNode["enable_ver_ref_smooth"].as<bool>();
         } catch (const std::exception& kE) {
             LogError(kE.what());
             return false;
