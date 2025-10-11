@@ -20,10 +20,6 @@ build_job:
     - ./scripts/compile.sh -c -i -p pc   # 编译 X86
     - echo "Complete build the aarch_x86_64 version."
 
-    - echo "Beginning to build the ARM version."
-    - ./scripts/compile.sh -c -i -p arm   # 编译 ARM
-    - echo "Complete build the ARM version."
-
     - echo "Beginning the pc-lint job;"
     - ./scripts/pclp/pclp.sh
 
