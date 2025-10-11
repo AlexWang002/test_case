@@ -32,4 +32,5 @@ endif()
 
 if(COMPILE_ARM_VERSION)
     add_compile_options(-march=armv8.1-a+crc)
+    add_compile_options(-ffast-math -funsafe-math-optimizations)
 endif()

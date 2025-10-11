@@ -9,6 +9,8 @@
 namespace dimw {
 namespace cameraipcclient {
 
+#define     RADAR_OR_LIDAR_FRAME_TIMEOUT    150U        //ms
+
 #define     EXPOSURES_NUM           4U
 
 typedef struct {
@@ -88,6 +90,7 @@ enum class AppType : uint32_t {
 enum ClientErrorCode : std::int32_t {
     CLIENT_SERVER_REMOTE_ERR = -101,    ///< 服务器远程错误
     CLIENT_FEATURE_NOT_SUPPORTED = -99, ///< 功能不支持
+    CLIENT_NOT_INIT = -9,               ///< 客户端未初始化
     CLIENT_TIME_OUT = -8,               ///< 超时
     CLIENT_SENSOR_NOT_EXIST = -7,       ///< 摄像头链路不存在
     CLIENT_OPRATE_ERROR = -6,                ///< 操作错误
@@ -118,17 +121,34 @@ enum class SensorType : std::uint32_t {
     CAMERA_SURROUND_LEFT,           ///< 左环视摄像头
 
     /* 激光雷达/毫米波雷达传感器 */
-    FRONT_RADAR_SLAVE = 0x0C,                  // 前向毫米波雷达B
-    FRONT_RADAR_MASTER,                  // 前向毫米波雷达C
-    MIDDLE_LIDAR,                   // 中激光雷达
-    FRONT_LEFT_RADAR = 0x10,        // 左前角毫米波雷达
-    FRONT_RIGHT_RADAR,              // 右前角毫米波雷达
-    REAR_LEFT_RADAR,                // 左后角毫米波雷达
-    REAR_RIGHT_RADAR,               // 右后角毫米波雷达
-    LEFT_LIDAR,                     // 左激光雷达
-    RIGHT_LIDAR,                    // 右激光雷达
+    FRONT_RADAR_SLAVE = 0x0C,       ///< 前向毫米波雷达B
+    FRONT_RADAR_MASTER,             ///< 前向毫米波雷达C
+    MIDDLE_LIDAR,                   ///< 中激光雷达
+    FRONT_LEFT_RADAR = 0x10,        ///< 左前角毫米波雷达
+    FRONT_RIGHT_RADAR,              ///< 右前角毫米波雷达
+    REAR_LEFT_RADAR,                ///< 左后角毫米波雷达
+    REAR_RIGHT_RADAR,               ///< 右后角毫米波雷达
+    LEFT_LIDAR,                     ///< 左激光雷达
+    RIGHT_LIDAR,                    ///< 右激光雷达
 
     SENSOR_TYPE_MAX,
+};
+
+enum InnerParaState : uint32_t {
+    INNERPARA_NOREADY = 0U,     // 内参和sn未准备好
+    INNERPARA_VALID,            // 内参和sn准备好
+    INNERPARA_INVALID,          // 内参和sn无效
+    INNERPARA_UNKNOWN,          // 未知状态
+};
+
+/* 设置fsync对应的groupid */
+enum GroupId : uint32_t {
+    FRONT_GROUP = 0U,
+    SIDE_GROUP,
+    SURROUND_GROUP,
+    LIDAR_RADAR_GROUP,
+
+    UNKNOWN_GROUP,
 };
 
 /**
@@ -157,6 +177,12 @@ struct SensorInfo {
     std::uint8_t vendorType;      //雷达模组厂家类型
     std::uint8_t sensorType;      //雷达类型/ID
     std::uint64_t sensorVer;      //雷达版本
+};
+
+/* 传感器类型信息结构体 */
+struct SensorTypeInfo {
+    bool dataValid = false;
+    uint8_t sensorType = 0;
 };
 
 }

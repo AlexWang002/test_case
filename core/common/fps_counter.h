@@ -1,14 +1,44 @@
+/*******************************************************************************
+ * \addtogroup common
+ * \{
+ * \headerfile fps_counter.h
+ * \brief
+ * \version 0.2
+ * \date 2025-08-06
+ *
+ * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
+ *
+ * \details
+ * #### Modification History :
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.1 | 2025-06-07 | Init version |
+ *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-08-06 | Add comments;|
+ * 
+ ******************************************************************************/
 #ifndef ROBSENSE_LIDAR_FPS_COUNTER_H
 #define ROBSENSE_LIDAR_FPS_COUNTER_H
 
+/******************************************************************************/
+/*                         Include dependant headers                          */
+/******************************************************************************/
 #include <string>
 #include <deque>
 #include <mutex>
 #include <cstdint>
 
+/******************************************************************************/
+/*                  Using namespace, type or template alias                   */
+/******************************************************************************/
 namespace robosense {
 namespace lidar {
 
+/******************************************************************************/
+/*                   Definition of classes or templates                       */
+/******************************************************************************/
 class FPSCounter {
 public:
     /**
@@ -63,14 +93,14 @@ private:
     // 更新阈值（基于基准帧率和波动百分比）
     void updateThresholds();
 
-    std::string name_;                        // 统计类型名称
-    double base_fps_;                          // 基准帧率
-    double tolerance_percent_;                 // 允许的波动百分比（如10%）
-    double update_interval_;                   // 平均帧率更新间隔（秒）
-    mutable std::mutex mutex_;                // 线程安全锁
+    std::string name_;                          // 统计类型名称
+    double base_fps_;                           // 基准帧率
+    double tolerance_percent_;                  // 允许的波动百分比（如10%）
+    double update_interval_;                    // 平均帧率更新间隔（秒）
+    mutable std::mutex mutex_;                  // 线程安全锁
     std::deque<uint64_t> frame_timestamps_us_;  // 存储时间戳（微秒）
-    double current_fps_ = 0.0;                 // 瞬时帧率
-    double average_fps_ = 0.0;                 // 平均帧率
+    double current_fps_ = 0.0;                  // 瞬时帧率
+    double average_fps_ = 0.0;                  // 平均帧率
     double fps_lower_threshold_ = 0.0;          // 帧率下限
     double fps_upper_threshold_ = 0.0;          // 帧率上限
 };

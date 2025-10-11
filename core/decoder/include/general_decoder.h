@@ -1,166 +1,170 @@
-/*********************************************************************************************************************
-Copyright (c) 2020 RoboSense
-All rights reserved
+/*******************************************************************************
+ * \addtogroup decoder
+ * \{
+ * \headerfile general_decoder.h "general_decoder.h"
+ * \brief Declares general decoder base class for all RoboSense LiDAR data.
+ * \version 0.2
+ * \date 2025-08-06
+ *
+ * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
+ *
+ * \details
+ * #### Modification History :
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.1 | 2025-08-06 | Init version |
+ * | 0.2 | 2025-08-06 | Add comments |
+ *
+ ******************************************************************************/
+#ifndef I_GENERAL_DECODER_H
+#define I_GENERAL_DECODER_H
 
-By downloading, copying, installing or using the software you agree to this license. If you do not agree to this
-license, do not download, install, copy or use the software.
-
-License Agreement
-For RoboSense LiDAR SDK Library
-(3-clause BSD License)
-
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
-following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
-disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
-disclaimer in the documentation and/or other materials provided with the distribution.
-
-3. Neither the names of the RoboSense, nor Suteng Innovation Technology, nor the names of other contributors may be used
-to endorse or promote products derived from this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*********************************************************************************************************************/
-
-#ifndef ROBOSENSE_GENERAL_DECODER_H_
-#define ROBOSENSE_GENERAL_DECODER_H_
-
-#include "lidar_sdk_api.h"
-#include <driver_param.h>
-#include <trigon.h>
-#include <section.h>
-#ifndef _USE_MATH_DEFINES
-#define _USE_MATH_DEFINES  // for VC++, required to use const M_IP in <math.h>
-#endif
-
+/******************************************************************************/
+/*                     Include dependant library headers                      */
+/******************************************************************************/
 #include <cmath>
 #include <functional>
-#include <memory>
 #include <iomanip>
+#include <memory>
+#include <mutex>
 #include <vector>
 
-namespace robosense
-{
-namespace lidar
-{
-// decoder const param
-struct RSDecoderConstParam
-{
-  // packet len
-  uint16_t msop_len;
-  uint16_t difop_len;
-  uint16_t device_info_len;
+/******************************************************************************/
+/*                      Include headers of the component                      */
+/******************************************************************************/
+#include "lidar_sdk_api.h"
+#include "driver_param.h"
+#include "trigon.h"
 
-  // packet identity
-  uint8_t msop_id_len;
-  uint8_t difop_id_len;
-  uint8_t device_info_id_len;
-  uint8_t msop_id[8];
-  uint8_t difop_id[8];
-  uint8_t device_info_id[8];
+/******************************************************************************/
+/*                          Definition of namespace                           */
+/******************************************************************************/
+namespace robosense::lidar {
 
-  uint16_t pixel_per_pkt;
+/******************************************************************************/
+/*                   Declaration of exported constant data                    */
+/******************************************************************************/
+constexpr uint32_t MAX_POINTCLOUD_NUM{5000000U};
 
-  // distance
-  float distance_min;
-  float distance_max;
-  float distance_res;
+/******************************************************************************/
+/*        Definition of exported types (typedef, enum, struct, union)         */
+/******************************************************************************/
+/**
+ * \brief Decoder const param.
+ * \details This struct is used to store the const param of decoder.
+ */
+struct RSDecoderConstParam {
+    // packet len
+    uint16_t msop_len;          ///< data length of MSOP
+    uint16_t difop_len;         ///< data length of DIFOP_2
+    int16_t device_info_len;    ///< data length of device info (DIFOP_1)
+
+    // packet identity
+    uint8_t msop_id_len;
+    uint8_t difop_id_len;
+    uint8_t device_info_id_len;
+    uint8_t msop_id[8];
+    uint8_t difop_id[8];
+    uint8_t device_info_id[8];
+
+    uint16_t pixel_per_pkt;
+
+    // distance
+    float distance_min;
+    float distance_max;
+    float distance_res;
 };
 
-struct PacketRangePerMipiFrame
-{
-  int32_t start;
-  int32_t end;
-  int32_t expectedCount;
-};
-constexpr uint32_t MAX_POINTCLOUD_NUM = 5000000;
-
-class Decoder
-{
-public:
-  virtual bool decodeMsopPkt(const uint8_t* pkt, size_t size) = 0;
-  virtual bool decodeDifopPkt(const uint8_t* pkt, size_t size) = 0;
-  virtual bool decodeDeviceInfoPkt(const uint8_t* pkt, size_t size) = 0;
-  virtual ~Decoder() = default;
-
-  bool init();
-  bool processMsopPkt(const uint8_t* pkt, size_t size);
-  bool processDifopPkt(const uint8_t* pkt, size_t size);
-  bool processDeviceInfoPkt(const uint8_t* pkt, size_t size);
-
-  explicit Decoder(const RSDecoderConstParam& const_param, const RSDecoderParam& param);
-  //
-
-  void regCallback(const std::function<void(uint32_t)>& cb_split_frame);
-
-  void resetPointCloud();
-  void resetDeviceInfo();
-
-  std::unique_ptr<LidarPointCloud, void (*)(LidarPointCloud*)> point_cloud_{ nullptr, [](LidarPointCloud* p) { free(p); } };
-  std::unique_ptr<LidarDeviceInfo> device_info_;
-  bool is_test_time_delay_ = false;
-  uint32_t getTheoreticalPointsPerFrame()
-  {
-    return theoretical_point_num_;
-  }
-
-  uint32_t getTheoreticalMipiDataLength()
-  {
-    return theoretical_mipi_data_len_;
-  }
-
-  uint16_t getMsopLength()
-  {
-    return const_param_.msop_len;
-  }
-  uint16_t getDifopLength()
-  {
-    return const_param_.difop_len;
-  }
-  uint16_t getDeviceInfoLength()
-  {
-    return const_param_.device_info_len;
-  }
-  std::vector<PacketRangePerMipiFrame> getPacketRanges()
-  {
-    return packet_ranges_;
-  }
-
-protected:
-  // Further corrections are needed
-  //
-  RSDecoderConstParam const_param_;  // const param
-  RSDecoderParam param_;             // user param
-  std::function<void(uint32_t)> cb_split_frame_;
-  Trigon trigon_;
-#define SIN(angle) this->trigon_.sin(angle)
-#define COS(angle) this->trigon_.cos(angle)
-
-  DistanceSection distance_section_;  // invalid section of distance
-
-  bool angles_ready_;  // is vert_angles/horiz_angles ready from csv file/difop packet?
-  uint32_t last_frame_cnt_;
-  uint32_t point_num_;
-  uint32_t theoretical_point_num_;
-  uint32_t theoretical_mipi_data_len_;
-
-  std::vector<PacketRangePerMipiFrame> packet_ranges_;
-
-  bool allocatePointCloud();
-  bool allocateDeviceInfo();
-  void initPointCloud();
-  void initDeviceInfo();
+/**
+ * \brief Packet range per MIPI frame.
+ * \details This struct is used to store the packet range per MIPI frame.
+ */
+struct PacketRangePerMipiFrame {
+    int32_t start;
+    int32_t end;
+    int32_t expectedCount;
 };
 
-}  // namespace lidar
-}  // namespace robosense
+/******************************************************************************/
+/*                   Definition of classes or templates                       */
+/******************************************************************************/
+/**
+ * \brief Decoder base class.
+ * \details This class is the base class of all decoders of RoboSense LiDAR.
+ */
+class Decoder {
+  public:
+    virtual bool decodeMsopPkt(const uint8_t* pkt, size_t size) = 0;
+    virtual bool decodeDifopPkt(const uint8_t* pkt, size_t size) = 0;
+    virtual bool decodeDeviceInfoPkt(const uint8_t* pkt, size_t size) = 0;
+    virtual ~Decoder() = default;
 
-#endif  // ROBOSENSE_GENERAL_DECODER_H_
+    explicit Decoder(const RSDecoderConstParam& const_param,
+                     const RSDecoderParam& param);
+
+    bool init();
+    bool processMsopPkt(const uint8_t* pkt, size_t size);
+    bool processDifopPkt(const uint8_t* pkt, size_t size);
+    bool processDeviceInfoPkt(const uint8_t* pkt, size_t size);
+
+    void regCallback(const std::function<void(uint32_t)>& cb_split_frame);
+
+    void resetPointCloud();
+    void resetDeviceInfo();
+
+    std::unique_ptr<LidarPointCloudPackets, void (*)(LidarPointCloudPackets*)> point_cloud_ {
+        nullptr,
+        [](LidarPointCloudPackets* p) {
+            /// \note Using free(p) instead of the default delete indicates that
+            ///    the LidarPointCloudPackets object is allocated using C-style malloc.
+            if (p) {
+                if(p->lidar_parameter) {
+                    free(p->lidar_parameter);
+                }
+                free(p);
+            }
+        }
+    };
+
+    std::mutex mtx_point_cloud_;
+
+    std::unique_ptr<LidarDeviceInfo> device_info_;
+    bool is_test_time_delay_ = false;
+    uint32_t getTheoreticalPointsPerFrame();
+    uint32_t getTheoreticalMipiDataLength();
+    uint16_t getMsopLength();
+    uint16_t getDifopLength();
+    uint16_t getDeviceInfoLength();
+    std::vector<PacketRangePerMipiFrame> getPacketRanges();
+
+  protected:
+    // TODO Further corrections are needed
+    RSDecoderConstParam const_param_; ///< const param
+    RSDecoderParam param_;            ///< user param
+    std::function<void(uint32_t)> cb_split_frame_;
+    // TODO refactor this trigon_ and macro using;
+    Trigon trigon_;
+#define SIN(angle) (trigon_.sin(angle))
+#define COS(angle) (trigon_.cos(angle))
+
+    bool angles_ready_{false}; ///< Is vert_angles/horiz_angles ready from csv file/difop packet?
+    uint32_t last_frame_cnt_{0U};
+    uint32_t point_num_{0U};
+    uint32_t theoretical_point_num_{0U};
+    uint32_t theoretical_mipi_data_len_{0U};
+    float min_distance_{0.0f};
+    float max_distance_{0.0f};
+
+    std::vector<PacketRangePerMipiFrame> packet_ranges_;
+
+    bool allocatePointCloud();
+    bool allocateDeviceInfo();
+    void initPointCloud();
+    void initDeviceInfo();
+    bool distance_section(float distance);
+};
+
+} // namespace robosense::lidar
+
+/** \} decoder */
+#endif /* I_GENERAL_DECODER_H */

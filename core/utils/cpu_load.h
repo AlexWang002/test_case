@@ -1,7 +1,7 @@
 /*******************************************************************************
  * \addtogroup utils
  * \{
- * \headerfile CPU_LOAD "CPU_LOAD"
+ * \headerfile cpu_load.h "cpu_load.h"
  * \brief
  * \version 0.1
  * \date 2025-07-09
@@ -24,7 +24,9 @@
 #include <vector>
 #include <atomic>
 #include <map>
-
+#include <string>
+#include <sys/types.h>
+#include <unistd.h>
 /******************************************************************************/
 /*                      Include headers of the component                      */
 /******************************************************************************/
@@ -51,9 +53,9 @@ public:
   pid_t tid;
   std::string name;
   std::string file;
-  uint64_t last_thread_time {0UL};
-  uint64_t last_total_cpu_time {0UL};
-  double cpu_usage {0.0};
+  uint64_t last_thread_time{0UL};
+  uint64_t last_total_cpu_time{0UL};
+  double cpu_usage{0.0};
 };
 
 /******************************************************************************/

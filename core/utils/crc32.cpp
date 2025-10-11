@@ -2,9 +2,9 @@
  * \addtogroup utils
  * \{
  * \file crc32.cpp
- * \brief
- * \version 0.1
- * \date 2025-07-13
+ * \brief CRC32 calculator
+ * \version 0.2
+ * \date 2025-08-07
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -13,46 +13,36 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-07-13 | Init version, add bin file reader and crc32 calculator |
+ * | 0.2 | 2025-08-07 | Add comments |
  *
  ******************************************************************************/
-
-/******************************************************************************/
-/*                         Include dependant headers                          */
-/******************************************************************************/
-#include "rs_new_logger.h"
-#include "json.hpp"
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
 /******************************************************************************/
 #include "crc32.h"
+#include "json.hpp"
+#include "rs_new_logger.h"
+
+/******************************************************************************/
+/*                          Definition of namespace                           */
+/******************************************************************************/
+namespace robosense::lidar::crc32 {
 
 /******************************************************************************/
 /*                  Using namespace, type or template alias                   */
 /******************************************************************************/
-namespace robosense::lidar::crc32 {
-
 using json = nlohmann::json;
-
-/******************************************************************************/
-/*              Definition of local types (enum, struct, union)               */
-/******************************************************************************/
-
-/******************************************************************************/
-/*                   Declaration of exported constant data                    */
-/******************************************************************************/
-
-/******************************************************************************/
-/*                       Definition of local variables                        */
-/******************************************************************************/
-
-/******************************************************************************/
-/*                     Definition of local constant data                      */
-/******************************************************************************/
 
 /******************************************************************************/
 /*                       Definition of local functions                        */
 /******************************************************************************/
+/**
+ * \brief Check if a file exists
+ * \param[in] file_path The file path
+ * \retval true The file exists
+ * \retval false The file does not exist
+ */
 bool fileExist(const std::string& file_path) {
     if (0 != access(file_path.c_str(), F_OK)) {
         LogError("File {} not exist", file_path);
@@ -69,6 +59,16 @@ bool fileExist(const std::string& file_path) {
 /******************************************************************************/
 /*                      Definition of exported functions                      */
 /******************************************************************************/
+/**
+ * \brief Calculate the CRC32 of a bin file
+ * \param[in] file_path The file path
+ * \param[out] result The CRC32 result
+ * \retval CrcErrorCode::SUCCESS The calculation is successful
+ * \retval CrcErrorCode::FILE_NOT_BIN The file path is not end with .bin
+ * \retval CrcErrorCode::FILE_NOT_EXIST The file does not exist
+ * \retval CrcErrorCode::FILE_OPEN_ERROR The file open error
+ * \retval CrcErrorCode::FILE_READ_ERROR The file read error
+ */
 CrcErrorCode calculate_bin_file_crc32(const std::string& file_path, uint32_t& result) {
     if (0 != file_path.compare(file_path.size() - 4, 4, ".bin")) {
         LogError("Input file path: {} not end with .bin", file_path);
@@ -84,9 +84,9 @@ CrcErrorCode calculate_bin_file_crc32(const std::string& file_path, uint32_t& re
         return CrcErrorCode::FILE_OPEN_ERROR;
     }
     // Get the size of bin file
-    file.seekg(0, std::ios::end);
+    (void)file.seekg(0, std::ios::end);
     std::streamsize file_size = file.tellg();
-    file.seekg(0, std::ios::beg);
+    (void)file.seekg(0, std::ios::beg);
 
     // Read file content to memory
     std::vector<char> buffer(file_size);
@@ -103,6 +103,16 @@ CrcErrorCode calculate_bin_file_crc32(const std::string& file_path, uint32_t& re
     return CrcErrorCode::SUCCESS;
 }
 
+/**
+ * \brief Read the CRC32 from a json file
+ * \param[in] file_path The file path
+ * \param[out] result The CRC32 result
+ * \retval CrcErrorCode::SUCCESS The calculation is successful
+ * \retval CrcErrorCode::FILE_NOT_JSON The file path is not end with .json
+ * \retval CrcErrorCode::FILE_NOT_EXIST The file does not exist
+ * \retval CrcErrorCode::FILE_OPEN_ERROR The file open error
+ * \retval CrcErrorCode::FILE_READ_ERROR The file read error
+ */
 CrcErrorCode read_json_file_crc32(const std::string& file_path, uint32_t& result) {
     if (0 != file_path.compare(file_path.size() - 5, 5, ".json")) {
         LogError("Input file path: {} not end with .json", file_path);
@@ -142,25 +152,35 @@ CrcErrorCode read_json_file_crc32(const std::string& file_path, uint32_t& result
     return CrcErrorCode::SUCCESS;
 }
 
+/**
+ * \brief Verify the CRC32 of a bin file
+ * \param[in] bin_file_path The bin file path
+ * \param[in] json_file_path The json file path
+ * \retval true The CRC32 is verified
+ * \retval false The CRC32 is not verified
+ */
 bool verify_crc32(const std::string& bin_file_path,
                 const std::string& json_file_path) {
-    uint32_t calculate_crc32 {0};
-    uint32_t expected_crc32 {0};
+    uint32_t calculate_crc32{0U};
+    uint32_t expected_crc32{0U};
+    bool result{false};
 
     if ((CrcErrorCode::SUCCESS != calculate_bin_file_crc32(bin_file_path, calculate_crc32)) ||
         (CrcErrorCode::SUCCESS != read_json_file_crc32(json_file_path, expected_crc32))) {
         return false;
     }
 
-    return (calculate_crc32 == expected_crc32);
-}
-/******************************************************************************/
-/*          Definition of public functions of classes or templates             */
-/******************************************************************************/
+    if (calculate_crc32 == expected_crc32) {
+        LogInfo("Bin file verify crc32 success");
+        result = true;
+    } else {
+        LogError("Bin file verify crc32 failed");
+        LogError("Calculate crc32: 0x{:08x}, Expected crc32: 0x{:08x}",
+                        calculate_crc32, expected_crc32);
+    }
 
-/******************************************************************************/
-/*         Definition of private functions of classes or templates            */
-/******************************************************************************/
+    return result;
+}
 
 } // namespace robosense::lidar::crc32
 

@@ -7,6 +7,8 @@
 #include <iostream>
 #include <unistd.h>
 #include <errno.h>
+
+#include "rs_new_logger.h"
 #include "thread_config.h"
 
 namespace robosense
@@ -15,9 +17,10 @@ namespace lidar
 {
     std::thread createConfiguredStdThread(const yaml::ThreadConfig& config, std::function<void()> entry) {
     return std::thread([config, entry]() {
-        // 设置线程名（必须在线程内部设置）
-        // std::string name = "RS-T" + std::to_string(config.id);
-        // pthread_setname_np(pthread_self(), name.substr(0, 15).c_str());
+        LogWarn("Thread id: {} policy: {} priority: {}", config.id, config.policy, config.priority);
+        for (int i : config.cpu_affinity) {
+            LogWarn("Thread id: {} cpu affinity: {}", config.id, i);
+        }
 
         // 设置调度策略和优先级
         int policy = SCHED_OTHER;
@@ -28,6 +31,7 @@ namespace lidar
         param.sched_priority = config.priority;
         if (pthread_setschedparam(pthread_self(), policy, &param) != 0) {
             std::cerr << "Failed to set schedparam: " << std::strerror(errno) << std::endl;
+            LogError("Failed to set schedparam: {}", std::strerror(errno));
         }
 
         // 设置 CPU 亲和性
@@ -39,6 +43,7 @@ namespace lidar
             }
             if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0) {
                 std::cerr << "Failed to set CPU affinity: " << std::strerror(errno) << std::endl;
+                LogError("Failed to set CPU affinity: {}", std::strerror(errno));
             }
         }
 

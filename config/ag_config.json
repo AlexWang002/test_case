@@ -1,0 +1,43 @@
+{
+    "HesaiLidar":
+    {
+        "USE_CPU":false,
+        "USE_DENOISE":true,
+        "LOG_DEBUG_OUTPUT":true,
+        "CORRECTION_FILE": ["modules/drivers/lidar_satellite/conf/R67V4000032253A282_Calibration_Chn192_4.2.dat"],
+        "FIRETIMES_FILE": ["modules/drivers/lidar_satellite/conf/ATXY1_A0_Firetime_V1P0.dat"],
+        "DENOISE_CONFIG": "modules/drivers/lidar_satellite/conf/ATLDetection.json",
+        "DENOISE_CUDA_STREAM_PRIORITY":1.0,
+        "DENOISE_TIMEOUT_US":20000,
+        "LIDAR_SENSOR_INDEX_VECTOR":[6],
+        "THREADS": {
+            "parser_thread": {
+                "policy": "SCHED_OTHER",
+                "priority": 0,
+                "cpu_affinity": [0, 1]
+            },
+            "device_info_thread": {
+                "policy": "SCHED_FIFO",
+                "priority": 90,
+                "cpu_affinity": [0]
+            },
+            "diagnosis_thread": {
+                "policy": "SCHED_RR",
+                "priority": 80,
+                "cpu_affinity": [0]
+            },
+            "denoise_thread": {
+                "policy": "SCHED_OTHER",
+                "priority": 0,
+                "cpu_affinity": [0]
+            }
+        }
+    },
+    "RobosenseLidar" : {
+        "ENABLE_MIPI_CRC": true,
+        "INNER_PARAM_PATH": "/osdata/satelite/lidar/",
+        "THREAD_CONFIG_FILE": "./thread_params.yaml",
+        "LOG_CONFIG_FILE": "/applog/lidar/rs_lidar_sdk.log",
+        "ALGO_SWITCH_FILE": "/path/to/algorithm_switch.yaml"
+    }
+}

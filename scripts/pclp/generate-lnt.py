@@ -97,11 +97,14 @@ def rule_lnt_generate(file_path, compiler_path):
     fp_rule.write("-efile(*, */3rdparty/dimw/*)\n")
     fp_rule.write("-efile(*, */3rdparty/rs_logger/*)\n")
     fp_rule.write("-efile(*, */3rdparty/yaml-cpp/*)\n")
+    fp_rule.write("-efile(*, */3rdparty/json.hpp)\n")
 
     fp_rule.write("\n-efile(*, /usr/lib/*)\n")
     fp_rule.write("-efile(*, /usr/lib/*/*)\n")
     fp_rule.write("-efile(*, /usr/include/*)\n")
     fp_rule.write("-efile(*, /usr/include/*/*)\n")
+
+    fp_rule.write("-efile(*, */core/algo/*)\n")
 
     # 剔除部分 supplemental/info/note 类型的警告规则
     supplemental_no = [831, 891, 893, 894, 897]
@@ -116,7 +119,8 @@ def rule_lnt_generate(file_path, compiler_path):
                 9145, 9146, 9147, 9148, 9150, 9153, 9158, 9165, 9169, 9173,
                 9175, 9176, 9177, 9183, 9215, 9252, 9272, 940,  9416, 9418,
                 9419, 9421, 9422, 9424, 9428, 9436, 9437, 9439, 944,  9441,
-                9444, 9445, 9449, 9456, 948,  952,  953,  967,  970]
+                9444, 9445, 9449, 9456, 948,  952,  953,  967,  970,  9110,
+                9006, 9172, 946,  9121, 9136, 9134, 1715]
 
     for pass_rule_list in [supplemental_no, info_no, note_no]:
         for rule_no in pass_rule_list:

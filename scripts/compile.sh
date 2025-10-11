@@ -97,7 +97,14 @@ fi
 echo "Building and installing the project for platform '$PLATFORM'..."
 # 运行 cmake 配置
 echo "Running cmake..."
-cmake .. $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
+if [ "$PLATFORM" = "pc" ]; then
+    cmake .. -DPVA_BUILD_MODE=NATIVE $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
+elif [ "$PLATFORM" = "arm" ]; then
+    cmake .. -DPVA_BUILD_MODE=L4T $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
+else
+    echo "Unsupported platform: $PLATFORM"
+    exit 1
+fi
 
 # 使用 make 编译
 echo "Compiling the project..."

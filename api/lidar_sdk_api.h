@@ -3,8 +3,8 @@
  * @brief lidar SDK对外接口文件定义
  * @details 定义调用底软函数指针，sdk函数指针等
  * @author
- * @version 1.0.12
- * @date 2025/07/11
+ * @version 1.0.17
+ * @date 2025/09/11
  * @copyright copyright(c)2025 比亚迪股份有限公司
  */
 
@@ -20,7 +20,7 @@ extern "C" {
 
 #define LIDAR_SDK_API_VER_MAJOR 1
 #define LIDAR_SDK_API_VER_MINOR 0
-#define LIDAR_SDK_API_VER_PATCH 12
+#define LIDAR_SDK_API_VER_PATCH 17
 
 #define LIDAR_SDK_API_VER_MACRO(major, minor, patch) (major << 16 | minor << 8 | patch)
 
@@ -69,28 +69,39 @@ typedef struct
 
 typedef struct
 {
-  float x;                 // 笛卡尔坐标系，X轴方向的距离值
-  float y;                 // 笛卡尔坐标系，Y轴方向的距离值
-  float z;                 // 笛卡尔坐标系，Z轴方向的距离值
-  int16_t timestamp;       // 每个点的时间戳(精确到10微秒)
-  uint8_t channel_number;  // channel(激光束)的序号
-  uint8_t intensity;       // 通道点反射强度值
-  uint8_t confidence[2];   // 雨雾扬尘噪点置信度
-} LidarPoint;
+  uint16_t radius;           // 极坐标
+  uint8_t intensity;         // 通道点反射强度值
+  uint8_t point_attribute;   // 雨雾噪点属性
+}__attribute__((packed)) ChannelData;
 
 typedef struct
 {
-  uint64_t frame_timestamp;   // 完整的时间戳(精确到微秒)
-  uint32_t point_num;         // 一帧里点的个数
-  uint32_t frame_seq;         // 数据帧序列号
-  uint16_t protocol_version;  // 通信协议版本号，供应商自己定义
-  uint8_t  return_mode;       // 回波模式设置:0-双回波，1-最强回波，2-最后回波，3-第一回波
-  uint8_t  sync_status;       // 时间同步状态:0:已经同步 1:未同步
-  uint8_t  frame_sync;        // 帧同步，0表示未同步，1表示已同步
-  uint8_t  mirror_id;         //奇偶帧标识（适用摆镜方案）
-  uint8_t  reserved[20];      // reverved
-  LidarPoint point[1];        // Lidar点云数据
-} LidarPointCloud;
+  uint16_t time_offset;          // 可以精确到10us的级别
+  int16_t motor_speed;          // 电机转速
+  int16_t azimuth;              // 水平角 
+  ChannelData channel_data[192]; // 192个通道数据
+}__attribute__((packed)) DataBlock;
+
+typedef struct
+{
+  uint64_t frame_timestamp;         	// 完整的时间戳(精确到微秒)
+  uint32_t point_num;               	// 一帧里点的个数
+  uint32_t frame_seq;               	// 数据帧序列号
+  void*    lidar_parameter;         	// 内参信息，供应商提供
+  uint16_t lidar_parameter_length;  	// 内参信息长度，供应商提供
+  uint16_t protocol_version;        	// 通信协议版本号，供应商自己定义
+  uint8_t  return_mode;             	// 回波模式设置:0-双回波，1-最强回波，2-最后回波，3-第一回波
+  uint8_t  sync_status;             	// 时间同步状态:0:已经同步 1:未同步
+  uint8_t  frame_sync;              	// 帧同步，0表示未同步，1表示已同步
+  uint8_t  mirror_id;               	// 奇偶帧标识（适用摆镜方案）
+  uint32_t data_length;             	// 预留字段
+  uint32_t data_id;                 	// 预留字段
+  uint32_t crc32;                   	// 预留字段
+  uint16_t counter;                 	// 预留字段
+  uint16_t packet_num;              	// packets个数
+  uint8_t  reserved[6];             	// reserved
+  DataBlock packets[1];             	// packet数据，保证此内存和header内存连续
+}__attribute__((packed)) LidarPointCloudPackets;
 
 typedef struct
 {
@@ -119,6 +130,14 @@ typedef struct
   uint8_t model;                 // 型号
   uint8_t reserved[50];          // 预留字段
 } LidarDeviceInfo;
+
+typedef struct
+{
+  uint16_t alarmId;
+  uint16_t alarmObj;  //alarmId+alarmObj,组成了故障码的唯一标识符
+  uint8_t status;    // Recover:0; Report:1
+}LidarAlarmInfo;
+
 
 typedef struct
 {
@@ -155,6 +174,7 @@ typedef struct
   LidarSdkErrorCode (*stop)(void);
 
   LidarSdkErrorCode (*injectAdc)(LidarSensorIndex sensor, const void* ptrAdc);  ////ptrAdc为结构体LidarAdcBuffer
+  LidarSdkErrorCode (*injectAlarmInfo)(const LidarAlarmInfo& lidarAlarmInfo);//中间件收到底软上报的alarmID后，直接转发给SDK
 
   LidarSdkErrorCode (*writeDid)(uint16_t did, uint8_t* data, uint16_t dataLen, uint8_t* nrc);  ////nrc 对应的结构体LidarSdkDtcNegativeResp
   LidarSdkErrorCode (*readDid)(uint16_t did, uint8_t* data, uint16_t* dataLen, uint8_t* nrc);  ////nrc 对应的结构体LidarSdkDtcNegativeResp

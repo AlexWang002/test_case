@@ -1,7 +1,7 @@
 /*******************************************************************************
  * \addtogroup driver
  * \{
- * \headerfile algo.cpp
+ * \file algo.cpp
  * \brief
  * \version 0.3
  * \date 2025-06-27
@@ -28,6 +28,10 @@
  * |-----|------------|--------------|
  * | 0.4 | 2025-07-14 | Move ground fit to thread 0 |
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.5 | 2025-08-11 | Optimize trail&denoise&filter algorithms load |
+ *
  ******************************************************************************/
 
 /******************************************************************************/
@@ -47,123 +51,79 @@ namespace robosense
 {
 namespace lidar
 {
-
-/*******************************************************************************
- * \brief  Trail remove pre process
- *
- * \param[in] trail_col : Current column index
- *                  Range: 0 - 760. Accuracy: 1.
- * \param[in] trail_col_buffer : Current column buffer index
- *                  Range: 0 - 4. Accuracy: 1.
- * \param[in] trail_col_neib_buf : Neighbor column buffer index
- *                  Range:0-2^32-1. Accuracy:1.
- * \param[in] trail_refer_mask : Trail refer mask
- *                  Range:0-2^32-1. Accuracy:1.
- ******************************************************************************/
-void AlgoFunction::trailPreProc(int trail_col, int trail_col_buffer,
-    int* trail_col_neib_buf,int* trail_refer_mask)
-{
-
-    if (trail_col < 0 || trail_col >= algo_Param.ViewField_Wide
-        || !algo_Param.TrailRemoveOn) {
-        return;
-    }
-
-    constexpr int HL = 5;
-    const int near_threshold = trail_Param.near_cnt_th_h;
-
-    for (int row_idx = 0; row_idx < VIEW_H; ++row_idx)
-    {
-        const int dist_pre = dist_wave0_buffer2[trail_col_buffer][row_idx];
-        if (dist_pre <= 0) continue;
-
-        const int diff_th = clamp(std::round(dist_pre *  trail_Param.dist_th_ratio),2,20);
-        int dist_pre_buf[HL];
-        for (int i = 0; i < HL; ++i) {
-            dist_pre_buf[i] = dist_wave0_buffer2[trail_col_neib_buf[i]][row_idx];
-        }
-
-        int near_cnt_h = 0;
-        for (int i = 0; i < HL - 1; ++i) {
-            near_cnt_h += (std::abs(dist_pre_buf[i + 1] - dist_pre_buf[i])
-            < diff_th);
-        }
-
-        trail_refer_mask[row_idx] = (near_cnt_h >= near_threshold);
-    }
-}
-
-/*******************************************************************************
+/**
  * \brief  Trail remove main process
- *
  * \param[in] trail_col : Current column index
  *                  Range: 0 - 760. Accuracy: 1.
  * \param[in] trail_col_buffer : Current column buffer index
  *                  Range: 0 - 4. Accuracy: 1.
  * \param[in] trail_col_neib_buf : Neighbor column buffer index
- *                  Range:0-2^32-1. Accuracy:1.
- * \param[in] trail_refer_mask : Trail refer mask
  *                  Range:0-2^32-1. Accuracy:1.
  * \param[out] trail_mask_out : Trail mask output
  *                  Range:0-2^32-1. Accuracy:1.
- ******************************************************************************/
+ */
 void AlgoFunction::trailRemove(int trail_col,
                                int trail_col_buffer,
                                int* trail_col_neib_buf,
-                               int* trail_refer_mask,
                                int* trail_mask_out)
 {
     if (trail_col < 0 || trail_col >= algo_Param.ViewField_Wide
         || !algo_Param.TrailRemoveOn) {
         return;
     }
-
-    constexpr int NEIGHBOR_COUNT = 5;
+    const int HL = trail_Param.HL;
+    //constexpr int NEIGHBOR_COUNT = 5;
     constexpr int LONGITUDINAL_RANGE = 4;
     const int bypass_distance = trail_Param.BypassDis;
+    const int near_threshold = trail_Param.near_cnt_th_h;
 
     for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
-        if (trail_refer_mask[row_idx] != 0) continue;
-
+        int near_dist_th = 0;
+        int near_cnt_h = 0;
         const int dist_trail = dist_wave0_buffer2[trail_col_buffer][row_idx];
         if (dist_trail <= 0 || dist_trail >= bypass_distance) continue;
+        int trail_refer_mask = 0;
 
-        const int dist_seg = (dist_trail / 12000);
-        const int diff_th = noise_params.denoise_offset[dist_seg];
-
-
-        int dist_tmp[NEIGHBOR_COUNT];
-        int ref_tmp[NEIGHBOR_COUNT];
-        for (int i = 0; i < NEIGHBOR_COUNT; ++i) {
-        const int idx = trail_col_neib_buf[i];
-        dist_tmp[i] = dist_wave0_buffer2[idx][row_idx];
-        ref_tmp[i] = refl_wave0_buffer2[idx][row_idx];
+        near_dist_th = clamp(((dist_trail * trail_Param.dist_th_ratio) >> 3), 2, 20);
+        int dist_tmp[HL];
+        for (int i = 0; i < HL; ++i) {
+            dist_tmp[i] = dist_wave0_buffer2[trail_col_neib_buf[i]][row_idx];
         }
-
-        int dist_longit[9] = {0};
-        int ref_longit[9] = {0};
-
-        const int row_range_up = std::min(row_idx, LONGITUDINAL_RANGE);
-        const int row_range_down = std::min(VIEW_H - 1 - row_idx,
-                                            LONGITUDINAL_RANGE);
-
-        const int start_idx = 4 - row_range_up;
-        for (int i = 0; i <= row_range_up + row_range_down; ++i) {
-        const int buf_idx = start_idx + i;
-        dist_longit[buf_idx] = dist_wave0_buffer2
-                                [trail_col_buffer][row_idx - row_range_up + i];
-        ref_longit[buf_idx] = refl_wave0_buffer2
-                                [trail_col_buffer][row_idx - row_range_up + i];
+        for (int i = 0; i < HL- 1; ++i) {
+            near_cnt_h += (std::abs(dist_tmp[i + 1] - dist_tmp[i]) < near_dist_th);
         }
+        trail_refer_mask = (near_cnt_h >= near_threshold);
+        trail_Param.near_cnt_h = near_cnt_h;
+        trail_Param.near_dist_th = near_dist_th;
 
-        if (trailJudge(dist_tmp, ref_tmp,
-            dist_longit, ref_longit, diff_th)) {
-            trail_mask_out[row_idx] = 1;
+        if (trail_refer_mask != 0) continue;
+        int Hortrail_judge = 0;
+        int wall_judge = 0;
+        HorTrailRemove(dist_tmp, dist_trail, &Hortrail_judge, &wall_judge);
+        trail_Param.wall_judge = wall_judge;
+        if(Hortrail_judge == 1)
+        {
+            int dist_longit[9] = {0};
+            const int row_range_up = std::min(row_idx, LONGITUDINAL_RANGE);
+            const int row_range_down = std::min(VIEW_H - 1 - row_idx,
+                                                LONGITUDINAL_RANGE);
+
+            const int start_idx = 4 - row_range_up;
+            for (int i = 0; i <= row_range_up + row_range_down; ++i) {
+                const int buf_idx = start_idx + i;
+                dist_longit[buf_idx] = dist_wave0_buffer2
+                                        [trail_col_buffer][row_idx - row_range_up + i];
+            }
+            int Vertrail_judge = VerTrailRemove(dist_trail, dist_longit);
+            if(Vertrail_judge == 1)
+            {
+                trail_mask_out[row_idx] = 1;
+            }
         }
     }
 }
 
-/*******************************************************************************
+/**
  * \brief  Limit value to minimum and maximum
  * \param[in] val : Value to be limited
  *                Range: 0 - 2^32-1. Accuracy: 1.
@@ -172,113 +132,88 @@ void AlgoFunction::trailRemove(int trail_col,
  * \param[in] max_val : Maximum value
  *                Range: 0 - 2^32-1. Accuracy: 1.
  * \return Limited value
-*******************************************************************************/
+*/
 int AlgoFunction::clamp(int val, int min_val, int max_val) {
     return std::max(min_val, std::min(val, max_val));
 }
 
-/*******************************************************************************
- * \brief  Trail remove judge function
+/**
+ * \brief  Horizontal trail remove judge function
  *
  * \param[in] dist_tmp : Distance input array
  *                Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] ref_tmp : Reflectance input array
- *                Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] dist_longit : Longitudinal distance array
- *                Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] ref_longit : Longitudinal reflectance array
- *                Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] diff_th : Difference threshold
- *                Range: 128-300. Accuracy: 1.
- * \return 0: Not trail, 1: Trail
- ******************************************************************************/
-int AlgoFunction::trailJudge(int* dist_tmp,
-                             int* ref_tmp,
-                             int* dist_longit,
-                             int* ref_longit,
-                             const int diff_th)
+ * \param[in] dist_trail : Reflectance input array
+ * \param[out] Hortrail_judge : Horizontal trail success flag
+ *                Range: 0-1. Accuracy: 1.
+ * \param[out] wall_judge : Horizontal trail success flag
+ *                Range: 0-1. Accuracy: 1.
+ */
+void AlgoFunction::HorTrailRemove(int* dist_tmp,
+                             int dist_trail,
+                             int* Hortrail_judge,
+                             int* wall_judge)
 {
-    int trail_judge = 0;
-    const int HL = 5;
-    const int half_HL = HL / 2;
-    const int distC = dist_tmp[half_HL];
+    int weight[5] = {1,2,0,2,1};
+    *Hortrail_judge = 0;
+    *wall_judge = 0;
+
+    const int HL = trail_Param.HL;
+    const int half_HL = trail_Param.half_HL;
 
     // 差异数组初始化
-    int dif_distC[HL] = {0};
     int dif_distC_abs[HL] = {0};
     int dif_dist[HL-1] = {0};
     int dif_dist_abs[HL-1] = {0};
     int dif2_dist_abs[HL-2] = {0};
-    int dif_distC_ver_abs[9] = {0};
+    // 计算自适应阈值
+    const int AdjDisThreD = std::max(1, (dist_trail * trail_Param.DisThreRatio) >> 3);
+    int zero_cnt = 0;
+    int dif_dist_abs_cnt = 0;
 
     // 参数提取
     const int& D_H = trail_Param.D_H;
-    const double& dist_th_ratio = trail_Param.dist_th_ratio;
-    const int& SlopDifThre = trail_Param.SlopDifThre;
-    const double& DisThreRatio = trail_Param.DisThreRatio;
-    const int& near_cnt_th_h = trail_Param.near_cnt_th_h;
-    const int& near_cnt_th_v = trail_Param.near_cnt_th_v;
 
-    // 计算自适应阈值
-    const int AdjDisThreD = std::max(1, static_cast<int>(std::floor(distC * DisThreRatio)));
-    const int near_dist_th = clamp(static_cast<int>(std::round(distC * dist_th_ratio)), 2, 20);
-
-    // 初始化权重数组
-    int weight[HL] = {1, 1, 1, 1, 1};
-    weight[half_HL - 1] = 2;
-    weight[half_HL] = 0;
-    weight[half_HL + 1] = 2;
-
-    // 统计变量初始化
-    int zero_cnt = 0;
-    int dif_dist_abs_cnt = 0;
-    int near_cnt_h = 0;
-    int near_cnt_v = 0;
-    int ver_cnt = 0;
+    //初始化参数
+    int dist_tmpC;
+    int dif_distC_tmp;
+    int dif_dist_tmp;
 
     // 水平方向处理 - 第一遍循环
     for (int i = 0; i < HL; i++)
     {
         // 处理无效点
-        if (dist_tmp[i] == 0) {
+        dist_tmpC = dist_tmp[i];
+        if (dist_tmpC == 0) {
         weight[i] = 0;
-        dif_distC[i] = 65535;
+        dif_distC_tmp = 65535;
         zero_cnt++;
         }
         else {
-            dif_distC[i] = dist_tmp[i] - distC;
+            dif_distC_tmp = dist_tmpC - dist_trail;
         }
 
         // 计算绝对值
-        dif_distC_abs[i] = abs(dif_distC[i]);
+        dif_distC_abs[i] = std::abs(dif_distC_tmp);
 
         // 相邻点差异计算
         if (i < HL - 1) {
-            dif_dist[i] = dist_tmp[i + 1] - dist_tmp[i];
-            dif_dist_abs[i] = abs(dif_dist[i]);
-
+            dif_dist_tmp = dist_tmp[i + 1] - dist_tmp[i];
+            dif_dist[i] = dif_dist_tmp;
+            dif_dist_abs[i] = std::abs(dif_dist_tmp);
             // 大差异计数
             if (dif_dist_abs[i] > AdjDisThreD) {
                 dif_dist_abs_cnt++;
             }
 
-            // 近邻计数
-            if (dif_dist_abs[i] < near_dist_th) {
-            near_cnt_h++;
-            }
-
             // 二阶差分计算
             if (i > 0) {
-            dif2_dist_abs[i - 1] = abs(dif_dist[i] - dif_dist[i - 1]);
+                dif2_dist_abs[i - 1] = std::abs(dif_dist[i] - dif_dist[i - 1]);
             }
         }
     }
 
     // 主判断条件
     bool con0 = zero_cnt <= half_HL + 1;
-    if (!con0) {
-    return trail_judge;
-    }
 
     // 条件1计算
     bool con1_1 = (dif_distC_abs[half_HL - 1] > AdjDisThreD) &&
@@ -296,739 +231,78 @@ int AlgoFunction::trailJudge(int* dist_tmp,
     int distdiff_mean = std::round(weighted_sum / 4.0);
     bool con2 = (distdiff_mean > AdjDisThreD) && (distdiff_mean < D_H);
 
-    if (!con1 && !con2) {
-        return trail_judge;
+    if (con0 && (con1 || con2)) {
+        *Hortrail_judge = 1;
     }
+    int sum_dif2_dist_abs = 0;
+    for (int i = 0; i < HL; i++)
+    {
+        sum_dif2_dist_abs += dif2_dist_abs[i];
+    }
+    int wall_mask1 = sum_dif2_dist_abs > trail_Param.SlopDifThre;
+    int wall_mask2 = dif2_dist_abs[half_HL - 2] > trail_Param.SlopDifThre;
+    if(wall_mask1 && wall_mask2)
+    {
+      *wall_judge = 1;
+    }
+}
 
-    // 垂直方向处理
-    for (int j = 0; j < 9; j++) {
-    if (dist_longit[j] == 0) {
-    dif_distC_ver_abs[j] = 65535;
-    } else {
-        dif_distC_ver_abs[j] = abs(dist_longit[j] - distC);
-    }
+/**
+ * \brief  verital trail remove judge function
+ *
+ * \param[in] dist_trail : Reflectance input array
+ * \param[out] Hortrail_judge : Horizontal trail success flag
+ *                Range: 0-1. Accuracy: 1.
+ * \param[out] wall_judge : Horizontal trail success flag
+ *                Range: 0-1. Accuracy: 1.
+ */
+int AlgoFunction::VerTrailRemove(
+                             int dist_trail,
+                             int* dist_longit)
+{
+    int Vertrail_judge = 0;
+    const int HL = trail_Param.HL;
+    const int half_HL = trail_Param.half_HL;
+    const int near_cnt_h = trail_Param.near_cnt_h;
 
-    // 近邻计数
-    if (dif_distC_ver_abs[j] < near_dist_th) {
-    near_cnt_v++;
-    }
+    // 差异数组初始化
+    int dif_distC_ver_abs[9] = {0};
+    int near_cnt_v = 0;
+    int ver_cnt = 0;
+    for(int i = 0;i < 9; i++)
+    {
+        int dist_longit_tmp = dist_longit[i];
+        if(dist_longit_tmp == 0) {
+            dif_distC_ver_abs[i] = 65535;
+        }
+        else {
+            dif_distC_ver_abs[i] = abs(dist_longit_tmp - dist_trail);
+        }
+        if(dif_distC_ver_abs[i] < trail_Param.near_dist_th)
+        {
+            near_cnt_v++;
+        }
+        if(dif_distC_ver_abs[i] < trail_Param.SlopDifThre * 2)
+        {
+          ver_cnt++;
+        }
 
-    // 垂直计数
-    if (dif_distC_ver_abs[j] < SlopDifThre * 2) {
-    ver_cnt++;
     }
-    }
-
-    // 条件3计算
-    bool con3_1 = near_cnt_h < near_cnt_th_h;
-    bool con3_2 = near_cnt_v < near_cnt_th_v;
+    //距离判断条件3 保护细杆
+    bool con3_1 = near_cnt_h < trail_Param.near_cnt_th_h;
+    bool con3_2 = near_cnt_v < trail_Param.near_cnt_th_v;
     bool con3 = con3_1 && con3_2;
-
-    // 条件4计算
-    int sumTmp = 0;
-    for (int i = 0; i < 3; i++) {
-        sumTmp += dif2_dist_abs[i];
-    }
-    bool con4_1 = sumTmp > SlopDifThre;
-    bool con4_2 = (half_HL >= 2) ? (dif2_dist_abs[half_HL - 2] > SlopDifThre) : false;
+    // 距离判断条件4 保护斜墙
     bool con4_3 = ver_cnt < 3;
-    bool con4 = (con4_1 && con4_2) || con4_3;
-
-    // 最终判断
-    if (con3 && con4) {
-        trail_judge = 1;
-    }
-
-    return trail_judge;
-}
-
-/*******************************************************************************
- * \brief  Choose distance filter according to the length of the data
- *
- * \param[in] data: input distance of filter neighborhood
- *                Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] length: the length of the data
- *                Range: 1 - 11. Accuracy: 1.
- * \param[in] order: fitting coefficient
-*                Range: 1,2. Accuracy: 1.
- * \return int: the result of the distance filter
- ******************************************************************************/
-int AlgoFunction::applyFilter(int* data, int length, int order)
-{
-    int num = 0;
-
-    switch (length) {
-        case 1:
-        {
-            for (int j = 0; j < 3; j++) {
-                num += (order == 1 ? Smooth_params.B31[0][j] : Smooth_params.B31[1][j]) * data[j];
-            }
-        }break;
-        case 2:
-        case 3:
-        {
-            int filter_size = (length == 2) ? 3 : 3; // B33或B32
-            const int* filter = (length == 2) ?
-                (order == 1 ? Smooth_params.B33[0] : Smooth_params.B33[1]):
-                (order == 1 ? Smooth_params.B32[0] : Smooth_params.B32[1]);
-            for (int j = 0; j < filter_size; j++) {
-                num += filter[j] * data[j];
-            }
-        }break;
-        case 5:
-        case 7:
-        case 9:
-        case 11:
-        {
-            const int* filter = (length == 5) ? (order == 1 ? Smooth_params.B5[0] : Smooth_params.B5[1]) :
-                            (length == 7) ? (order == 1 ? Smooth_params.B7[0] : Smooth_params.B7[1]) :
-                            (length == 9) ? (order == 1 ? Smooth_params.B9[0] : Smooth_params.B9[1]) :
-                                            (order == 1 ? Smooth_params.B11[0] : Smooth_params.B11[1]);
-            for (int j = 0; j < length; j++) {
-                num += filter[j] * data[j];
-            }
-        }break;
-        default:
-            // 默认处理
-            for (int j = 0; j < length; j++) {
-                num += (order == 1 ? Smooth_params.B11[0][j] : Smooth_params.B11[1][j]) * data[j];
-            }
-        break;
-    }
-
-    return num >> 12;
-}
-
-/*******************************************************************************
- * \brief  Horizontal smooth processing
- *
- * \param[in] hor_smooth_col: the column of the horizontal smooth
- *                Range: 0 - 759. Accuracy: 1.
- * \param[in] hor_smooth_col_buffer: the buffer index of the horizontal smooth
- *                Range: 0 -10. Accuracy: 1.
- * \param[in] hor_smooth_col_neib_buf: the buffer index of the horizontal smooth neighbor
- *                Range: 0 - 2^32-1. Accuracy: 1.
-*******************************************************************************/
-void AlgoFunction::hSmooth(int hor_smooth_col,
-    int hor_smooth_col_buffer, int* hor_smooth_col_neib_buf)
-{
-    // 提前条件判断，减少不必要的计算
-    if (hor_smooth_col < 0 || hor_smooth_col >= VIEW_W ||
-        (!algo_Param.HorDistSmoothOn && !algo_Param.HorRefSmoothOn)) {
-        return;
-    }
-
-    const int SmoothH = Smooth_params.SmoothH;
-
-    // 合并距离和反射的平滑处理
-    for (int row_idx = 0; row_idx < VIEW_H; ++row_idx)
+    bool con4 = trail_Param.wall_judge || con4_3;
+    if(con3 && con4)
     {
-        int dist_cur = dist_wave0_buffer1[hor_smooth_col_buffer][row_idx];
-        int ref_cur = refl_wave0_buffer1[hor_smooth_col_buffer][row_idx];
-
-        // 提前判断阈值条件
-        if (dist_cur <= Smooth_params.dist_filter_start_th || dist_cur > Smooth_params.dist_filter_end_th) {
-            continue;
-        }
-
-        // 合并数据读取
-        int dist_src[5] = {0};
-        int ref_src[5] = {0};
-        for (int i = 0; i < 5; ++i) {
-            dist_src[i] = dist_wave0_buffer1[hor_smooth_col_neib_buf[i]][row_idx];
-            ref_src[i] = refl_wave0_buffer1[hor_smooth_col_neib_buf[i]][row_idx];
-        }
-
-        // 计算公共阈值
-        int dist_th = clamp((dist_cur * Smooth_params.dist_th_ratio) >> 12, 30, 150);
-        int filter_diff_th = 0, mean_diff_th = 0;
-
-        if (algo_Param.HorDistSmoothOn) {
-            filter_diff_th = clamp((dist_cur * Smooth_params.filter_diff_th_ratio) >> 12, 50, 100);
-            mean_diff_th = clamp((dist_cur * Smooth_params.mean_diff_th_ratio) >> 12, 50, 100);
-        }
-
-        // 合并左右数据处理
-        int dist_dst_L[3] = {0}, dist_dst_R[3] = {0};
-        int ref_dst_L[3] = {0}, ref_dst_R[3] = {0};
-        int realL_L = 0, realL_R = 0;
-        int realL_ref_L = 0, realL_ref_R = 0;
-        int end_flag_L = 0, end_flag_R = 0;
-        int sum_diff = 0, sum_diff_abs = 0, mean_dist = 0;
-
-        int cosis_cnt_L = 0;
-        int cosis_cnt_R = 0;
-        int diff_pre_L = 0;
-        int diff_pre_R = 0;
-        for (int i = 0; i < SmoothH; ++i)
-        {
-            // 右数据处理
-            int dist_tmp_R = dist_src[SmoothH + 1 + i];
-            int ref_tmp_R = ref_src[SmoothH + 1 + i];
-            int diff_R = dist_tmp_R - dist_cur;
-            int abs_diff_R = abs(diff_R);
-            int abs_ref_diff_R = abs(ref_tmp_R - ref_cur);
-
-            if (abs_diff_R < dist_th && end_flag_R < 2) {
-                if (abs(diff_R - diff_pre_R) < Smooth_params.dist_th_cosisH)
-                {
-                    cosis_cnt_R++;
-                }
-                dist_dst_R[realL_R] = dist_tmp_R;
-                realL_R++;
-                if (abs_ref_diff_R < Smooth_params.ref_th) {
-                    ref_dst_R[realL_ref_R++] = ref_tmp_R;
-                }
-                sum_diff += diff_R;
-                sum_diff_abs += abs_diff_R;
-                mean_dist += dist_tmp_R;
-                diff_pre_R = diff_R;
-            } else if (dist_tmp_R <= 0 || abs_diff_R > 400) {
-                end_flag_R++;
-            }
-
-            // 左数据处理
-            int dist_tmp_L = dist_src[SmoothH - 1 - i];
-            int ref_tmp_L = ref_src[SmoothH - 1 - i];
-            int diff_L = dist_tmp_L - dist_cur;
-            int abs_diff_L = abs(diff_L);
-            int abs_ref_diff_L = abs(ref_tmp_L - ref_cur);
-
-            if (abs_diff_L < dist_th && end_flag_L < 2) {
-                if (abs(diff_L - diff_pre_L) < Smooth_params.dist_th_cosisH)
-                {
-                    cosis_cnt_L = cosis_cnt_L + 1;
-                }
-                dist_dst_L[realL_L] = dist_tmp_L;
-                realL_L++;
-                if (abs_ref_diff_L < Smooth_params.ref_th) {
-                    ref_dst_L[realL_ref_L++] = ref_tmp_L;
-                }
-                sum_diff += diff_L;
-                sum_diff_abs += abs_diff_L;
-                mean_dist += dist_tmp_L;
-                diff_pre_L = diff_L;
-            } else if (dist_tmp_L <= 0 || abs_diff_L > 400) {
-                end_flag_L++;
-            }
-        }
-
-        // 距离平滑处理
-        if (algo_Param.HorDistSmoothOn)
-        {
-            sum_diff = abs(sum_diff);
-            int dist_dst[11] = {0}; // 使用最大可能大小
-            int real_L = 0;
-
-            if (realL_R != 0 && realL_L != 0) {
-                int realHL = std::min(realL_R, realL_L);
-                real_L = 2 * realHL + 1;
-
-                for (int i = 0; i < realHL; i++) {
-                    dist_dst[i] = dist_dst_L[realHL - 1 - i];
-                }
-                dist_dst[realHL] = dist_cur;
-                for (int i = 0; i < realHL; i++) {
-                    dist_dst[realHL + 1 + i] = dist_dst_R[i];
-                }
-
-                int idx = realL_R + realL_L - 1;
-                mean_dist = (int)round((mean_dist * Smooth_params.data_len_inv[idx]) / 4096.0);
-            }
-            else if (realL_R > 1) {
-                real_L = 1;
-                dist_dst[0] = dist_cur;
-                if (realL_R >= 2) {
-                    dist_dst[1] = dist_dst_R[0];
-                    dist_dst[2] = dist_dst_R[1];
-                }
-                mean_dist = dist_cur;
-            }
-            else if (realL_L > 1) {
-                real_L = 2;
-                dist_dst[0] = dist_dst_L[1];
-                dist_dst[1] = dist_dst_L[0];
-                dist_dst[2] = dist_cur;
-                mean_dist = dist_cur;
-            }
-
-            if (real_L != 0)
-            {
-                bool need_filter = (sum_diff_abs < Smooth_params.abs_diff_sum_th) ||
-                                    (sum_diff < Smooth_params.diff_sum_th) ||
-                                    (abs(mean_dist - dist_cur) < mean_diff_th);
-                    bool edge_flag = (cosis_cnt_R >= realL_R - 1 && abs(diff_pre_R) < Smooth_params.dist_th_cosisH) ||
-                        (cosis_cnt_L >= realL_L - 1 && abs(diff_pre_L) < Smooth_params.dist_th_cosisH);
-
-                    if (need_filter && (!edge_flag))
-                {
-                    int order = (sum_diff_abs < ((dist_cur * Smooth_params.var_ratio) >> 12) ||
-                                (abs(mean_dist - dist_cur) < filter_diff_th)) ? 1 : 2;
-
-                    int dist_filter = applyFilter(dist_dst, real_L, order);
-
-                        if (abs(dist_filter - dist_cur) < filter_diff_th && dist_filter > 0) {
-                        dist_wave0_buffer1[hor_smooth_col_buffer][row_idx] = dist_filter;
-                    }
-                }
-                else if (real_L >= 3) {
-                    int num = 0;
-                    int mid = real_L / 2;
-                    for (int j = mid; j < mid + 3; j++) {
-                        num += Smooth_params.B32[1][j - mid] * dist_dst[j - 1];
-                    }
-                    int dist_filter = num >> 12;
-                        if (dist_filter > 0 && abs(dist_filter - dist_cur) < filter_diff_th) {
-                        dist_wave0_buffer1[hor_smooth_col_buffer][row_idx] = dist_filter;
-                    }
-                }
-            }
-        }
-
-        // 反射平滑处理
-        if (algo_Param.HorRefSmoothOn)
-        {
-            int ref_dst[11] = {0}; // 使用最大可能大小
-            int real_ref_L = 0;
-
-            if (realL_ref_R != 0 && realL_ref_L != 0) {
-                int realHrefL = std::min(realL_ref_L, realL_ref_R);
-                real_ref_L = 2 * realHrefL + 1;
-                for (int i = 0; i < realHrefL; i++) {
-                    ref_dst[i] = ref_dst_L[realHrefL - 1 - i];
-                }
-                ref_dst[realHrefL] = ref_cur;
-                for (int i = 0; i < realHrefL; i++) {
-                    ref_dst[realHrefL + 1 + i] = ref_dst_R[i];
-                }
-            }
-            else if (realL_ref_R > 1) {
-                real_ref_L = 1;
-                ref_dst[0] = ref_cur;
-                ref_dst[1] = ref_dst_R[0];
-                ref_dst[2] = ref_dst_R[1];
-            }
-            else if (realL_ref_L > 1) {
-                real_ref_L = 2;
-                ref_dst[0] = ref_dst_L[1];
-                ref_dst[1] = ref_dst_L[0];
-                ref_dst[2] = ref_cur;
-            }
-
-            if (real_ref_L != 0) {
-                int order = 1;
-                int ref_filter = applyFilter(ref_dst, real_ref_L, order);
-                if (ref_filter > 0 && ref_filter <= 255)
-                {
-                    refl_wave0_buffer1[hor_smooth_col_buffer][row_idx] = ref_filter;
-                }
-            }
-        }
+        Vertrail_judge = 1;
     }
+    return Vertrail_judge;
 }
 
-/*******************************************************************************
- * \brief  Vertical smooth processing
- *
- * \param[in] ver_smooth_col: the column of the vertical smooth
- *                Range: 0 - 759. Accuracy: 1.
- * \param[in] ver_smooth_col_buffer: the buffer index of the vertical smooth
- *                Range: 0 -10. Accuracy: 1.
-*******************************************************************************/
-void AlgoFunction::vSmooth(int ver_smooth_col, int ver_smooth_col_buffer)
-{
-    const int SmoothH = 2;
-
-    if (ver_smooth_col < 0 || ver_smooth_col >= VIEW_W) return;
-
-    // 提前加载常用参数
-    const bool verDistSmoothOn = algo_Param.VerDistSmoothOn == 1;
-    const bool verRefSmoothOn = algo_Param.VerRefSmoothOn == 1;
-    if (!verDistSmoothOn && !verRefSmoothOn) return;
-
-    const int interface_rows = Smooth_params.interface_rows;
-    const int ex_row = Smooth_params.ex_row;
-    const int gap_len = Smooth_params.gap_len;
-    const int dist_filter_start_th = Smooth_params.dist_filter_start_th;
-    const int dist_filter_end_th = Smooth_params.dist_filter_end_th;
-    const int ref_th = Smooth_params.ref_th;
-
-    // 预计算常用值
-    const int interface_end = interface_rows - ex_row + 1;
-    const int gap_interface_end = interface_rows - gap_len + 1;
-
-    uint16_t dist_line[VIEW_H];
-    uint8_t ref_line[VIEW_H];
-
-    memcpy(dist_line,dist_wave0_buffer1[ver_smooth_col_buffer],sizeof(uint16_t) * VIEW_H);
-    memcpy(ref_line,refl_wave0_buffer1[ver_smooth_col_buffer],sizeof(uint8_t) * VIEW_H);
-
-    for (int row_idx = 0; row_idx < VIEW_H; row_idx++)
-    {
-        const int dist_cur = dist_line[row_idx];
-        const int ref_cur = ref_line[row_idx];
-
-        // 快速跳过不在距离范围内的点
-        if (dist_cur < dist_filter_start_th || dist_cur > dist_filter_end_th) continue;
-
-        // 计算行区域和SmoothV
-        const int row_in_region = (row_idx + 1) % interface_rows;
-        const int SmoothV = (row_in_region <= ex_row || row_in_region >= interface_end)
-                                ? Smooth_params.SmoothV_list[1]
-                                : Smooth_params.SmoothV_list[0];
-
-        // 计算gap位置
-        const bool gap_pos = ((row_idx >= gap_len && row_in_region >= gap_interface_end) ||
-                            (row_idx < VIEW_H - gap_len && row_in_region <= gap_len));
-        if (!gap_pos) continue;
-
-        // 准备数据缓冲区 - 优化内存访问
-        int dist_src[7] = {0};
-        int ref_src[7] = {0};
-        const int window_size = 2 * SmoothV + 1;
-
-        // 边界处理优化
-        if (row_idx <= SmoothV)
-        {
-            const int valid_size = std::min(row_idx + SmoothV + 1, VIEW_H);
-            for (int i = 0; i < valid_size; i++)
-            {
-                const int src_pos = 2 * SmoothV - valid_size + 1 + i;
-                dist_src[src_pos] = dist_line[i];
-                ref_src[src_pos] = ref_line[i];
-            }
-        }
-        else if (row_idx >= VIEW_H - SmoothV)
-        {
-            const int valid_rows = std::min(SmoothV + 1, VIEW_H - row_idx);
-            for (int i = 0; i < valid_rows; i++)
-            {
-                dist_src[i] = dist_line[VIEW_H - valid_rows + i];
-                ref_src[i] = ref_line[VIEW_H - valid_rows + i];
-            }
-        }
-        else
-        {
-            const int start_row = row_idx - SmoothV;
-            for (int i = 0; i < window_size; i++)
-            {
-                dist_src[i] = dist_line[start_row + i];
-                ref_src[i] = ref_line[start_row + i];
-            }
-        }
-
-        // 计算距离阈值
-        int dist_th = (dist_cur * Smooth_params.dist_th_ratio) >> 12;
-        dist_th = (dist_th < 30) ? 30 : (dist_th > 500) ? 500 : dist_th;
-
-        // 邻域分析
-        int realL_L = 0, realL_R = 0;
-        int realL_ref_L = 0, realL_ref_R = 0;
-        int end_flag_L = 0, end_flag_R = 0;
-        int sum_diff = 0, sum_diff_abs = 0, mean_dist = 0;
-        int dist_dst_L[5] = {0}, dist_dst_R[5] = {0};
-        int ref_dst_L[5] = {0}, ref_dst_R[5] = {0};
-        int cosis_cnt_L = 0;
-        int cosis_cnt_R = 0;
-        int diff_pre_L = 0;
-        int diff_pre_R = 0;
-
-        for (int i = 1; i <= SmoothV; i++)
-        {
-            const int idx_R = SmoothV + i;
-            const int idx_L = SmoothV - i;
-            const int dist_tmp_R = dist_src[idx_R];
-            const int dist_tmp_L = dist_src[idx_L];
-            const int ref_tmp_R = ref_src[idx_R];
-            const int ref_tmp_L = ref_src[idx_L];
-            //const int diff_tmp_L = dist_src[SmoothV] - dist_src[idx_L];
-            //const int diff_tmp_R = dist_src[idx_R] - dist_src[SmoothV];
-
-            const int diff_R = dist_tmp_R - dist_cur;
-            const int diff_L = dist_tmp_L - dist_cur;
-            const int abs_diff_R = abs(diff_R);
-            const int abs_diff_L = abs(diff_L);
-            const int abs_ref_diff_R = abs(ref_tmp_R - ref_cur);
-            const int abs_ref_diff_L = abs(ref_tmp_L - ref_cur);
-
-            // 右侧邻域处理
-            if (abs_diff_R < dist_th && end_flag_R < 2)
-            {
-                if (abs(diff_R - diff_pre_R) < Smooth_params.dist_th_cosisV)
-                {
-                    cosis_cnt_R++;
-                }
-                dist_dst_R[realL_R++] = dist_tmp_R;
-                if (abs_ref_diff_R < ref_th || gap_pos)
-                {
-                    ref_dst_R[realL_ref_R++] = ref_tmp_R;
-                }
-                sum_diff += diff_R;
-                sum_diff_abs += abs_diff_R;
-                mean_dist += dist_tmp_R;
-                diff_pre_R = diff_R;
-            }
-            else if (dist_tmp_R <= 0 || abs_diff_R > 400)
-            {
-                end_flag_R++;
-            }
-
-            // 左侧邻域处理
-            if (abs_diff_L < dist_th && end_flag_L < 2)
-            {
-                if (abs(diff_L - diff_pre_L) < Smooth_params.dist_th_cosisV) {
-                    cosis_cnt_L++;
-                }
-                dist_dst_L[realL_L++] = dist_tmp_L;
-                if (abs_ref_diff_L < ref_th || gap_pos)
-                {
-                    ref_dst_L[realL_ref_L++] = ref_tmp_L;
-                }
-                sum_diff += diff_L;
-                sum_diff_abs += abs_diff_L;
-                mean_dist += dist_tmp_L;
-                diff_pre_L = diff_L;
-            }
-            else if (dist_tmp_L <= 0 || abs_diff_L > 400)
-            {
-                end_flag_L++;
-            }
-        }
-
-        // 距离平滑处理
-        if (verDistSmoothOn && (realL_L > 0 || realL_R > 0))
-        {
-            int dist_dst_vec[11] = {0};
-            int real_L = 0;
-            const int sum_diff_abs_val = abs(sum_diff);
-
-            if (realL_R != 0 && realL_L != 0)
-            {
-                const int realHL = std::min(realL_R, realL_L);
-                real_L = 2 * realHL + 1;
-                for (int i = 0; i < realHL; i++)
-                {
-                    dist_dst_vec[i] = dist_dst_L[realHL - 1 - i];
-                }
-                dist_dst_vec[realHL] = dist_cur;
-                for (int i = 0; i < realHL; i++)
-                {
-                    dist_dst_vec[realHL + 1 + i] = dist_dst_R[i];
-                }
-                mean_dist = (mean_dist * Smooth_params.data_len_inv[realL_R + realL_L - 1] + 2048) >> 12;
-            }
-            else if (realL_R > 1)
-            {
-                real_L = 1;
-                dist_dst_vec[0] = dist_cur;
-                dist_dst_vec[1] = dist_dst_R[0];
-                dist_dst_vec[2] = dist_dst_R[1];
-                mean_dist = dist_cur;
-            }
-            else if (realL_L > 1)
-            {
-                real_L = 2;
-                dist_dst_vec[0] = dist_dst_L[1];
-                dist_dst_vec[1] = dist_dst_L[0];
-                dist_dst_vec[2] = dist_cur;
-                mean_dist = dist_cur;
-            }
-
-            if (real_L > 0)
-            {
-                const int filter_diff_th = std::max(50, std::min((dist_cur * Smooth_params.filter_diff_th_ratio) >> 12, 100));
-                const int mean_diff_th = std::max(50, std::min((dist_cur * Smooth_params.mean_diff_th_ratio) >> 12, 100));
-                const int need_filter = sum_diff_abs < Smooth_params.abs_diff_sum_th ||
-                    sum_diff_abs_val < Smooth_params.diff_sum_th ||
-                    abs(mean_dist - dist_cur) < mean_diff_th;
-                const bool  edge_flag = (cosis_cnt_R >= realL_R - 1 && abs(diff_pre_R) < Smooth_params.dist_th_cosisV) ||
-                    (cosis_cnt_L >= realL_L - 1 && abs(diff_pre_L) < Smooth_params.dist_th_cosisV);
-
-                if (!edge_flag && need_filter)
-                {
-                    const int order = (sum_diff_abs < ((dist_cur * Smooth_params.var_ratio) >> 12) ||
-                                        abs(mean_dist - dist_cur) < filter_diff_th) ? 1 : 2;
-
-                    int dist_filter = dist_cur;
-                    const int* filter_coeff = nullptr;
-                    int filter_size = 0;
-
-                    // 选择滤波器系数
-                    if (real_L == 1)
-                    {
-                        filter_coeff = Smooth_params.B31[order - 1];
-                        filter_size = 3;
-                    }
-                    else if (real_L == 2)
-                    {
-                        filter_coeff = Smooth_params.B33[order - 1];
-                        filter_size = 3;
-                    }
-                    else if (real_L == 3)
-                    {
-                        filter_coeff = Smooth_params.B32[order - 1];
-                        filter_size = 3;
-                    }
-                    else if (real_L == 5)
-                    {
-                        filter_coeff = Smooth_params.B5[order - 1];
-                        filter_size = 5;
-                    }
-                    else if (real_L == 7)
-                    {
-                        filter_coeff = Smooth_params.B7[order - 1];
-                        filter_size = 7;
-                    }
-                    else if (real_L == 9)
-                    {
-                        filter_coeff = Smooth_params.B9[order - 1];
-                        filter_size = 9;
-                    }
-                    else
-                    {
-                        filter_coeff = Smooth_params.B11[order - 1];
-                        filter_size = 11;
-                    }
-
-                    // 应用滤波器
-                    int num = 0;
-                    for (int j = 0; j < filter_size; j++)
-                    {
-                        num += filter_coeff[j] * dist_dst_vec[j];
-                    }
-                    dist_filter = num >> 12;
-
-                    if (abs(dist_filter - dist_cur) < filter_diff_th && dist_filter> 0)
-                    {
-                        dist_wave0_buffer1[ver_smooth_col_buffer][row_idx] = dist_filter;
-                    }
-                }
-                else if (real_L >= 3)
-                {
-                    const int mid = real_L / 2;
-                    const int* filter_coeff = Smooth_params.B32[1];
-                    int num = 0;
-                    for (int j = mid; j < mid + 3; j++)
-                    {
-                        num += filter_coeff[j - mid] * dist_dst_vec[j - 1];
-                    }
-                    const int dist_filter = num >> 12;
-                    const int filter_diff_th = std::max(50, std::min((dist_cur * Smooth_params.filter_diff_th_ratio) >> 12, 100));
-
-                        if (abs(dist_filter - dist_cur) < filter_diff_th && dist_filter > 0)
-                    {
-                        dist_wave0_buffer1[ver_smooth_col_buffer][row_idx] = dist_filter;
-                    }
-                }
-            }
-        }
-
-        // 反射率平滑处理
-        if (verRefSmoothOn && (realL_ref_L > 0 || realL_ref_R > 0))
-        {
-            int ref_dst_vec[11] = {0};
-            int real_ref_L = 0;
-
-            if (realL_ref_R != 0 && realL_ref_L != 0)
-            {
-                const int realHrefL = std::min(realL_ref_L, realL_ref_R);
-                real_ref_L = 2 * realHrefL + 1;
-                for (int i = 0; i < realHrefL; i++)
-                {
-                    ref_dst_vec[i] = ref_dst_L[realHrefL - 1 - i];
-                }
-                ref_dst_vec[realHrefL] = ref_cur;
-                for (int i = 0; i < realHrefL; i++)
-                {
-                    ref_dst_vec[realHrefL + 1 + i] = ref_dst_R[i];
-                }
-            }
-            else if (realL_ref_R > 1)
-            {
-                real_ref_L = 1;
-                ref_dst_vec[0] = ref_cur;
-                ref_dst_vec[1] = ref_dst_R[0];
-                ref_dst_vec[2] = ref_dst_R[1];
-            }
-            else if (realL_ref_L > 1)
-            {
-                real_ref_L = 2;
-                ref_dst_vec[0] = ref_dst_L[1];
-                ref_dst_vec[1] = ref_dst_L[0];
-                ref_dst_vec[2] = ref_cur;
-            }
-
-            if (real_ref_L > 0)
-            {
-                const int order = 1; // 固定1阶
-                const int* filter_coeff = nullptr;
-                int filter_size = 0;
-
-                // 选择滤波器系数
-                if (real_ref_L == 1)
-                {
-                    filter_coeff = Smooth_params.B31[order - 1];
-                    filter_size = 3;
-                }
-                else if (real_ref_L == 2)
-                {
-                    filter_coeff = Smooth_params.B33[order - 1];
-                    filter_size = 3;
-                }
-                else if (real_ref_L == 3)
-                {
-                    filter_coeff = Smooth_params.B32[order - 1];
-                    filter_size = 3;
-                }
-                else if (real_ref_L == 5)
-                {
-                    filter_coeff = Smooth_params.B5[order - 1];
-                    filter_size = 5;
-                }
-                else if (real_ref_L == 7)
-                {
-                    filter_coeff = Smooth_params.B7[order - 1];
-                    filter_size = 7;
-                }
-                else if (real_ref_L == 9)
-                {
-                    filter_coeff = Smooth_params.B9[order - 1];
-                    filter_size = 9;
-                }
-                else
-                {
-                    filter_coeff = Smooth_params.B11[order - 1];
-                    filter_size = 11;
-                }
-
-                // 应用滤波器
-                int num = 0;
-                for (int j = 0; j < filter_size; j++)
-                {
-                    num += filter_coeff[j] * ref_dst_vec[j];
-                }
-                const int ref_filter = num >> 12;
-
-                if (gap_pos)
-                {
-                    if (ref_filter > ref_cur && ref_filter > 0 && ref_filter <= 255)
-                    {
-                        refl_wave0_buffer1[ver_smooth_col_buffer][row_idx] = ref_filter;
-                    }
-                }
-                else
-                {
-                    if (ref_filter > 0 && ref_filter <= 255)
-                    {
-                        refl_wave0_buffer1[ver_smooth_col_buffer][row_idx] = ref_filter;
-                    }
-                }
-            }
-        }
-    }
-}
-
-/*******************************************************************************
+/**
  * \brief  Rebuild distance and reflectance function
  *
  * \param[in] dist_tmp1: distance neighborhood of wave 0
@@ -1043,31 +317,37 @@ void AlgoFunction::vSmooth(int ver_smooth_col, int ver_smooth_col_buffer)
  *                Range: 0 - 2^32-1. Accuracy: 1.
  * \param[in] ad_mask2: additional mask neighborhood of wave 1
  *                Range: 0 - 2^32-1. Accuracy: 1.
-*******************************************************************************/
+ */
 void AlgoFunction::rebuildFunc(int* dist_tmp1,
                                int* dist_tmp2,
                                int* mask1,
                                int* mask2,
                                int* ad_mask1,
-                               int* ad_mask2)
+                               int* ad_mask2,
+                               int* PLRawFillMask)
 {
-    InsertParam_t params;
     memset(mask1, 0, 3 * sizeof(int));
     memset(mask2, 0, 3 * sizeof(int));
     memset(ad_mask1, 0, 3 * sizeof(int));
     memset(ad_mask2, 0, 3 * sizeof(int));
-
+    *PLRawFillMask = 0;
     // 参数解包到局部变量（减少结构体访问开销）
-    const int diff_th = params.diff_th;
-    const int diff_ratio_max = params.diff_ratio_max;
-    const int diff2_th = params.diff2_th;
-    const double ratio_scale = diff_ratio_max / 4096.0;
+    const int diff_th = upsample_Param.diff_th;
+    const int diff_ratio_max = upsample_Param.diff_ratio_max;
+    const int diff2_th = upsample_Param.diff2_th;
+    const float ratio_scale = diff_ratio_max / 4096.0;
 
     // 替代 Eigen::Vector3i dist_c1 = dist_tmp1.segment(1, 3)
     int dist_c1[3] = { dist_tmp1[1], dist_tmp1[2], dist_tmp1[3] };  // 注意原始数据索引偏移
     int dist_c2[3] = { dist_tmp2[1], dist_tmp2[2], dist_tmp2[3] };
 
     // 计算距离差值（展开所有计算）
+    if (std::abs(dist_c1[1] - dist_c2[1]) < ((dist_c1[1]*diff_ratio_max) >> 12) && dist_c1[1] > 0)
+    {
+        *PLRawFillMask = 1;
+        return;
+    }
+
     const int dist_diff11 = dist_tmp1[2] - dist_tmp1[1];
     const int dist_diff12 = dist_tmp1[3] - dist_tmp1[2];
     const int dist_diff13 = dist_tmp1[3] - dist_tmp1[1];
@@ -1126,7 +406,7 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
         res1 += mask1_hor[i] * dist_c1[i];
         consis_cnt1 += mask1_hor[i];
     }
-    const int coef1 = (consis_cnt1 > 0) ? params.coef_inv[consis_cnt1 - 1] : 0;
+    const int coef1 = (consis_cnt1 > 0) ? upsample_Param.coef_inv[consis_cnt1 - 1] : 0;
     const int consis_dist1 = (res1 * coef1) >> 12;
 
     // 处理右侧数据（相同模式优化）
@@ -1136,16 +416,14 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
         res2 += mask2_hor[i] * dist_c2[i];
         consis_cnt2 += mask2_hor[i];
     }
-    const int coef2 = (consis_cnt2 > 0) ? params.coef_inv[consis_cnt2 - 1] : 0;
+    const int coef2 = (consis_cnt2 > 0) ? upsample_Param.coef_inv[consis_cnt2 - 1] : 0;
     const int consis_dist2 = (res2 * coef2) >> 12;
-
 
     // 主条件判断优化
     const int diff_threshold = (consis_dist1 * diff_ratio_max) >> 12;
-    const bool main_condition =
-        (std::abs(consis_dist1 - consis_dist2) < diff_threshold &&
-            consis_cnt1 >= 2 && consis_cnt2 >= 2 &&
-            (mask1_hor[1] + mask2_hor[1] > 0));
+    const bool main_condition = (consis_cnt1 >= 2 && consis_cnt2 >= 2)
+                                && std::abs(consis_dist1 - consis_dist2) < ((consis_dist1 * diff_ratio_max) >> 12)
+                                && (mask1_hor[1] + mask2_hor[1] > 0);
 
     if (main_condition) {
         memcpy(mask1, mask1_hor, sizeof(mask1_hor));
@@ -1169,116 +447,6 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
     for (int i = 0; i < 3; ++i) {
         mask_cross[i] &= (dist_c1[i] > 0);
     }
-
-#if 0
-    int mask1_ver[3] = { 0 }, mask2_ver[3] = { 0 };
-    /* 垂直一致性检测（展开计算）*/
-    for (int i = 0; i < 3; ++i) {
-        if (abs_cross_diff[i] < diff_th) {
-            mask1_ver[i] = (dist_c1[i] > 0) ? 1 : 0;
-            mask2_ver[i] = (dist_c2[i] > 0) ? 1 : 0;
-        }
-    }
-
-    /* 三角一致性检测（展开计算）*/
-    auto checkTriangle = [&](const int* dist, const int* diffs,
-        int* tri_mask, int* ad_tri_mask) {
-            for (int i = 0; i < 3; ++i) {
-                const bool cond1 = (diffs[i] < diff2_th);
-                const bool cond2 = (diffs[(i + 1) % 3] < diff2_th);
-
-                if (cond1 && cond2) {
-                    tri_mask[i] = 1;
-                    ad_tri_mask[i] = (dist[i + 1] == 0) ? 2 : 0;
-                }
-                else if (cond1 || cond2) {
-                    ad_tri_mask[i] = 1;
-                }
-            }
-    };
-
-    // 执行三角检测
-    checkTriangle(dist_tmp1, abs_dist_diff, mask1_tri, ad_tri_mask1);
-    checkTriangle(dist_tmp2, abs_dist_diff + 3, mask2_tri, ad_tri_mask2);
-
-    for (int i = 0; i < 3; ++i) {
-        // 水平掩码优先
-        mask1[i] = (mask1_hor[i] > 0) ? 1 : ((mask1_ver[i] > 0) ? 1 : 0);
-        mask2[i] = (mask2_hor[i] > 0) ? 1 : ((mask2_ver[i] > 0) ? 1 : 0);
-
-        // 三角掩码覆盖
-        if (mask1_tri[i] > 0) {
-            mask1[i] = 1;
-            ad_mask1[i] = ad_tri_mask1[i];
-        }
-        if (mask2_tri[i] > 0) {
-            mask2[i] = 1;
-            ad_mask2[i] = ad_tri_mask2[i];
-        }
-    }
-
-    //const int diffs3[3] = { abs_dist_diff[0], abs_dist_diff[1], abs_dist_diff[2] };
-    //const int diffs4[3] = { abs_dist_diff[3], abs_dist_diff[4], abs_dist_diff[5] };
-
-    //checkConsistency(dist_tmp1, diffs3, mask1_hor);
-    //checkConsistency(dist_tmp2, diffs4, mask2_hor);
-
-
-
-    /* 条件判断集合优化（展开为独立判断）*/
-    // 条件1
-    if ((mask_cross[0] || mask_cross[1]) &&
-        dist_tmp1[1] > 0 && dist_tmp2[1] > 0 &&
-        dist_tmp1[2] > 0 && dist_tmp2[2] > 0 &&
-        std::abs(dist_diff11 - dist_diff21) < diff2_th &&
-        abs_dist_diff[0] < diff_th_max1[0])
-    {
-        mask1_ver[0] = mask1_ver[1] = 1;
-        mask2_ver[0] = mask2_ver[1] = 1;
-    }
-
-    // 条件2（优化重复项计算）
-    const bool cond2_base =
-        mask_cross[1] &&
-        dist_tmp1[2] > 0 && dist_tmp2[2] > 0 &&
-        dist_tmp1[1] > 0 && dist_tmp2[3] > 0;
-    if (cond2_base &&
-        std::abs(dist_diff11 - dist_diff22) < diff2_th &&
-        abs_dist_diff[0] < diff_th_max1[0])
-    {
-        mask1_ver[0] = mask1_ver[1] = 1;
-        mask2_ver[1] = mask2_ver[2] = 1;
-    }
-
-    // 条件3-8采用相同模式优化...
-    // [为节省篇幅，这里展示典型条件优化模式，实际需完整展开]
-
-    // 条件3
-    if (mask_cross[1] &&
-        dist_tmp1[2] > 0 && dist_tmp2[2] > 0 &&
-        dist_tmp1[3] > 0 && dist_tmp2[1] > 0 &&
-        std::abs(dist_diff12 - dist_diff21) < diff2_th &&
-        abs_dist_diff[1] < diff_th_max1[1])
-    {
-        mask1_ver[1] = mask1_ver[2] = 1;
-        mask2_ver[0] = mask2_ver[1] = 1;
-    }
-
-    // 计算单列计数（展开循环优化）
-    int mono_cnt1 = mask1_ver[0] + mask1_ver[1] + mask1_ver[2];
-    int mono_cnt2 = mask2_ver[0] + mask2_ver[1] + mask2_ver[2];
-
-    // 左侧与右侧单调判断（优化分支预测）
-    if (mono_cnt1 >= 2 && mono_cnt2 >= 2) {
-        memcpy(mask1, mask1_ver, 3 * sizeof(int));
-        memcpy(mask2, mask2_ver, 3 * sizeof(int));
-
-        // 使用位运算代替条件判断
-        ad_mask1[1] = (mask1_ver[1] == 0) ? 2 : ad_mask1[1];
-        ad_mask2[1] = (mask2_ver[1] == 0) ? 2 : ad_mask2[1];
-        return;
-    }
-#endif
     // 构建掩码数组（展开所有计算）
     int mask_c1[3], mask_c2[3];
     mask_c1[0] = (abs_dist_diff[0] < diff_th);  // abs_dist_diff11
@@ -1304,7 +472,7 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
     const int mask_c2_sum = mask_c2[0] + mask_c2[1] + mask_c2[2];
 
 
-    if ((3 == consis_cnt1 || (fabs(dist_diff12 - dist_diff13) < diff2_th &&
+    if ((3 == consis_cnt1 || (std::abs(dist_diff12 - dist_diff13) < diff2_th &&
         abs_dist_diff[1] < diff_th_max1[0])) && (mask_cross_sum == 1)) {
 
         int product_sum = 0;
@@ -1321,12 +489,12 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
             ad_tri_mask2[1] = mask_cross[1];
             ad_tri_mask2[2] = mask_cross[2];
         }
-        else if (fabs(dist_tmp2[0] - dist_tmp2[2]) < params.diff_th) {
+        else if (std::abs(dist_tmp2[0] - dist_tmp2[2]) < upsample_Param.diff_th) {
             mask2_tri[0] = 0; mask2_tri[1] = 1; mask2_tri[2] = 0;
             mask1_tri[0] = 1; mask1_tri[1] = 1; mask1_tri[2] = 1;
             ad_tri_mask2[0] = 2; ad_tri_mask2[1] = 0; ad_tri_mask2[2] = 0;
         }
-        else if (fabs(dist_tmp2[4] - dist_tmp2[2]) < params.diff_th) {
+        else if (std::abs(dist_tmp2[4] - dist_tmp2[2]) < upsample_Param.diff_th) {
             mask2_tri[0] = 0; mask2_tri[1] = 1; mask2_tri[2] = 0;
             mask1_tri[0] = 1; mask1_tri[1] = 1; mask1_tri[2] = 1;
             ad_tri_mask2[0] = 0; ad_tri_mask2[1] = 0; ad_tri_mask2[2] = 2;
@@ -1335,7 +503,7 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
             ad_tri_mask2[0] = 0; ad_tri_mask2[1] = 1; ad_tri_mask2[2] = 0;
         }
     }
-    else if ((consis_cnt2 == 3 || (fabs(dist_diff22 - dist_diff23) < diff2_th &&
+    else if ((consis_cnt2 == 3 || (std::abs(dist_diff22 - dist_diff23) < diff2_th &&
         abs_dist_diff[4] < diff_th_max2[0])) && mask_cross_sum == 1) {
 
         int product_sum = 0;
@@ -1353,12 +521,12 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
             ad_tri_mask1[1] = mask_cross[1];
             ad_tri_mask1[2] = mask_cross[2];
         }
-        else if (fabs(dist_tmp1[0] - dist_tmp1[2]) < params.diff_th) {
+        else if (std::abs(dist_tmp1[0] - dist_tmp1[2]) < upsample_Param.diff_th) {
             mask1_tri[0] = 0; mask1_tri[1] = 1; mask1_tri[2] = 0;
             mask2_tri[0] = 1; mask2_tri[1] = 1; mask2_tri[2] = 1;
             ad_tri_mask1[0] = 2; ad_tri_mask1[1] = 0; ad_tri_mask1[2] = 0;
         }
-        else if (fabs(dist_tmp1[4] - dist_tmp1[2]) < params.diff_th) {
+        else if (std::abs(dist_tmp1[4] - dist_tmp1[2]) < upsample_Param.diff_th) {
             mask1_tri[0] = 0; mask1_tri[1] = 1; mask1_tri[2] = 0;
             mask2_tri[0] = 1; mask2_tri[1] = 1; mask2_tri[2] = 1;
             ad_tri_mask1[0] = 0; ad_tri_mask1[1] = 0; ad_tri_mask1[2] = 2;
@@ -1369,60 +537,60 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
     }
     else if (mask_cross[1] && (mask_c1_sum == 2)) {
         if (mask_c1[0] > 0) {
-            if (fabs(dist_tmp1[0] - dist_tmp1[1]) >= diff_th) {
+            if (std::abs(dist_tmp1[0] - dist_tmp1[1]) >= diff_th) {
                 for (int i = 0; i < 3; i++) {
                     mask1_tri[i] = mask_c1[i];
                     mask2_tri[i] = mask_c2[i];
                 }
-                if (fabs(dist_tmp2[2] - dist_tmp2[0]) < diff_th) {
+                if (std::abs(dist_tmp2[2] - dist_tmp2[0]) < diff_th) {
                     ad_tri_mask2[0] = 2; ad_tri_mask2[1] = 0; ad_tri_mask2[2] = 0;
                 }
             }
-            else if (fabs(dist_tmp2[2] - dist_tmp2[0]) >= diff_th) {
+            else if (std::abs(dist_tmp2[2] - dist_tmp2[0]) >= diff_th) {
                 ad_tri_mask2[0] = 0; ad_tri_mask2[1] = 1; ad_tri_mask2[2] = 0;
             }
         }
         else if (mask_c1[2]) {
-            if (fabs(dist_tmp1[3] - dist_tmp1[4]) >= diff_th) {
+            if (std::abs(dist_tmp1[3] - dist_tmp1[4]) >= diff_th) {
                 for (int i = 0; i < 3; i++) {
                     mask1_tri[i] = mask_c1[i];
                     mask2_tri[i] = mask_c2[i];
                 }
-                if (fabs(dist_tmp2[2] - dist_tmp2[4]) < diff_th) {
+                if (std::abs(dist_tmp2[2] - dist_tmp2[4]) < diff_th) {
                     ad_tri_mask2[0] = 0; ad_tri_mask2[1] = 0; ad_tri_mask2[2] = 2;
                 }
             }
-            else if (fabs(dist_tmp2[2] - dist_tmp2[4]) >= diff_th) {
+            else if (std::abs(dist_tmp2[2] - dist_tmp2[4]) >= diff_th) {
                 ad_tri_mask2[0] = 0; ad_tri_mask2[1] = 1; ad_tri_mask2[2] = 0;
             }
         }
     }
     else if (mask_cross[1] && (mask_c2_sum == 2)) {
         if (mask_c2[0] > 0) {
-            if (fabs(dist_tmp2[0] - dist_tmp2[1]) >= params.diff_th) {
+            if (std::abs(dist_tmp2[0] - dist_tmp2[1]) >= upsample_Param.diff_th) {
                 for (int i = 0; i < 3; i++) {
                     mask1_tri[i] = mask_c1[i];
                     mask2_tri[i] = mask_c2[i];
                 }
-                if (fabs(dist_tmp1[2] - dist_tmp1[0]) < params.diff_th) {
+                if (std::abs(dist_tmp1[2] - dist_tmp1[0]) < upsample_Param.diff_th) {
                     ad_tri_mask1[0] = 2; ad_tri_mask1[1] = 0; ad_tri_mask1[2] = 0;
                 }
             }
-            else if (fabs(dist_tmp1[2] - dist_tmp1[0]) >= params.diff_th) {
+            else if (std::abs(dist_tmp1[2] - dist_tmp1[0]) >= upsample_Param.diff_th) {
                 ad_tri_mask1[0] = 0; ad_tri_mask1[1] = 1; ad_tri_mask1[2] = 0;
             }
         }
         else if (mask_c2[2]) {
-            if (fabs(dist_tmp2[3] - dist_tmp2[4]) >= params.diff_th) {
+            if (std::abs(dist_tmp2[3] - dist_tmp2[4]) >= upsample_Param.diff_th) {
                 for (int i = 0; i < 3; i++) {
                     mask1_tri[i] = mask_c1[i];
                     mask2_tri[i] = mask_c2[i];
                 }
-                if (fabs(dist_tmp1[2] - dist_tmp1[4]) < params.diff_th) {
+                if (std::abs(dist_tmp1[2] - dist_tmp1[4]) < upsample_Param.diff_th) {
                     ad_tri_mask1[0] = 0; ad_tri_mask1[1] = 0; ad_tri_mask1[2] = 2;
                 }
             }
-            else if (fabs(dist_tmp1[2] - dist_tmp1[4]) >= params.diff_th) {
+            else if (std::abs(dist_tmp1[2] - dist_tmp1[4]) >= upsample_Param.diff_th) {
                 ad_tri_mask1[0] = 0; ad_tri_mask1[1] = 1; ad_tri_mask1[2] = 0;
             }
         }
@@ -1431,12 +599,12 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
         mask1_tri[1] = 1;
         mask2_tri[1] = 1;
     }
-    else if (fabs(dist_tmp1[1] - dist_tmp2[3]) < params.diff_th &&
+    else if (std::abs(dist_tmp1[1] - dist_tmp2[3]) < upsample_Param.diff_th &&
         dist_tmp1[1] > 0 && dist_tmp2[3] > 0) {
         mask1_tri[0] = 1;
         mask2_tri[2] = 1;
     }
-    else if (fabs(dist_tmp2[1] - dist_tmp1[3]) < params.diff_th &&
+    else if (std::abs(dist_tmp2[1] - dist_tmp1[3]) < upsample_Param.diff_th &&
         dist_tmp2[1] > 0 && dist_tmp1[3] > 0) {
         mask1_tri[2] = 1;
         mask2_tri[0] = 1;
@@ -1454,7 +622,7 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
     }
 }
 
-/*******************************************************************************
+/**
  * \brief  Up sample distance and reflectance main function
  *
  * \param[in] up_smpl_col: column index of sample point
@@ -1467,7 +635,8 @@ void AlgoFunction::rebuildFunc(int* dist_tmp1,
  *                Range: 0 - 2^32-1. Accuracy: 1.
  * \param[in] pu8Ref: reflectance neighborhood of wave 0
  *                Range: 0 - 2^32-1. Accuracy: 1.
-*******************************************************************************/
+ * \param[in] pstFrameBuffer: frame buffer
+ */
 void AlgoFunction::processUpSample(int up_smpl_col,
                                     int up_smpl_col_buffer,
                                     int up_smpl_col2_buffer,
@@ -1500,7 +669,7 @@ void AlgoFunction::processUpSample(int up_smpl_col,
     }
 
     if (up_smpl_col < VIEW_W - 1) {
-        const int window_size = (UpSamplingParam.WH << 1) + 1;
+        const int window_size = (upsample_Param.WH << 1) + 1;
 
         int dist_tmp1[5];
         int dist_tmp2[5];
@@ -1517,8 +686,8 @@ void AlgoFunction::processUpSample(int up_smpl_col,
             int ref_raw = refl_wave0_buffer_raw[row_idx];
 
             // 合并数据提取逻辑
-            if (row_idx > UpSamplingParam.WH - 1 && row_idx < VIEW_H - UpSamplingParam.WH) {
-                const int start_row = row_idx - UpSamplingParam.WH;
+            if (row_idx > upsample_Param.WH - 1 && row_idx < VIEW_H - upsample_Param.WH) {
+                const int start_row = row_idx - upsample_Param.WH;
                 for (int i = 0; i < window_size; ++i) {
                     const int src_row = start_row + i;
                     dist_tmp1[i] = dist_wave0_buffer5[up_smpl_col_buffer][src_row];
@@ -1527,9 +696,9 @@ void AlgoFunction::processUpSample(int up_smpl_col,
                     ref_tmp2[i] = refl_wave0_buffer5[up_smpl_col2_buffer][src_row];
                 }
             }
-            else if (row_idx <= UpSamplingParam.WH - 1) {
-                const int valid_rows = row_idx + UpSamplingParam.WH + 1;
-                const int dest_start = UpSamplingParam.WH - row_idx;
+            else if (row_idx <= upsample_Param.WH - 1) {
+                const int valid_rows = row_idx + upsample_Param.WH + 1;
+                const int dest_start = upsample_Param.WH - row_idx;
                 for (int i = 0; i < valid_rows; ++i) {
                     dist_tmp1[dest_start + i] = dist_wave0_buffer5[up_smpl_col_buffer][i];
                     dist_tmp2[dest_start + i] = dist_wave0_buffer5[up_smpl_col2_buffer][i];
@@ -1538,8 +707,8 @@ void AlgoFunction::processUpSample(int up_smpl_col,
                 }
             }
             else {
-                const int valid_rows = UpSamplingParam.WH + (VIEW_H - row_idx);
-                const int src_start = row_idx - UpSamplingParam.WH;
+                const int valid_rows = upsample_Param.WH + (VIEW_H - row_idx);
+                const int src_start = row_idx - upsample_Param.WH;
                 for (int i = 0; i < valid_rows; ++i) {
                     const int src_row = src_start + i;
                     dist_tmp1[i] = dist_wave0_buffer5[up_smpl_col_buffer][src_row];
@@ -1551,7 +720,8 @@ void AlgoFunction::processUpSample(int up_smpl_col,
 
             // 使用栈数组存储mask和ad_mask
             int mask1[3], mask2[3], ad_mask1[3], ad_mask2[3];
-            rebuildFunc(dist_tmp1, dist_tmp2, mask1, mask2, ad_mask1, ad_mask2);
+            int PLRawFillMask = 0;
+            rebuildFunc(dist_tmp1, dist_tmp2, mask1, mask2, ad_mask1, ad_mask2, &PLRawFillMask);
 
             // 提取中心3个元素（对应原始代码的segment(1,3)）
             int dist_c1[3], dist_c2[3], ref_c1[3], ref_c2[3];
@@ -1566,15 +736,23 @@ void AlgoFunction::processUpSample(int up_smpl_col,
             int w1_sum = 0, w2_sum = 0;
             int w1[3], w2[3];
             for (int i = 0; i < 3; ++i) {
-                w1[i] = UpSamplingParam.weight1[i] * mask1[i];
-                w2[i] = UpSamplingParam.weight2[i] * mask2[i];
+                w1[i] = upsample_Param.weight1[i] * mask1[i];
+                w2[i] = upsample_Param.weight2[i] * mask2[i];
                 w1_sum += w1[i];
                 w2_sum += w2[i];
             }
             const int total_weight = w1_sum + w2_sum;
 
             int dist_ins = 0, ref_ins = 0;
-            if (total_weight > 0) {
+            if(PLRawFillMask)
+            {
+                if(abs(dist_c1[1] - dist_raw) < 200)
+                {
+                    dist_ins = dist_raw;
+                    ref_ins = ref_raw;
+                }
+            }
+            else if (total_weight > 0) {
                 // 合并dist和ref的项计算
                 int term_dist1 = 0, term_dist2 = 0;
                 int term_ref1 = 0, term_ref2 = 0;
@@ -1585,7 +763,7 @@ void AlgoFunction::processUpSample(int up_smpl_col,
                     term_ref2 += w2[i] * ref_c2[i];
                 }
 
-                const int coef = UpSamplingParam.coef_inv[total_weight - 1];
+                const int coef = upsample_Param.coef_inv[total_weight - 1];
                 dist_ins = ((term_dist1 + term_dist2) * coef) >> 12;
                 ref_ins = ((term_ref1 + term_ref2) * coef) >> 12;
 
@@ -1669,8 +847,8 @@ void AlgoFunction::processUpSample(int up_smpl_col,
                 refl_wave0_buffer5[up_smpl_col2_buffer][row_end - 1] = ref_c2[0];
                 refl_wave0_buffer5[up_smpl_col2_buffer][row_end] = ref_c2[1];
             }
-            if(dist_wave0_buffer5[up_smpl_col_buffer][row_idx] < 0 || dist_wave0_buffer5[up_smpl_col_buffer][row_idx] > 60000)
-            {
+            if(dist_wave0_buffer5[up_smpl_col_buffer][row_idx] < 0 || dist_wave0_buffer5[up_smpl_col_buffer][row_idx] > 60000) {
+                LogError("Data abnormal: dist_wave0_buffer5[up_smpl_col_buffer][row_idx] = %d", dist_wave0_buffer5[up_smpl_col_buffer][row_idx]);
                 FaultManager::getInstance().setFault(FaultBits::DataAbnormalFault);
                 data_abnormal_ = true;
             }
@@ -1687,7 +865,7 @@ void AlgoFunction::processUpSample(int up_smpl_col,
     memcpy(&pu8Ref[VIEW_H], ref_ins_c, sizeof(uint8_t) * VIEW_H);
 }
 
-/*******************************************************************************
+/**
  * \brief  Take the remainder of a number
  *
  * \param[in] a : original input data
@@ -1695,335 +873,12 @@ void AlgoFunction::processUpSample(int up_smpl_col,
  * \param[in] b : remainder input data
  *                Range: 0 - 2^32-1. Accuracy: 1.
  * \return int : output remainder result
-*******************************************************************************/
+ */
 inline int AlgoFunction::matlabMod(int a, int b){
     return (a % b + b) % b;  // 确保结果非负
 }
 
-/*******************************************************************************
- * \brief  Frame filter main function
- *
- * \param[in] filter_col: column index of sample point
- *                 Range: 0 - 759. Accuracy: 1.
- * \param[in] filter_col_buffer: buffer index of sample point
- *                 Range: 0 - 10. Accuracy: 1.
- * \param[in] filter_col_valid: valid index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] filter_col_neib_buf: neighbor buffer index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] filter_col_neib_vld: neighbor valid index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] empty_col: empty column index
- *                 Range: 0 - 2. Accuracy: 1.
- * \param[in] empty_out_col: empty output column index
- *                 Range: 0 - 2. Accuracy: 1.
-*******************************************************************************/
-void AlgoFunction::frameFilter(int filter_col,
-                               int filter_col_buffer,
-                               int filter_col_valid,
-                               int* filter_col_neib_buf,
-                               int* filter_col_neib_vld,
-                               int empty_col,
-                               int empty_out_col) {
-    // 环形缓冲区索引计算函数
-
-    // 初始化滑动窗口缓冲区
-    if (filter_col >= 0 && filter_col < algo_Param.ViewField_Wide)
-    {
-        if (algo_Param.FilterOn)
-        {
-            for (int point_row = 0; point_row < VIEW_H; ++point_row) {
-                const int dist_cur = dist_wave0_buffer1[filter_col_buffer][point_row];
-                const int filter_valid_cur = filter_valid_buffer[filter_col_valid][point_row];
-
-                // 空掩码生成
-                int empty_mask_cur = 0;
-                if (dist_cur < Filter_params.multi_frame_dist_th) {
-                    empty_mask_cur = -(((dist_cur * 20) >> 13) * 2 + 1); // 优化为位操作
-                }
-                else {
-                    empty_mask_cur = (((dist_cur - Filter_params.multi_frame_dist_th) * 14) >> 13) * 2 + 1;
-                }
-
-                // 距离段索引检测（优化位操作）
-                int dist_segment_idx = 1;
-                const uint16_t s = (dist_cur >> 12); // 等价于除以4096
-                for (int i = 4; i >= 0; --i) {
-                    if ((s & (1 << i)) && (dist_segment_idx == 1)) {
-                        dist_segment_idx = i + 2;
-                        break; // 找到最高位立即退出
-                    }
-                }
-
-                // 高度投影计算（使用预计算参数）
-                const int height_cur_real = high_wave0_buffer1[filter_col_buffer][point_row];
-
-                // 高度段索引（带饱和处理）
-                const int height_segment_idx = std::max(0, std::min(static_cast<int>(std::floor(std::abs(height_cur_real) / 512.0)), 4));
-
-                // 水平位置分区（分支预测优化）
-                int hor_pos_segment_idx;
-                if (pc_Param.reverse_mask) {
-                    hor_pos_segment_idx = ((algo_Param.ViewField_Wide - filter_col - 1) >> 8) + 1;
-                }
-                else {
-                    hor_pos_segment_idx = ((filter_col + 1) >> 8) + 1;
-                }
-                hor_pos_segment_idx = std::max(1, std::min(hor_pos_segment_idx, 6));
-
-                if (dist_cur > 0)
-                {
-                    if (1 != filter_valid_cur)
-                    {
-                        // 参数获取
-                        const int Range_Threshold = Filter_params.DiffRhresholdList[dist_segment_idx - 1];
-                        int ValidNum = Filter_params.ValidNumList[height_segment_idx][dist_segment_idx - 1];
-                        int FrameValidNum = Filter_params.FrameValidNumList[height_segment_idx][dist_segment_idx - 1];
-                        int max_diff_unit = Filter_params.DiffUnitList[dist_segment_idx - 1];
-                        int Range_High = dist_cur + Range_Threshold;
-                        int Range_Low = std::max(1, dist_cur - Range_Threshold);
-
-                        // 滑动窗口初始化
-                        const int window_size = 2 * Filter_params.filter_L + 1;
-                        int dist_neighbour[filter_valid_size][filter_valid_size] = { 0 };
-                        int empty_mask_neib[filter_valid_size][filter_valid_size] = { 0 };
-                        int valid_mask[filter_valid_size][filter_valid_size] = { 0 };
-
-                        // 边界范围计算
-                        int row_range_up = Filter_params.filter_L;
-                        int row_range_down = Filter_params.filter_L;
-                        int col_range_left = Filter_params.filter_L;
-                        int col_range_right = Filter_params.filter_L;
-
-                        if (point_row < Filter_params.filter_L)
-                            row_range_up = point_row;
-                        if (point_row >= VIEW_H - Filter_params.filter_L)
-                            row_range_down = VIEW_H - point_row - 1;
-                        if (filter_col < Filter_params.filter_L)
-                            col_range_left = filter_col;
-                        if (filter_col >= algo_Param.ViewField_Wide - Filter_params.filter_L)
-                            col_range_right = algo_Param.ViewField_Wide - filter_col - 1;
-
-                        // 滑动窗口数据填充
-                        const int row_start = point_row - row_range_up;
-                        const int col_start = filter_col - col_range_left;
-
-                        // Copy block from dist_wave0_buffer1 to dist_neighbour
-                        for (int i = 0; i < row_range_up + row_range_down + 1; i++) {
-                            for (int j = 0; j < window_size; j++) {
-                                dist_neighbour[0 + j][Filter_params.filter_L - row_range_up + i] =
-                                    dist_wave0_buffer1[filter_col_neib_buf[j]][row_start + i];
-                            }
-                        }
-
-                        // Copy block from EmptyMask to empty_mask_neib
-                        for (int i = 0; i < row_range_up + row_range_down + 1; i++) {
-                            for (int j = 0; j < col_range_left + col_range_right + 1; j++) {
-                                empty_mask_neib[Filter_params.filter_L - col_range_left + j][Filter_params.filter_L - row_range_up + i] =
-                                    EmptyMask[col_start + j][row_start + i];
-                            }
-                        }
-
-
-                        // 严格条件判断
-                        int strict_con = 0;
-                        if (height_cur_real > 300 &&
-                            zone_valid_cnt_in[height_segment_idx][hor_pos_segment_idx - 1][dist_segment_idx - 1] < Filter_params.zone_cnt_th) {
-                            strict_con = 1;
-                            max_diff_unit = 1;
-                            ValidNum = ValidNum + 1;
-                            FrameValidNum = FrameValidNum + 1;
-                        }
-
-                        // 邻域统计分析
-                        int neib_cnt = 0;
-                        int frame_valid_cnt = 0;
-
-    // #pragma omp parallel for collapse(2) reduction(+:neib_cnt, frame_valid_cnt)
-                        for (int i = -Filter_params.filter_L; i <= Filter_params.filter_L; ++i) {
-                            for (int j = -Filter_params.filter_L; j <= Filter_params.filter_L; ++j) {
-                                const int idx_i = Filter_params.filter_L + i;
-                                const int idx_j = Filter_params.filter_L + j;
-
-                                // 距离范围检查
-                                if (dist_neighbour[idx_j][idx_i] >= Range_Low && dist_neighbour[idx_j][idx_i] <= Range_High) {
-                                    valid_mask[idx_j][idx_i] = 1;
-                                    neib_cnt++;
-                                }
-
-                                // 空掩码验证
-                                const int mask_diff = std::abs(empty_mask_neib[idx_j][idx_i] - empty_mask_cur);
-                                if (empty_mask_neib[idx_j][idx_i] != 0 &&
-                                    (std::ceil((mask_diff) / 2.0) <= max_diff_unit) &&
-                                    (!strict_con || matlabMod(empty_mask_neib[idx_j][idx_i], 2) == 1)) {
-                                    frame_valid_cnt++;
-                                }
-                            }
-                        }
-
-                        // 有效性判定及更新
-                        if (!(neib_cnt <= ValidNum && frame_valid_cnt <= FrameValidNum)) {
-    // #pragma omp parallel for collapse(2)
-                            for (int i = -Filter_params.filter_L; i <= Filter_params.filter_L; ++i) {
-                                for (int j = -Filter_params.filter_L; j <= Filter_params.filter_L; ++j) {
-                                    if (valid_mask[Filter_params.filter_L + j][Filter_params.filter_L + i] == 1) {
-                                        const int target_col = filter_col_neib_vld[Filter_params.filter_L + j];
-                                        filter_valid_buffer[target_col][point_row + i] = 1;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    empty_buffer[empty_col][point_row] = empty_mask_cur;
-                }
-                else
-                {
-                    // 空缓冲区更新
-                    if (matlabMod(EmptyMask[filter_col][point_row] , 2) == 1) {
-                        empty_buffer[empty_col][point_row] = floor(EmptyMask[filter_col][point_row] / 2.0) * 2;
-                    }
-                }
-                if (filter_valid_buffer[filter_col_valid][point_row] == 1) {
-                    //condition_met = true;
-                    zone_valid_cnt[height_segment_idx][hor_pos_segment_idx - 1][dist_segment_idx - 1]++;
-                }
-            }
-
-            if (pc_Param.reverse_mask) {
-                if (filter_col == algo_Param.ViewField_Wide - 1) {
-                    for (int c = -Filter_params.filter_L; c <= 0; ++c) {
-                        const int empty_c = (empty_col  + 1 + c - 1 + empty_size) % empty_size;
-                        const int target_col = -c; // reverse_mask为true且filter_col在末尾
-                        if (target_col >= 0 && target_col < algo_Param.ViewField_Wide) {
-                            for (int i = 0; i < VIEW_H; i++) {  // num_rows should be the row count of both matrices
-                                EmptyMask_out[target_col][i] = empty_buffer[empty_c][i];
-                            }
-                        }
-                    }
-                }
-                else if (filter_col >= Filter_params.filter_L) {
-                    const int target_col = algo_Param.ViewField_Wide - filter_col + Filter_params.filter_L - 1;
-                    if (target_col >= 0 && target_col < algo_Param.ViewField_Wide) {
-                        for (int i = 0; i < VIEW_H; i++) {  // num_rows should be the row count of both matrices
-                            EmptyMask_out[target_col][i] = empty_buffer[empty_out_col][i];
-                        }
-                    }
-                }
-            }
-            else {
-                if (filter_col == algo_Param.ViewField_Wide - 1) {
-                    for (int c = -Filter_params.filter_L; c <= 0; ++c) {
-                        const int empty_c = (empty_col + 1 + c - 1 + empty_size) % empty_size;
-                        const int target_col = filter_col + c;
-                        if (target_col >= 0 && target_col < algo_Param.ViewField_Wide) {
-                            for (int i = 0; i < VIEW_H; i++) {  // num_rows should be the row count of both matrices
-                                EmptyMask_out[target_col][i] = empty_buffer[empty_c][i];
-                            }
-                        }
-                    }
-                }
-                else if (filter_col >= Filter_params.filter_L) {
-                    const int target_col = filter_col - Filter_params.filter_L;
-                    if (target_col >= 0 && target_col < algo_Param.ViewField_Wide) {
-                        for (int i = 0; i < VIEW_H; i++) {  // num_rows should be the row count of both matrices
-                            EmptyMask_out[target_col][i] = empty_buffer[empty_out_col][i];
-                        }
-                    }
-                }
-            }
-        }
-        else {
-            // 第三部分：如果条件未满足，设置整个列
-            for (int row_idx = 0; row_idx < VIEW_H; row_idx++)
-            {
-                filter_valid_buffer[filter_col_valid][row_idx] = 1;
-            }
-        }
-    }
-}
-
-
-/*******************************************************************************
- * \brief  Denoise pre-processing
- *
- * \param[in] denoise_col: column index of sample point
- *                 Range: 0 - 759. Accuracy: 1.
- * \param[in] denoise_col_buffer: buffer index of sample point
- *                 Range: 0 - 10. Accuracy: 1.
- * \param[in] denoise_col_neib_buf: neighbor buffer index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] valid_pre_2: neighbor valid index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] denoise_refer_mask: refer mask of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] valid_pre_mask: neighbor valid index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
-*******************************************************************************/
-void AlgoFunction::denoisePreProc(int denoise_col,
-                                  int denoise_col_buffer,
-                                  int* denoise_col_neib_buf,
-                                  int* valid_pre_2,
-                                  int* denoise_refer_mask,
-                                  int (*valid_pre_mask)[5])
-{
-    const int HL = 5;
-    const int half_HL = HL / 2;
-    const int view_width = algo_Param.ViewField_Wide;
-    const int last_row = VIEW_H - 1;
-
-    // 提前检查条件，避免无效计算
-    if (!(denoise_col >= 0 && denoise_col < view_width && algo_Param.DenoiseOn)) {
-        return;
-    }
-
-    // 预加载常用参数
-    const auto& params = noise_params;
-    const int block_size = BlockSize;
-    const int dist_seg_div = 3000 * 4; // 合并除法运算
-
-    for (int row_idx = 0; row_idx < last_row; ++row_idx)
-    {
-        const int dist_pre = dist_wave0_buffer4[denoise_col_buffer][row_idx];
-
-        // 跳过无效距离值
-        if (dist_pre <= 0) continue;
-
-        // 区块和距离段计算优化
-        const int block_id = (row_idx + block_size) / block_size - 1;
-        const int dist_seg = (dist_pre / dist_seg_div);
-        const int diff_th = params.denoise_offset[dist_seg]; // 数组访问优化
-
-        // 邻域距离值预取
-        int dist_pre_buf[5];
-        for (int i = 0; i < HL; ++i) {
-            dist_pre_buf[i] = dist_wave0_buffer4[denoise_col_neib_buf[i]][row_idx];
-        }
-
-        // 邻域有效性统计优化
-        int valid_cnt = 0;
-        for (int i = 0; i < HL; ++i)
-        {
-            bool is_valid = (std::abs(dist_pre_buf[i] - dist_pre) <= diff_th);
-            valid_pre_mask[row_idx][i] = is_valid;
-            valid_cnt += is_valid;
-        }
-
-        // 两侧有效性统计
-        valid_pre_2[row_idx] = valid_pre_mask[row_idx][half_HL - 1]
-                            + valid_pre_mask[row_idx][half_HL + 1];
-
-        // 参考掩码设置
-        const int region = params.region_list[block_id] - 1;
-        const int threshold = params.denoise_point[dist_seg][region][1];
-
-        denoise_refer_mask[row_idx] = (valid_pre_2[row_idx] >= threshold)
-                                    ? ((valid_cnt > 2) ? 2 : 1)
-                                    : 3;
-    }
-    denoise_refer_mask[VIEW_H - 1] = 1; // 最后一个点强制为有效
-}
-
-/*******************************************************************************
+/**
  * \brief  Denoise main process function
  *
  * \param[in] denoise_col_buffer: buffer index of sample point
@@ -2036,21 +891,16 @@ void AlgoFunction::denoisePreProc(int denoise_col,
  *                 Range: 0 - 2^32-1. Accuracy: 1.
  * \param[in] col_idx: neighbor valid index of sample point
  *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] denoise_refer_mask: refer mask of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] valid_pre_2: neighbor valid index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] valid_pre_mask: neighbor valid index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
-*******************************************************************************/
+ */
 void AlgoFunction::denoiseProcessing(int denoise_col_buffer,
-    int denoise_col_valid,int* denoise_col_neib_buf,
-    int* denoise_col_neib_vld,int col_idx,
-    int* denoise_refer_mask,int* valid_pre_2, int (*valid_pre_mask)[5])
+    int denoise_col_valid, int* denoise_col_neib_buf,
+    int* denoise_col_neib_vld, int col_idx)
 {
     const int current_col = col_idx;
-    const int win_len_v = noise_params.WinLenV;
     const int win_len_h = noise_params.WinLenH;
+    const int win_len_v = noise_params.WinLenV;
+    const int HL = 2* noise_params.WinLenH + 1;
+    const int HV = 2* noise_params.WinLenV + 1;
 
     // 边界检查
     if (current_col < 0 || current_col >= algo_Param.ViewField_Wide) {
@@ -2067,103 +917,138 @@ void AlgoFunction::denoiseProcessing(int denoise_col_buffer,
         return;
     }
 
+    // 预加载常用参数
+    const auto& params = noise_params;
+    const int block_size = BlockSize;
+    const int dist_seg_div = 12000; // 合并除法运算
+
     // 主处理循环
-    for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
-        const int dist_cur = dist_wave0_buffer4[denoise_col_buffer][row_idx];
-        const int refer_mask = denoise_refer_mask[row_idx];
+     for (int row_idx = 0; row_idx < VIEW_H; ++row_idx)
+    {
+        const int dist_cur = dist_wave0_buffer1[denoise_col_buffer][row_idx];
+        const int valid_cur = denoise_valid_buffer[denoise_col_buffer][row_idx];
+        const int block_id = (row_idx + BlockSize) / BlockSize - 1;
+        const int dist_seg = (dist_cur / dist_seg_div);
+        const int region = params.region_list[block_id] - 1;
+        const int threshold = noise_params.denoise_point[dist_seg][region][0];
+        const int threshold1 = noise_params.denoise_point[dist_seg][region][1];
+        const int threshold2 = noise_params.denoise_point[dist_seg][region][2];
+        // 跳过无效距离值
+        if(dist_cur > 8000 || (valid_cur != 1 && dist_cur > 0))
+        {
+            int denoise_refer_mask = 0;
+            // 区块和距离段计算优化
+            const int block_id = (row_idx + block_size) / block_size - 1;
+            const int diff_th = params.denoise_offset[dist_seg]; // 数组访问优化
 
-        // 跳过无效情况
-        if (dist_cur <= 0) continue;
+            // 邻域距离值预取
+            const int HL = 2 * params.WinLenH + 1;
+            const int HV = 2 * params.WinLenV + 1;
 
-        if (refer_mask == 1) {
-            // 邻域窗口构建优化
-            int dist_neib[5][3] = {0};
-            int valid_neib[5][3] = {0};
-
-            // 预计算常用值
-            const int dist_seg = (dist_cur / 3000) / 4;
-            const int diff_th = noise_params.denoise_offset[dist_seg];
-            const int block_id = row_idx / BlockSize;
-            const int region = noise_params.region_list[block_id] - 1;
-            const int threshold = noise_params.denoise_point[dist_seg][region][0];
-            const int threshold1 = noise_params.denoise_point[dist_seg][region][1];
-            const int threshold2 = noise_params.denoise_point[dist_seg][region][2];
-
-            // 邻域分析优化
-            int NeibValidNum[3] = {0};
-            int ValidMask[5][3] = {0};
-
-            for (int dv = -win_len_v; dv <= win_len_v; dv++) {
-                if ((dv == 0) && (row_idx != (VIEW_H - 1))) continue;
-                const int row_neib = row_idx + dv;
-                if (row_neib < 0 || row_neib >= VIEW_H) continue;
-
-                const int v_idx = dv + win_len_v;
-                for (int dh = -win_len_h; dh <= win_len_h; dh++) {
-                    const int h_idx = dh + win_len_h;
-                    const int col_buf_idx = denoise_col_neib_buf[h_idx];
-
-                    dist_neib[h_idx][v_idx] = dist_wave0_buffer4[col_buf_idx][row_neib];
-                    valid_neib[h_idx][v_idx] = denoise_valid_buffer[col_buf_idx][row_neib];
-
-                    // 有效性判断
-                    const int nei_val = dist_neib[h_idx][v_idx];
-                    if (std::abs(nei_val - dist_cur) <= diff_th && (valid_neib[h_idx][v_idx] != 6)) {
-                        const int zone = noise_params.zone_matrix[v_idx][h_idx];
-                        if (zone > 0 && zone <= 3) {
-                            NeibValidNum[zone - 1]++;
-                            ValidMask[h_idx][v_idx] = 1;
-                        }
-                    }
-                }
+            int dist_neib[HL][HV] ={0};
+            int ValidMask[HL][HV] ={0};
+            for(int i = -params.WinLenH; i <= params.WinLenH; i++)
+            {
+                dist_neib[i + params.WinLenH][params.WinLenV] = dist_wave0_buffer1[denoise_col_neib_buf[2 + i]][row_idx];
             }
 
-            // 去噪条件判断优化
-            if (((NeibValidNum[0] + valid_pre_2[row_idx]) >= threshold)
-                || (row_idx == (VIEW_H - 1) && (NeibValidNum[1] >= threshold1))
-                || (NeibValidNum[0] + NeibValidNum[1] >= threshold)
-                || (NeibValidNum[2] + NeibValidNum[1] >= threshold2)) {
-                denoise_valid_buffer[denoise_col_valid][row_idx] = 1;
+            // 邻域有效性统计优化
+            int valid_cnt = 0;
+            for (int i = 0; i < HL; ++i)
+            {
+                bool is_valid = (std::abs(dist_neib[i][params.WinLenV] - dist_cur) <= diff_th);
+                ValidMask[i][params.WinLenV] = is_valid;
+                valid_cnt += is_valid;
+            }
 
-                // 传播有效标记优化
+            // 两侧有效性统计
+            int valid_pre_2 = ValidMask[params.WinLenH - 1][params.WinLenV]
+                                + ValidMask[params.WinLenH + 1][params.WinLenV];
+
+            denoise_refer_mask = (valid_pre_2 >= threshold1)
+                                        ? ((valid_cnt > 2) ? 2 : 1)
+                                        : 3;
+            if (denoise_refer_mask == 1) {
+                // 邻域窗口构建优化
+                int valid_pre_3 = ValidMask[0][win_len_v] + ValidMask[HL - 1][win_len_v];
+                int valid_neib[HL][HV]= {0};
+                int NeibValidNum[3] = {0};
+                for(int i = 0; i < HL; i++)
+                {
+                    valid_neib[i][win_len_v] = denoise_valid_buffer[denoise_col_neib_buf[i]][row_idx];
+                }
                 for (int dv = -win_len_v; dv <= win_len_v; dv++) {
                     if ((dv == 0) && (row_idx != (VIEW_H - 1))) continue;
-                    const int v_idx = dv + win_len_v;
-                    const int target_row = row_idx + dv;
-                    if (target_row < 0 || target_row >= VIEW_H) continue;
+                    const int row_neib = row_idx + dv;
+                    if (row_neib < 0 || row_neib >= VIEW_H || dv == row_idx) continue;
 
+                    const int v_idx = dv + win_len_v;
                     for (int dh = -win_len_h; dh <= win_len_h; dh++) {
                         const int h_idx = dh + win_len_h;
-                        if (ValidMask[h_idx][v_idx] == 1) {
-                            int idx = denoise_col_neib_vld[h_idx];
-                            denoise_valid_buffer[idx][target_row] = 1;
+                        const int col_buf_idx = denoise_col_neib_buf[h_idx];
+
+                        dist_neib[h_idx][v_idx] = dist_wave0_buffer1[col_buf_idx][row_neib];
+                        valid_neib[h_idx][v_idx] = denoise_valid_buffer[col_buf_idx][row_neib];
+
+                        // 有效性判断
+                        const int nei_val = dist_neib[h_idx][v_idx];
+                        if (std::abs(nei_val - dist_cur) <= diff_th && (valid_neib[h_idx][v_idx] != 6)) {
+                            const int zone = noise_params.zone_matrix[v_idx][h_idx];
+                            if (zone > 0) {
+                                NeibValidNum[zone - 1]++;
+                                ValidMask[h_idx][v_idx] = 1;
+                            }
+                        }
+                    }
+                }
+
+                // 去噪条件判断优化
+                if (((NeibValidNum[0] + valid_pre_2) >= threshold)
+                    || (row_idx == (VIEW_H - 1) && (valid_pre_2 >= threshold1))
+                    || (NeibValidNum[0] + valid_pre_2 >= threshold)
+                    || (valid_pre_3 + valid_pre_2 >= threshold2)) {
+                    denoise_valid_buffer[denoise_col_valid][row_idx] = 1;
+
+                    // 传播有效标记优化
+                    for (int dv = -win_len_v; dv <= win_len_v; dv++) {
+                        if ((dv == 0) && (row_idx != (VIEW_H - 1))) continue;
+                        const int v_idx = dv + win_len_v;
+                        const int target_row = row_idx + dv;
+                        if (target_row < 0 || target_row >= VIEW_H) continue;
+
+                        for (int dh = -win_len_h; dh <= win_len_h; dh++) {
+                            const int h_idx = dh + win_len_h;
+                            if (ValidMask[h_idx][v_idx] == 1) {
+                                int idx = denoise_col_neib_vld[h_idx];
+                                denoise_valid_buffer[idx][target_row] = 1;
+                            }
                         }
                     }
                 }
             }
-        }
-        else if (refer_mask == 2) {
-            // 直接对左右补点优化
-            denoise_valid_buffer[denoise_col_valid][row_idx] = 1;
+            else if (denoise_refer_mask == 2) {
+                // 直接对左右补点优化
+                denoise_valid_buffer[denoise_col_valid][row_idx] = 1;
 
-            for (int j = -noise_params.WinLenH; j <= noise_params.WinLenH; j++) {
-                if (valid_pre_mask[row_idx][noise_params.WinLenH + j] == 1) {
-                    int idx = denoise_col_neib_vld[3 + j - 1];
-                    denoise_valid_buffer[idx][row_idx] = 1;
+                for (int j = -noise_params.WinLenH; j <= noise_params.WinLenH; j++) {
+                    if (ValidMask[noise_params.WinLenH + j][noise_params.WinLenV] == 1) {
+                        int idx = denoise_col_neib_vld[3 + j - 1];
+                        denoise_valid_buffer[idx][row_idx] = 1;
+                    }
                 }
             }
         }
     }
 }
 
-/*******************************************************************************
+/**
  * \brief  Matrix calculate inverse function
  *
  * \param[in] mat: input matrix
  *              Range: N/A. Accuracy: N/A.
  * \param[out] inv: output inverse matrix
  *              Range: N/A. Accuracy: N/A.
-*******************************************************************************/
+ */
 void AlgoFunction::matrixInverse(const Matrix3x3& mat, Matrix3x3& inv) {
     // 计算行列式
     float det = mat(0,0)*(mat(1,1)*mat(2,2) - mat(1,2)*mat(2,1))
@@ -2191,7 +1076,7 @@ void AlgoFunction::matrixInverse(const Matrix3x3& mat, Matrix3x3& inv) {
     inv(2,2) = (mat(0,0)*mat(1,1) - mat(0,1)*mat(1,0)) * inv_det;
 }
 
-/*******************************************************************************
+/**
  * \brief  Matrix calculate vector mutilply function
  *
  * \param[in] A: input matrix
@@ -2200,7 +1085,7 @@ void AlgoFunction::matrixInverse(const Matrix3x3& mat, Matrix3x3& inv) {
  *              Range: N/A. Accuracy: N/A.
  * \param[out] result: output mutilply matrix
  *              Range: N/A. Accuracy: N/A.
-*******************************************************************************/
+ */
 void AlgoFunction::matVecMulti(const Matrix3x3& A, const Vector3& v, Vector3& result) {
     // 矩阵-向量乘法: A(3x3) * v(3x1) -> result(3x1)
     result[0] = A(0,0)*v[0] + A(0,1)*v[1] + A(0,2)*v[2];
@@ -2208,12 +1093,12 @@ void AlgoFunction::matVecMulti(const Matrix3x3& A, const Vector3& v, Vector3& re
     result[2] = A(2,0)*v[0] + A(2,1)*v[1] + A(2,2)*v[2];
 }
 
-/*******************************************************************************
+/**
  * \brief  Select ground fit main function
  *
  * \param[out] best_model: output best model result
  *              Range: N/A. Accuracy: N/A.
-*******************************************************************************/
+ */
 void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
 {
     const int rows = VIEW_H; // 192
@@ -2457,25 +1342,22 @@ void AlgoFunction::selectGroundFitFunc(Vector3& best_model)
         best_model[1] = 0.0f;
         best_model[2] = roi_z_center;
     }
-
-    // return best_model;
 }
 
-// 高性能环形索引计算器（适配MATLAB的1-based索引模式）
-/*******************************************************************************
+/**
  * \brief  Calculate circular index of the buffer
  *
  * \param[in] rear: rear index of the buffer
  *              Range: N/A. Accuracy: N/A.
  * \param[in] size: size of the buffer
  *              Range: N/A. Accuracy: N/A.
-*******************************************************************************/
+ */
 inline void AlgoFunction::circularCalcIdx(int& rear, int size)
 {
     rear = (rear + 1 + size) % size;
 }
 
-/*******************************************************************************
+/**
  * \brief  Calculate height of the buffer
  *
  * \param[in] pu16Dist: distance buffer
@@ -2484,29 +1366,346 @@ inline void AlgoFunction::circularCalcIdx(int& rear, int size)
  *                 Range: 0 - 759. Accuracy: 1.
  * \param[in] fit_high: height of the buffer
  *                 Range: 0 - 2^32-1. Accuracy: 1.
-*******************************************************************************/
-void AlgoFunction::highCalcFunc(uint16_t *pu16Dist, int col, int* fit_high)
+ */
+void AlgoFunction::highCalcFunc(uint16_t *dist0,uint16_t *dist1, int col,
+                                int *fit_high0, int *fit_high1, uint8_t *gnd_mark0, uint8_t *gnd_mark1)
 {
-    int org_high =  0 ;
-    int fit_ground_high = 0 ;
+    int org_high0;
+    int org_high1;
+    int fit_ground_high0;
+    int fit_ground_high1;
     const float a = fit_Params.a;
     const float b = fit_Params.b;
     const float c = fit_Params.c;
+    int proj_dist0[VIEW_H];
+    int proj_dist1[VIEW_H];
+    const int dist_diff_th = 600;
+    const int delta_z_th = 20;
+    const int z_th = 300;
+    const int dist_max_th = 16000;
 
+    memset(gnd_mark0, 0, VIEW_H);
+    memset(gnd_mark1, 0, VIEW_H);
     for (int i = 0; i < VIEW_H; ++i) {
-        float dist_val = pu16Dist[i];
-        float Ix_val = Ix_in[i][col];
-        float Iy_val = Iy_in[i][col];
-        float Iz_val = Iz_in[i][col];
+        int dist_val0 = dist0[i];
+        int dist_val1 = dist1[i];
+        int Ix_val = Ix_in[i][col];
+        int Iy_val = Iy_in[i][col];
+        int Iz_val = Iz_in[i][col];
 
-        org_high = std::floor(dist_val * Iz_val / 32768.0);
-        fit_ground_high = std::floor(dist_val *
+        org_high0 = (dist_val0 * Iz_val) >> 15;
+        org_high1 = (dist_val1 * Iz_val) >> 15;
+        fit_ground_high0 = std::floor((float)dist_val0 *
             (a * Ix_val / 32768.0 + b * Iy_val / 32768.0) + c);
-        fit_high[i] = org_high - fit_ground_high;
+        fit_ground_high1 = std::floor((float)dist_val1 *
+            (a * Ix_val / 32768.0 + b * Iy_val / 32768.0) + c);
+        fit_high0[i] = org_high0 - fit_ground_high0;
+        fit_high1[i] = org_high1 - fit_ground_high1;
+        proj_dist0[i] = (dist_val0 * cosd_pitch_lut[i]) >> 15;
+        proj_dist1[i] = (dist_val1 * cosd_pitch_lut[i]) >> 15;
+    }
+
+    // 3. 地面检测主循环
+    for (int row_idx = 1; row_idx < VIEW_H - 1; row_idx++) {
+        // 当前点数据
+        int dist_cur = dist0[row_idx];
+        int z_cur = fit_high0[row_idx];
+        int dist_cur2 = dist1[row_idx];
+        int z_cur2 = fit_high1[row_idx];
+        bool ground_flag;
+        bool ground_flag2;
+        bool roi_flag = (dist_cur > 0) && (dist_cur <= dist_max_th) && (std::abs(z_cur) <= z_th);
+        bool roi_flag2 = (dist_cur2 > 0) && (dist_cur2 <= dist_max_th) && (std::abs(z_cur2) <= z_th);
+        int x_cur = proj_dist0[row_idx];
+        int x_cur2 = proj_dist1[row_idx];
+
+        // 下邻点数据 (row_idx-1)
+        int dist_down = dist0[row_idx - 1];
+        int x_down = proj_dist0[row_idx - 1];
+        int z_down = fit_high0[row_idx - 1];
+        int dist_down2 = dist1[row_idx - 1];
+        int x_down2 = proj_dist1[row_idx - 1];
+        int z_down2 = fit_high1[row_idx - 1];
+
+        // 上邻点数据 (row_idx+1)
+        int dist_up = dist0[row_idx + 1];
+        int x_up = proj_dist0[row_idx + 1];
+        int z_up = fit_high0[row_idx + 1];
+        int dist_up2 = dist1[row_idx + 1];
+        int x_up2 = proj_dist1[row_idx + 1];
+        int z_up2 = fit_high1[row_idx + 1];
+
+        if ((std::abs(z_cur) < 20 && dist_cur < 4000)|| roi_flag)
+        {
+            // 计算邻近标志
+            bool near_up_1 = (dist_up > 0) && (dist_up - dist_cur > 0) && (dist_up - dist_cur <= dist_diff_th);
+            bool near_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur > 0) && (dist_up2 - dist_cur <= dist_diff_th);
+            bool near_down_1 = (dist_down > 0) && (dist_cur - dist_down > 0) && (dist_cur - dist_down <= dist_diff_th);
+            bool near_down_2 = (dist_down2 > 0) && (dist_cur - dist_down2 > 0) && (dist_cur - dist_down2 <= dist_diff_th);
+           
+            // 计算平坦标志 (第一回波)
+            int dz_up = std::abs(z_up - z_cur);
+            int dz_down = std::abs(z_down - z_cur);
+            int dx_up = std::abs(x_up - x_cur);
+            int dx_down = std::abs(x_down - x_cur);
+            int dz_down2 = std::abs(z_down2 - z_cur);
+            int dx_down2 = std::abs(x_down2 - x_cur);
+            int dz_up2 = std::abs(z_up2 - z_cur);
+            int dx_up2 = std::abs(x_up2 - x_cur);
+
+            bool flat_flag11 = (dz_up * 2 <= dx_up) && (dz_down * 2 <= dx_down);
+            bool flat_flag12 = (dz_up * 2 <= dx_up) && (dz_down2 * 2 <= dx_down2);
+            bool flat_flag21 = (dz_up2 * 2 <= dx_up2) && (dz_down * 2 <= dx_down);
+            bool flat_flag22 = (dz_up2 * 2 <= dx_up2) && (dz_down2 * 2 <= dx_down2);
+
+            // 计算角度标志 (第一回波)
+            bool angle_flag11 = std::abs(z_up + z_down - 2 * z_cur) <= delta_z_th;
+            bool angle_flag12 = std::abs(z_up + z_down2 - 2 * z_cur) <= delta_z_th;
+            bool angle_flag21 = std::abs(z_up2 + z_down - 2 * z_cur) <= delta_z_th;
+            bool angle_flag22 = std::abs(z_up2 + z_down2 - 2 * z_cur) <= delta_z_th;
+
+            // 组合标志 (第一回波)
+            bool flag_11 = near_up_1 && near_down_1 && flat_flag11 && angle_flag11;
+            bool flag_21 = near_up_1 && near_down_2 && flat_flag12 && angle_flag12;
+            bool flag_12 = near_up_2 && near_down_1 && flat_flag21 && angle_flag21;
+            bool flag_22 = near_up_2 && near_down_2 && flat_flag22 && angle_flag22;
+
+            bool ground_flag = roi_flag && (flag_11 || flag_12 || flag_21 || flag_22) ||
+                (std::abs(z_cur) < 20 && dist_cur < 4000);
+            if (!ground_flag && (roi_flag2 || (std::abs(z_cur2) < 20 && dist_cur2 < 4000)))
+            {
+                
+                // 计算邻近标志 (第二回波)
+                bool near2_up_1 = (dist_up > 0) && (dist_up - dist_cur2 > 0) && (dist_up - dist_cur2 <= dist_diff_th);
+                bool near2_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur2 > 0) && (dist_up2 - dist_cur2 <= dist_diff_th);
+                bool near2_down_1 = (dist_down > 0) && (dist_cur2 - dist_down > 0) && (dist_cur2 - dist_down <= dist_diff_th);
+                bool near2_down_2 = (dist_down2 > 0) && (dist_cur2 - dist_down2 > 0) && (dist_cur2 - dist_down2 <= dist_diff_th);
+                // 计算平坦标志 (第二回波)
+                int dz2_up = std::abs(z_up - z_cur2);
+                int dz2_down = std::abs(z_down - z_cur2);
+                int dx2_up = std::abs(x_up - x_cur2);
+                int dx2_down = std::abs(x_down - x_cur2);
+                int dz2_down2 = std::abs(z_down2 - z_cur2);
+                int dx2_down2 = std::abs(x_down2 - x_cur2);
+                int dz2_up2 = std::abs(z_up2 - z_cur2);
+                int dx2_up2 = std::abs(x_up2 - x_cur2);
+
+                bool flat2_flag11 = (dz2_up * 2 <= dx2_up) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag12 = (dz2_up * 2 <= dx2_up) && (dz2_down2 * 2 <= dx2_down2);
+                bool flat2_flag21 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag22 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down2 * 2 <= dx2_down2);
+                // 计算角度标志 (第二回波)
+                bool angle2_flag11 = std::abs(z_up + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag12 = std::abs(z_up + z_down2 - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag21 = std::abs(z_up2 + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag22 = std::abs(z_up2 + z_down2 - 2 * z_cur2) <= delta_z_th;
+                // 组合标志 (第二回波)
+                bool flag2_11 = near2_up_1 && near2_down_1 && flat2_flag11 && angle2_flag11;
+                bool flag2_21 = near2_up_1 && near2_down_2 && flat2_flag12 && angle2_flag12;
+                bool flag2_12 = near2_up_2 && near2_down_1 && flat2_flag21 && angle2_flag21;
+                bool flag2_22 = near2_up_2 && near2_down_2 && flat2_flag22 && angle2_flag22;
+
+                bool ground_flag2 = !ground_flag && roi_flag2 &&
+                    (flag2_11 || flag2_12 || flag2_21 || flag2_22) ||
+                    (std::abs(z_cur2) < 20 && dist_cur2 < 4000);
+
+                // 更新地面标记 (当前行)
+                if (ground_flag) gnd_mark0[row_idx] |= 1;
+                if (ground_flag2) {
+                    gnd_mark1[row_idx] |= 1;
+                    gnd_mark0[row_idx] = 0; // 第一回波标记置0
+                }
+
+                // 更新 row_idx-1 的第一回波标记 (gnd_mark_line(row_idx-1))
+                if ((ground_flag && (flag_11 || flag_12)) ||
+                    (ground_flag2 && (flag2_11 || flag2_12))) {
+                    gnd_mark0[row_idx - 1] |= 1;
+                }
+
+                // 更新 row_idx+1 的第一回波标记 (gnd_mark_line(row_idx+1))
+                if ((ground_flag && (flag_11 || flag_21)) ||
+                    (ground_flag2 && (flag2_11 || flag2_21))) {
+                    gnd_mark0[row_idx + 1] |= 1;
+                }
+
+                // 更新 row_idx-1 的第二回波标记 (gnd_mark_line2(row_idx-1))
+                if ((ground_flag && (flag_21 || flag_22)) ||
+                    (ground_flag2 && (flag2_21 || flag2_22))) {
+                    gnd_mark1[row_idx - 1] |= 1;
+                }
+                if ((ground_flag && (flag_12 || flag_22)) ||
+                    (ground_flag2 && (flag2_12 || flag2_22))) {
+                    gnd_mark1[row_idx + 1] |= 1;
+                }
+            }
+            else if (ground_flag && (std::abs(z_cur2) < 20 && dist_cur2 < 4000))
+            {
+                gnd_mark0[row_idx] |= 1;
+                bool ground_flag2 = true;
+                gnd_mark1[row_idx] |= 1;
+                gnd_mark0[row_idx] = 0; // 第一回波标记置0
+
+                // 计算邻近标志 (第二回波)
+                bool near2_up_1 = (dist_up > 0) && (dist_up - dist_cur2 > 0) && (dist_up - dist_cur2 <= dist_diff_th);
+                bool near2_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur2 > 0) && (dist_up2 - dist_cur2 <= dist_diff_th);
+                bool near2_down_1 = (dist_down > 0) && (dist_cur2 - dist_down > 0) && (dist_cur2 - dist_down <= dist_diff_th);
+                bool near2_down_2 = (dist_down2 > 0) && (dist_cur2 - dist_down2 > 0) && (dist_cur2 - dist_down2 <= dist_diff_th);
+                // 计算平坦标志 (第二回波)
+                int dz2_up = std::abs(z_up - z_cur2);
+                int dz2_down = std::abs(z_down - z_cur2);
+                int dx2_up = std::abs(x_up - x_cur2);
+                int dx2_down = std::abs(x_down - x_cur2);
+                int dz2_down2 = std::abs(z_down2 - z_cur2);
+                int dx2_down2 = std::abs(x_down2 - x_cur2);
+                int dz2_up2 = std::abs(z_up2 - z_cur2);
+                int dx2_up2 = std::abs(x_up2 - x_cur2);
+
+                bool flat2_flag11 = (dz2_up * 2 <= dx2_up) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag12 = (dz2_up * 2 <= dx2_up) && (dz2_down2 * 2 <= dx2_down2);
+                bool flat2_flag21 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag22 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down2 * 2 <= dx2_down2);
+                // 计算角度标志 (第二回波)
+                bool angle2_flag11 = std::abs(z_up + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag12 = std::abs(z_up + z_down2 - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag21 = std::abs(z_up2 + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag22 = std::abs(z_up2 + z_down2 - 2 * z_cur2) <= delta_z_th;
+                // 组合标志 (第二回波)
+                bool flag2_11 = near2_up_1 && near2_down_1 && flat2_flag11 && angle2_flag11;
+                bool flag2_21 = near2_up_1 && near2_down_2 && flat2_flag12 && angle2_flag12;
+                bool flag2_12 = near2_up_2 && near2_down_1 && flat2_flag21 && angle2_flag21;
+                bool flag2_22 = near2_up_2 && near2_down_2 && flat2_flag22 && angle2_flag22;
+                // 更新 row_idx-1 的第一回波标记 (gnd_mark_line(row_idx-1))
+                if ((flag_11 || flag_12) ||
+                    (flag2_11 || flag2_12)) {
+                    gnd_mark0[row_idx - 1] |= 1;
+                }
+
+                // 更新 row_idx+1 的第一回波标记 (gnd_mark_line(row_idx+1))
+                if ((flag_11 || flag_21) ||
+                    (flag2_11 || flag2_21)) {
+                    gnd_mark0[row_idx + 1] |= 1;
+                }
+
+                // 更新 row_idx-1 的第二回波标记 (gnd_mark_line2(row_idx-1))
+                if ((flag_21 || flag_22) ||
+                    (flag2_21 || flag2_22)) {
+                    gnd_mark1[row_idx - 1] |= 1;
+                }
+                if ((flag_12 || flag_22) ||
+                    (flag2_12 || flag2_22)) {
+                    gnd_mark1[row_idx + 1] |= 1;
+                }
+            }
+            else if(ground_flag)
+            {
+                gnd_mark0[row_idx] |= 1;
+                // 更新 row_idx-1 的第一回波标记 (gnd_mark_line(row_idx-1))
+                if (flag_11 || flag_12) {
+                    gnd_mark0[row_idx - 1] |= 1;
+                }
+                // 更新 row_idx+1 的第一回波标记 (gnd_mark_line(row_idx+1))
+                if (flag_11 || flag_21) {
+                    gnd_mark0[row_idx + 1] |= 1;
+                }
+
+                // 更新 row_idx-1 的第二回波标记 (gnd_mark_line2(row_idx-1))
+                if (flag_21 || flag_22) {
+                    gnd_mark1[row_idx - 1] |= 1;
+                }
+                if (flag_12 || flag_22) {
+                    gnd_mark1[row_idx + 1] |= 1;
+                }
+            }
+        }
+        else
+        {
+            ground_flag = false;
+            if (roi_flag2 || (std::abs(z_cur2) < 20 && dist_cur2 < 4000))
+            {
+                // 计算邻近标志 (第二回波)
+                bool near2_up_1 = (dist_up > 0) && (dist_up - dist_cur2 > 0) && (dist_up - dist_cur2 <= dist_diff_th);
+                bool near2_up_2 = (dist_up2 > 0) && (dist_up2 - dist_cur2 > 0) && (dist_up2 - dist_cur2 <= dist_diff_th);
+                bool near2_down_1 = (dist_down > 0) && (dist_cur2 - dist_down > 0) && (dist_cur2 - dist_down <= dist_diff_th);
+                bool near2_down_2 = (dist_down2 > 0) && (dist_cur2 - dist_down2 > 0) && (dist_cur2 - dist_down2 <= dist_diff_th);
+
+                // 计算平坦标志 (第一回波)
+                int dz_up = std::abs(z_up - z_cur);
+                int dz_down = std::abs(z_down - z_cur);
+                int dx_up = std::abs(x_up - x_cur);
+                int dx_down = std::abs(x_down - x_cur);
+                int dz_down2 = std::abs(z_down2 - z_cur);
+                int dx_down2 = std::abs(x_down2 - x_cur);
+                int dz_up2 = std::abs(z_up2 - z_cur);
+                int dx_up2 = std::abs(x_up2 - x_cur);
+
+                // 计算平坦标志 (第二回波)
+                int dz2_up = std::abs(z_up - z_cur2);
+                int dz2_down = std::abs(z_down - z_cur2);
+                int dx2_up = std::abs(x_up - x_cur2);
+                int dx2_down = std::abs(x_down - x_cur2);
+                int dz2_down2 = std::abs(z_down2 - z_cur2);
+                int dx2_down2 = std::abs(x_down2 - x_cur2);
+                int dz2_up2 = std::abs(z_up2 - z_cur2);
+                int dx2_up2 = std::abs(x_up2 - x_cur2);
+
+                bool flat2_flag11 = (dz2_up * 2 <= dx2_up) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag12 = (dz2_up * 2 <= dx2_up) && (dz2_down2 * 2 <= dx2_down2);
+                bool flat2_flag21 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down * 2 <= dx2_down);
+                bool flat2_flag22 = (dz2_up2 * 2 <= dx2_up2) && (dz2_down2 * 2 <= dx2_down2);
+
+                // 计算角度标志 (第二回波)
+                bool angle2_flag11 = std::abs(z_up + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag12 = std::abs(z_up + z_down2 - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag21 = std::abs(z_up2 + z_down - 2 * z_cur2) <= delta_z_th;
+                bool angle2_flag22 = std::abs(z_up2 + z_down2 - 2 * z_cur2) <= delta_z_th;
+
+                // 组合标志 (第二回波)
+                bool flag2_11 = near2_up_1 && near2_down_1 && flat2_flag11 && angle2_flag11;
+                bool flag2_21 = near2_up_1 && near2_down_2 && flat2_flag12 && angle2_flag12;
+                bool flag2_12 = near2_up_2 && near2_down_1 && flat2_flag21 && angle2_flag21;
+                bool flag2_22 = near2_up_2 && near2_down_2 && flat2_flag22 && angle2_flag22;
+
+                ground_flag2 = roi_flag2 &&
+                    (flag2_11 || flag2_12 || flag2_21 || flag2_22) ||
+                    (std::abs(z_cur2) < 20 && dist_cur2 < 4000);
+                if (ground_flag2) 
+                {
+                    gnd_mark1[row_idx] |= 1;
+                    gnd_mark0[row_idx] = 0; // 第一回波标记置0
+                    if(flag2_11 || flag2_12)
+                    {
+                        gnd_mark0[row_idx - 1] |= 1;
+                    }
+
+                    if (flag2_11 || flag2_21)
+                    {
+                        gnd_mark0[row_idx + 1] |= 1;
+                    }
+
+                    if(flag2_21 || flag2_22)
+                    {
+                        gnd_mark1[row_idx - 1] |= 1;
+                    }
+
+                    if (flag2_12 || flag2_22)
+                    {
+                        gnd_mark1[row_idx + 1] |= 1;
+                    }
+                }
+            }
+        }
+        // 低高度强制标记
+        if (std::abs(z_down) < 20 && dist_down < 4000) {
+            gnd_mark0[row_idx - 1] = 2;
+        }
+        if (std::abs(z_down2) < 20 && dist_down2 < 4000) {
+            gnd_mark1[row_idx - 1] = 2;
+        }
+
     }
 }
 
-/*******************************************************************************
+/**
  * \brief  Final decision of the algorithm, delete points with mask
  *
  * \param[in] col_idx: column index of the buffer
@@ -2515,42 +1714,70 @@ void AlgoFunction::highCalcFunc(uint16_t *pu16Dist, int col, int* fit_high)
  *                 Range: 0 - 2^32-1. Accuracy: 1.
  * \param[in] pu8Ref: reflectance buffer
  *                 Range: 0 - 2^32-1. Accuracy: 1.
-*******************************************************************************/
+ * \param[in] pstFrameBuffer: frame buffer
+ */
 void AlgoFunction::algoFianlDecision(int col_idx, uint16_t *pu16Dist, uint8_t *pu8Ref, tstFrameBuffer* frame_buffer)
 {
-    // 提前计算环形缓冲区索引
+    memcpy(pu16Dist, frame_buffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+    memcpy(&pu16Dist[VIEW_H], frame_buffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+    memcpy(pu8Ref, frame_buffer->ref0[col_idx], sizeof(uint8_t) * VIEW_H);
+    memcpy(&pu8Ref[VIEW_H], frame_buffer->ref0[col_idx], sizeof(uint8_t) * VIEW_H);
+    //提前计算环形缓冲区索引
     circularCalcIdx(rear5, buffer_size_upsampling);
     const int decision_col = col_idx;
     const int decision_col_buffer = matlabMod(rear5 - 1 + 1, buffer_size_upsampling);
 
     // 边界检查提前
-    if (decision_col >=0 && decision_col < VIEW_W) {
+    if (decision_col >= 0 && decision_col < VIEW_W) {
         // 获取当前列的指针，减少数组访问
-        uint16_t *current_dist_wave0 = stFilterFrmBuffer.dist_wave0[decision_col];
-        uint8_t *current_refl_wave0 = stFilterFrmBuffer.refl_wave0[decision_col];
+        uint16_t* current_dist_wave0 = stFilterFrmBuffer.dist_wave0[decision_col];
+        uint16_t* current_dist_wave1 = stFilterFrmBuffer.dist_wave1[decision_col];
+        uint8_t* current_refl_wave0 = stFilterFrmBuffer.refl_wave0[decision_col];
+        uint8_t* current_refl_wave1 = stFilterFrmBuffer.refl_wave1[decision_col];
 
-        uint16_t *buffer_dist_wave0 = dist_wave0_buffer5[decision_col_buffer];
-        uint8_t *buffer_refl_wave0 = refl_wave0_buffer5[decision_col_buffer];
+        uint16_t* buffer_dist_wave0 = dist_wave0_buffer5[decision_col_buffer];
+        uint16_t* buffer_dist_wave1 = dist_wave1_buffer5[decision_col_buffer];
+        uint8_t* buffer_refl_wave0 = refl_wave0_buffer5[decision_col_buffer];
+        uint8_t* buffer_refl_wave1 = refl_wave1_buffer5[decision_col_buffer];
 
         // 一次性拷贝整列数据
         memcpy(buffer_dist_wave0, current_dist_wave0, sizeof(uint16_t) * VIEW_H);
+        memcpy(buffer_dist_wave1, current_dist_wave1, sizeof(uint16_t) * VIEW_H);
         memcpy(buffer_refl_wave0, current_refl_wave0, sizeof(uint8_t) * VIEW_H);
+        memcpy(buffer_refl_wave1, current_refl_wave1, sizeof(uint8_t) * VIEW_H);
 
         // 获取掩码指针
-        int *trail_mask_out = trail_mask_out_frm[decision_col];
-        int *denoise_mask_out = denoise_mask_out_frm[decision_col];
+        uint16_t* trail_mask_out = trail_mask_out_frm[decision_col];
+        int* stray_mask_out0 = stray_mask_out_frm0[decision_col];
+        int* stray_mask_out1 = stray_mask_out_frm1[decision_col];
+        int* spray_mask_out0 = spray_mark_out_frm0[decision_col];
+        int* spray_mask_out1 = spray_mark_out_frm1[decision_col];
 
         // 优化处理循环
         for (int row_idx = 0; row_idx < VIEW_H; row_idx++)
         {
-            const int trail_mask = trail_mask_out[row_idx];
-            const int denoise_mask = denoise_mask_out[row_idx];
+            const bool stray0 = stray_mask_out0[row_idx];
+            const bool stray1 = stray_mask_out1[row_idx];
+            const bool spray0 = spray_mask_out0[row_idx];
+            const bool spray1 = spray_mask_out1[row_idx];
+            const bool trail = trail_mask_out[row_idx];
+            const bool wave0_del_flag = stray0 || spray0 || trail;
+            const bool wave1_del_flag = !stray1 && !spray1 && !trail;
 
-            // 按照优先级处理不同掩码情况
-            if (trail_mask == 1 || denoise_mask == 0) {
-                // 只清空wave0数据
+            // 情况1: 两回波均无效点
+            if (wave0_del_flag && !wave1_del_flag) {
                 buffer_dist_wave0[row_idx] = 0;
                 buffer_refl_wave0[row_idx] = 0;
+            }
+            // 情况2: 第一回波无效点，第二回波有效点
+            else if (wave0_del_flag && wave1_del_flag) {
+                buffer_dist_wave0[row_idx] = buffer_dist_wave1[row_idx];
+                buffer_refl_wave0[row_idx] = buffer_refl_wave1[row_idx];
+            }
+            // 情况3: 第一回波有效，第二回波无效
+            else if (!wave0_del_flag && !wave1_del_flag) {
+                buffer_dist_wave1[row_idx] = 0;
+                buffer_refl_wave1[row_idx] = 0;
             }
         }
     }
@@ -2563,9 +1790,9 @@ void AlgoFunction::algoFianlDecision(int col_idx, uint16_t *pu16Dist, uint8_t *p
     processUpSample(up_smpl_col, up_smpl_col_buffer, up_smpl_col2_buffer, pu16Dist, pu8Ref, frame_buffer);
 }
 
-/*******************************************************************************
+/**
  * \brief  Update ground fit params
-*******************************************************************************/
+ */
 void AlgoFunction::updateGroundFitParams(void)
 {
     //更新地面拟合结果
@@ -2574,9 +1801,9 @@ void AlgoFunction::updateGroundFitParams(void)
     fit_Params.c = best_model_fit[2];
 }
 
-/*******************************************************************************
+/**
  * \brief  Algorithm params initialize
-*******************************************************************************/
+ */
 void AlgoFunction::algoInit()
 {
     pc_Param.initialize();
@@ -2587,46 +1814,32 @@ void AlgoFunction::algoInit()
     using namespace robosense::lidar::yaml;
 
     if (algo_switch_param.data_valid) {
-        LogDebug("Using algorithm switch in yaml file.");
+        LogInfo("Using algorithm switch in yaml file.");
         algo_Param.TrailRemoveOn = algo_switch_param.enable_trail_remove;
         algo_Param.DenoiseOn = algo_switch_param.enable_denoise;
-        algo_Param.HighRefCrossOn = algo_switch_param.enable_high_ref_cross;
-        algo_Param.FilterOn = algo_switch_param.enable_filter;
-        algo_Param.HorDistSmoothOn = algo_switch_param.enable_hor_dist_smooth;
-        algo_Param.HorRefSmoothOn = algo_switch_param.enable_hor_ref_smooth;
-        algo_Param.VerDistSmoothOn = algo_switch_param.enable_ver_dist_smooth;
-        algo_Param.VerRefSmoothOn = algo_switch_param.enable_ver_ref_smooth;
+        algo_Param.StrayRemoveOn = algo_switch_param.enable_stray;
+        algo_Param.SprayRemoveOn = algo_switch_param.enable_spray;
     } else {
         LogWarn(__FILE__, __LINE__, __func__,
             "Algorithm switch yaml file read FAILED, Using default switch.");
     }
 
-    LogDebug(__FILE__, __LINE__, __func__,
+    LogInfo(__FILE__, __LINE__, __func__,
             "TrailRemoveOn: {}", algo_Param.TrailRemoveOn);
-    LogDebug(__FILE__, __LINE__, __func__,
+    LogInfo(__FILE__, __LINE__, __func__,
             "DenoiseOn: {}", algo_Param.DenoiseOn);
-    LogDebug(__FILE__, __LINE__, __func__,
-            "HighRefCrossOn: {}", algo_Param.HighRefCrossOn);
-    LogDebug(__FILE__, __LINE__, __func__,
-            "FilterOn: {}", algo_Param.FilterOn);
-    LogDebug(__FILE__, __LINE__, __func__,
-            "HorDistSmoothOn: {}", algo_Param.HorDistSmoothOn);
-    LogDebug(__FILE__, __LINE__, __func__,
-            "HorRefSmoothOn: {}", algo_Param.HorRefSmoothOn);
-    LogDebug(__FILE__, __LINE__, __func__,
-            "VerDistSmoothOn: {}", algo_Param.VerDistSmoothOn);
-    LogDebug(__FILE__, __LINE__, __func__,
-            "VerRefSmoothOn: {}", algo_Param.VerRefSmoothOn);
+    LogInfo(__FILE__, __LINE__, __func__,
+            "StrayRemoveOn: {}", algo_Param.StrayRemoveOn);
+    LogInfo(__FILE__, __LINE__, __func__,
+            "SprayRemoveOn: {}", algo_Param.SprayRemoveOn);
 }
 
-/*******************************************************************************
+/**
  * \brief  Algorithm frame change
-*******************************************************************************/
+ */
 void AlgoFunction::algoFrameChange(void)
 {
     memset(denoise_valid_buffer, 0, sizeof(denoise_valid_buffer));
-    memset(filter_valid_buffer, 0, sizeof(filter_valid_buffer));
-    memset(empty_buffer, 0, sizeof(empty_buffer));
 
     memset(dist_wave0_buffer1, 0, sizeof(dist_wave0_buffer1));
     memset(dist_wave1_buffer1, 0, sizeof(dist_wave1_buffer1));
@@ -2639,25 +1852,18 @@ void AlgoFunction::algoFrameChange(void)
 
     memset(dist_wave0_buffer2, 0, sizeof(dist_wave0_buffer2));
     memset(refl_wave0_buffer2, 0, sizeof(refl_wave0_buffer2));
-
     memset(dist_wave0_buffer4, 0, sizeof(dist_wave0_buffer4));
     memset(refl_wave0_buffer4, 0, sizeof(refl_wave0_buffer4));
-    memset(high_wave0_buffer4, 0, sizeof(high_wave0_buffer4));
 
     memset(dist_wave0_buffer5, 0, sizeof(dist_wave0_buffer5));
     memset(dist_wave1_buffer5, 0, sizeof(dist_wave1_buffer5));
     memset(refl_wave0_buffer5, 0, sizeof(refl_wave0_buffer5));
     memset(refl_wave1_buffer5, 0, sizeof(refl_wave1_buffer5));
 
-    memcpy(zone_valid_cnt_in, zone_valid_cnt,sizeof(zone_valid_cnt));
-    memset(zone_valid_cnt, 0, sizeof(zone_valid_cnt));
-
-    memcpy(EmptyMask, EmptyMask_out,sizeof(EmptyMask_out));
-    memset(EmptyMask_out, 0, sizeof(EmptyMask_out));
-
     rear1 = -1; //去噪
     rear2 = -1; //拖点
-    rear4 = -1; //帧间
+    rear3 = -1; //杂散
+    rear4 = -1; //雨雾
     rear5 = -1; //上采样
 
     basic_rear = -1;
@@ -2665,289 +1871,1777 @@ void AlgoFunction::algoFrameChange(void)
     empty_rear = -1;
 }
 
-/*******************************************************************************
- * \brief  Algorithm main function
+/**
+ * @brief stray delete algorithm of lidar
  *
- * \param[in] col_idx: column index of the buffer
- *                 Range: 0 - 759. Accuracy: 1.
- * \param[in] pstFrameBuffer: frame buffer
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] task_id: thread id of algorithm
- *                 Range: 0 - 4. Accuracy: 1.
-*******************************************************************************/
+ * @param col_idx column index of the buffer
+ *                  Range: 0 - 759. Accuracy: 1.
+ * @param stray_col_buffer stray buffer column index
+ *                  Range: 0 - 2. Accuracy: 1.
+ * @param stray_col_neib_buf stray neighbor buffer column index
+ *                  Range: 0 - 2. Accuracy: 1.
+ * @param stray_mark_out0 stray wave0 buffer mark value
+ *                  Range: 0 - 1. Accuracy: 1.
+ * @param stray_mark_out1 stray wave1 buffer mark value
+ *                  Range: 0 - 1. Accuracy: 1.
+ */
+void AlgoFunction::strayDelete(int col_idx,
+    int stray_col_buffer,
+    int *stray_col_neib_buf,
+    int *stray_mark_out0,
+    int *stray_mark_out1) {
+    if(col_idx < 0 || col_idx >= VIEW_W){
+        return;
+    }
+    if (algo_Param.StrayRemoveOn) {
+        static int ceil_stray_dist[3] = {0};
+        static int stray_chain_cnt[3] = {0};
+        static int stray_chain_dist[3] = {0};
+        static int stray_chain_row_st[3] = {0};
+        static int stray_chain_row_ed[3] = {0};
+
+        static int stray_conn_dist = 0;
+        static int stray_conn_cols = 0;
+        static int stray_conn_cnt = 0;
+        static int stray_conn_col_st = 0;
+        static int stray_conn_col_ed = 0;
+
+        static int rain_wall_cnt = 0;
+        static int rain_wall_dist = 0;
+        static int peak_buffer[VIEW_H][3];
+
+        if(0 == col_idx){
+            memset(ceil_stray_dist, 0, sizeof(ceil_stray_dist));
+            memset(stray_chain_cnt, 0, sizeof(stray_chain_cnt));
+            memset(stray_chain_dist, 0, sizeof(stray_chain_dist));
+            memset(stray_chain_row_st, 0, sizeof(stray_chain_row_st));
+            memset(stray_chain_row_ed, 0, sizeof(stray_chain_row_ed));
+            stray_conn_dist = 0;
+            stray_conn_cols = 0;
+            stray_conn_cnt = 0;
+            stray_conn_col_st = 0;
+            stray_conn_col_ed = 0;
+            rain_wall_cnt = 0;
+            rain_wall_dist = 0;
+        }
+        // 地面标记表
+        int gnd_cnt_tab[28] = {0};
+        int gnd_row_ed_tab[28] = {0};
+        int gnd_height_st_tab[28];
+        std::fill_n(gnd_height_st_tab, 28, 65535);
+        int gnd_dist_max = 0;
+
+        // 滑动窗口更新
+        ceil_stray_dist[0] = ceil_stray_dist[1];
+        ceil_stray_dist[1] = ceil_stray_dist[2];
+        ceil_stray_dist[2] = 0;
+
+        // 聚类变量
+        int class_line[VIEW_H] = {0};
+
+        int class_row_st = 0;
+        int class_row_ed = 0;
+        int class_cnt = 0;
+        int class_dist = 0;
+        int class_stray_cnt = 0;
+        int class_stray_row = 0;
+
+        int stray_chain_points_c = 0;
+        int stray_chain_cnt_c = 0;
+        int stray_chain_dist_c = 0;
+        int stray_chain_row_st_c = 0;
+        int stray_chain_row_ed_c = 0;
+
+        // 更新全局杂散链数组
+        stray_chain_cnt[0] = stray_chain_cnt[1];
+        stray_chain_cnt[1] = stray_chain_cnt[2];
+        stray_chain_cnt[2] = stray_chain_cnt_c;
+
+        stray_chain_dist[0] = stray_chain_dist[1];
+        stray_chain_dist[1] = stray_chain_dist[2];
+        stray_chain_dist[2] = stray_chain_dist_c;
+
+        stray_chain_row_st[0] = stray_chain_row_st[1];
+        stray_chain_row_st[1] = stray_chain_row_st[2];
+        stray_chain_row_st[2] = stray_chain_row_st_c;
+
+        stray_chain_row_ed[0] = stray_chain_row_ed[1];
+        stray_chain_row_ed[1] = stray_chain_row_ed[2];
+        stray_chain_row_ed[2] = stray_chain_row_ed_c;
+
+        // =============== 前级信息计算 ===============
+        for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
+            // 获取当前行数据
+            int dist_cur = dist_wave0_buffer3[stray_col_buffer][row_idx];
+            int dist_cur2 = dist_wave1_buffer3[stray_col_buffer][row_idx];
+
+            int row_idx_up = std::max(0, row_idx - 1);
+            int dist_up = dist_wave0_buffer3[stray_col_buffer][row_idx_up];
+            int dist_up2 = dist_wave1_buffer3[stray_col_buffer][row_idx_up];
+
+            int crosstalk_cur = crtk_wave0_buffer3[stray_col_buffer][row_idx];
+            int crosstalk_cur2 = crtk_wave1_buffer3[stray_col_buffer][row_idx];
+            int crosstalk_up = crtk_wave0_buffer3[stray_col_buffer][row_idx_up];
+            int crosstalk_up2 = crtk_wave1_buffer3[stray_col_buffer][row_idx_up];
+
+            int gnd_cur = grnd_wave0_buffer3[stray_col_buffer][row_idx];
+            int gnd_cur2 = grnd_wave1_buffer3[stray_col_buffer][row_idx];
+
+            int height_cur = high_wave0_buffer3[stray_col_buffer][row_idx];
+            int height_cur2 = high_wave1_buffer3[stray_col_buffer][row_idx];
+
+            bool save_flag_col = false;
+
+            // ------ 地面标记统计 ------
+            if (dist_cur > 0 && dist_cur < 14000 && gnd_cur) {
+                int gnd_seg = dist_cur >> 9; // 等价于除以512
+                if (gnd_seg >= 28) gnd_seg = 27;
+
+                if (gnd_cnt_tab[gnd_seg] == 0) {
+                    gnd_cnt_tab[gnd_seg] = 1;
+                    gnd_row_ed_tab[gnd_seg] = row_idx;
+                    gnd_height_st_tab[gnd_seg] = height_cur;
+                } else if (row_idx - gnd_row_ed_tab[gnd_seg] <= 3 &&
+                            std::abs(height_cur - gnd_height_st_tab[gnd_seg]) < 50) {
+                    gnd_cnt_tab[gnd_seg] = std::min(32, gnd_cnt_tab[gnd_seg] + 1);
+                    gnd_row_ed_tab[gnd_seg] = row_idx;
+                }
+
+                if ((dist_cur > gnd_dist_max && dist_cur - gnd_dist_max < 800) ||
+                        gnd_dist_max == 0) {
+                    gnd_dist_max = dist_cur;
+                }
+            }
+            else if (dist_cur2 > 0 && dist_cur2 < 14000 && gnd_cur2) {
+                int gnd_seg = dist_cur2 >> 9;
+                if (gnd_seg >= 28) gnd_seg = 27;
+
+                if (gnd_cnt_tab[gnd_seg] == 0) {
+                    gnd_cnt_tab[gnd_seg] = 1;
+                    gnd_row_ed_tab[gnd_seg] = row_idx;
+                    gnd_height_st_tab[gnd_seg] = height_cur2;
+                } else if (row_idx - gnd_row_ed_tab[gnd_seg] <= 3 &&
+                            std::abs(height_cur2 - gnd_height_st_tab[gnd_seg]) < 50) {
+                    gnd_cnt_tab[gnd_seg] = std::min(32, gnd_cnt_tab[gnd_seg] + 1);
+                    gnd_row_ed_tab[gnd_seg] = row_idx;
+                }
+
+                if ((dist_cur2 > gnd_dist_max && dist_cur2 - gnd_dist_max < 800) ||
+                        gnd_dist_max == 0) {
+                    gnd_dist_max = dist_cur2;
+                }
+            }
+
+            // ------ 天花板杂散标记 ------
+            if (row_idx >= 139 && row_idx <= 143) { // 140-144行对应索引139-143
+                if (crosstalk_cur &&
+                    ((std::abs(dist_cur - dist_up) < 100 && crosstalk_up) ||
+                        (std::abs(dist_cur - dist_up2) < 100 && crosstalk_up2))) {
+                    ceil_stray_dist[2] = dist_cur;
+                }
+                else if (crosstalk_cur2 &&
+                        ((std::abs(dist_cur2 - dist_up) < 100 && crosstalk_up) ||
+                            (std::abs(dist_cur2 - dist_up2) < 100 && crosstalk_up2))) {
+                    ceil_stray_dist[2] = dist_cur2;
+                }
+            }
+
+            // ------ 聚类处理 ------
+            int dist_th_classify_cur = (dist_cur < stray_Param.dist_node1) ?
+                                        stray_Param.dist_th_classify[0] : stray_Param.dist_th_classify[1];
+
+            if (dist_cur > 1600) {
+                if (0 == class_cnt) {
+                    class_row_st = row_idx;
+                    class_row_ed = row_idx;
+                    class_cnt = 1;
+                    class_dist = dist_cur;
+                    if (crosstalk_cur > 0) {
+                        class_stray_cnt++;
+                        class_stray_row = row_idx;
+                    }
+                }
+                else if (std::abs(class_dist - dist_cur) < dist_th_classify_cur &&
+                            row_idx - class_row_ed < 3) {
+                    // 普通块处理
+                    if (0 == class_stray_cnt) {
+                        if (crosstalk_cur > 0 && row_idx - class_row_st > 3) {
+                            save_flag_col = true;
+                        } else {
+                            class_row_ed = row_idx;
+                            class_cnt++;
+                            class_dist = dist_cur;
+                            if (crosstalk_cur > 0) {
+                                class_stray_cnt++;
+                                class_stray_row = row_idx;
+                            }
+                        }
+                    }
+                    // 杂散块处理
+                    else if (class_stray_cnt > 0) {
+                        class_row_ed = row_idx;
+                        class_cnt++;
+                        class_dist = dist_cur;
+                        if (crosstalk_cur > 0) {
+                            class_stray_cnt++;
+                            class_stray_row = row_idx;
+                        }
+                        if (row_idx - class_stray_row > 5) {
+                            save_flag_col = true;
+                        }
+                    }
+                }
+                else {
+                    save_flag_col = true;
+                }
+            }
+
+            // 保存聚类结果
+            if (save_flag_col || row_idx == (VIEW_H - 1)) {
+                bool class_type = (class_stray_cnt > 0);
+                bool wr_stray_class_flag = false;
+                int chain_last_row_st = 0;
+                int chain_last_row_ed = 0;
+                // 杂散链统计
+                if(class_type && (class_stray_cnt * 4 >= class_row_ed - class_row_st)) {
+                    if (0 == stray_chain_cnt_c) {
+                        stray_chain_dist_c = class_dist;
+                        stray_chain_points_c = class_cnt;
+                        stray_chain_cnt_c = class_stray_cnt;
+                        stray_chain_row_st_c = class_row_st;
+                        stray_chain_row_ed_c = class_row_ed;
+                    }
+                    // 合并条件
+                    else if(std::abs(class_dist - stray_chain_dist_c) < 100 &&
+                            (class_row_st - stray_chain_row_ed_c < 20 || class_stray_cnt > 5)) {
+                        stray_chain_dist_c = class_dist;
+                        stray_chain_points_c += class_cnt;
+                        stray_chain_cnt_c += class_stray_cnt;
+                        stray_chain_row_ed_c = class_row_ed;
+                    }
+                    // 替换条件
+                    else if(class_stray_cnt > stray_chain_cnt_c) {
+                        wr_stray_class_flag = (stray_chain_cnt_c >= 5) &&
+                            (stray_chain_cnt_c * 2 >= stray_chain_points_c) &&
+                            (abs(stray_chain_dist_c - RainWall_in.dist) < 960) &&
+                            (RainWall_in.cnt > 150);
+                        chain_last_row_st = stray_chain_row_st_c;
+                        chain_last_row_ed = stray_chain_row_ed_c;
+                        stray_chain_dist_c = class_dist;
+                        stray_chain_points_c = class_cnt;
+                        stray_chain_cnt_c = class_stray_cnt;
+                        stray_chain_row_st_c = class_row_st;
+                        stray_chain_row_ed_c = class_row_ed;
+                    }
+                }
+
+                // 距离聚类标记
+                if (class_cnt >= 1 && ((!class_type && class_cnt <= 10) ||
+                    (class_type && class_cnt <= 5 &&
+                        (class_cnt - class_stray_cnt) <= 3 &&
+                        class_stray_cnt * 2 >= class_cnt))) {
+                    for (int i = class_row_st; i <= class_row_ed; ++i) {
+                        class_line[i] = 1;
+                    }
+                }
+                else if (class_cnt <= 10 && class_type)
+                {
+                    for (int i = class_row_st; i <= class_row_ed; ++i) {
+                        class_line[i] = 2;
+                    }
+                }
+
+                if (row_idx == (VIEW_H - 1) && stray_chain_cnt_c >= 5 &&
+                    stray_chain_cnt_c * 2 >= stray_chain_points_c &&
+                    std::abs(stray_chain_dist_c - RainWall_in.dist) < 960 &&
+                    RainWall_in.cnt > 150) {
+                    chain_last_row_st = stray_chain_row_st_c;
+                    chain_last_row_ed = stray_chain_row_ed_c;
+                    wr_stray_class_flag = true;
+
+                }
+                if (wr_stray_class_flag)
+                {
+                    for (int i = chain_last_row_st; i <= chain_last_row_ed; ++i) {
+                        class_line[i] = 1;
+                    }
+                }
+
+                if (save_flag_col && row_idx == (VIEW_H - 1)) {
+                    class_line[VIEW_H - 1] = 1;
+                }
+
+                // 重置聚类变量
+                if (dist_cur > 1600) {
+                    class_row_st = row_idx;
+                    class_row_ed = row_idx;
+                    class_cnt = 1;
+                    class_dist = dist_cur;
+                    class_stray_cnt = (crosstalk_cur > 0) ? 1 : 0;
+                    class_stray_row = (crosstalk_cur > 0) ? row_idx : 0;
+                }
+            }
+
+            // 行结束处理
+            if (row_idx == VIEW_H - 1) {
+                bool save_flag_row = false;
+
+                if (stray_chain_cnt_c > 0) {
+                    int span_condition = (stray_chain_dist_c * (stray_chain_row_ed_c - stray_chain_row_st_c) * 7) >> 12;
+                    if (span_condition > 120 && stray_chain_row_ed_c > 71) {
+                        if (stray_conn_cols == 0 &&
+                            stray_chain_cnt_c * 2 > (stray_chain_row_ed_c - stray_chain_row_st_c)) {
+                            stray_conn_dist = stray_chain_dist_c;
+                            stray_conn_col_st = col_idx;
+                            stray_conn_col_ed = col_idx;
+                            stray_conn_cols = 1;
+                            stray_conn_cnt = stray_chain_cnt_c;
+                        }
+                        else if (std::abs(stray_conn_dist - stray_chain_dist_c) < 200 &&
+                                    col_idx - stray_conn_col_ed < 20) {
+                            stray_conn_cols++;
+                            stray_conn_dist = stray_chain_dist_c;
+                            stray_conn_col_ed = col_idx;
+                            stray_conn_cnt += stray_chain_cnt_c;
+                        }
+                        else {
+                            save_flag_row = true;
+                        }
+                    }
+                }
+
+                if (save_flag_row || col_idx == VIEW_W - 1) {
+                    if (stray_conn_cnt > 20 && stray_conn_cnt > rain_wall_cnt) {
+                        rain_wall_cnt = stray_conn_cnt;
+                        rain_wall_dist = stray_conn_dist;
+                    }
+
+                    if (col_idx == VIEW_W - 1) {
+                        if (rain_wall_cnt > 0) {
+                            RainWall_out.dist = rain_wall_dist;
+                            RainWall_out.cnt = rain_wall_cnt;
+                            RainWall_out.hold_cnt = 0;
+                        } else {
+                            memcpy(&RainWall_out, &RainWall_in, sizeof(RainWall_out));
+                            RainWall_out.hold_cnt++;
+                            if (RainWall_out.hold_cnt >= stray_Param.rwall_hold_th) {
+                                RainWall_out = {0, 0, 0};
+                            }
+                        }
+                    }
+
+                    if (stray_chain_cnt_c > 0) {
+                        stray_conn_dist = stray_chain_dist_c;
+                        stray_conn_col_st = col_idx;
+                        stray_conn_col_ed = col_idx;
+                        stray_conn_cnt = stray_chain_cnt_c;
+                        stray_conn_cols = 1;
+                    }
+                }
+            }
+        }
+
+        // 更新杂散链信息
+        stray_chain_cnt[2] = stray_chain_cnt_c;
+        stray_chain_dist[2] = stray_chain_dist_c;
+        stray_chain_row_st[2] = stray_chain_row_st_c;
+        stray_chain_row_ed[2] = stray_chain_row_ed_c;
+
+        // =============== 杂散判断 ===============
+        for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
+            // 获取当前行数据
+            int dist_cur = dist_wave0_buffer3[stray_col_buffer][row_idx];
+            int dist_cur2 = dist_wave1_buffer3[stray_col_buffer][row_idx];
+
+            int row_idx_down = std::max(0, row_idx - 1);
+            int row_idx_up = std::min(VIEW_H - 1, row_idx + 1);
+
+            int dist_down = dist_wave0_buffer3[stray_col_buffer][row_idx_down];
+            int dist_up = dist_wave0_buffer3[stray_col_buffer][row_idx_up];
+
+            int ref_cur = refl_wave0_buffer3[stray_col_buffer][row_idx];
+            int ref_cur2 = refl_wave1_buffer3[stray_col_buffer][row_idx];
+
+            int peak_mark_cur = peak_wave0_buffer3[stray_col_buffer][row_idx];
+            int peak_mark_l = peak_wave0_buffer3[stray_col_neib_buf[0]][row_idx];
+            int peak_mark_r = peak_wave0_buffer3[stray_col_neib_buf[2]][row_idx];
+
+            int gnd_cur = grnd_wave0_buffer3[stray_col_buffer][row_idx];
+            int gnd_cur2 = grnd_wave1_buffer3[stray_col_buffer][row_idx];
+
+            int height_cur = high_wave0_buffer3[stray_col_buffer][row_idx];
+            int height_cur2 = high_wave1_buffer3[stray_col_buffer][row_idx];
+
+            int crosstalk_cur = crtk_wave0_buffer3[stray_col_buffer][row_idx];
+            int crosstalk_cur2 = crtk_wave1_buffer3[stray_col_buffer][row_idx];
+
+            int smlr_cur2 = smlr_wave1_buffer3[stray_col_buffer][row_idx];
+
+            int class_raw = class_line[row_idx];
+            int class_down = (row_idx > 0) ? class_line[row_idx_down] : 0;
+            int class_up = (row_idx < VIEW_H - 1) ? class_line[row_idx_up] : 0;
+
+            // 地面高度处理
+            int ground_seg = (dist_cur >> 9);
+            if (ground_seg >= 28) ground_seg = 27;
+
+            int ground_height = gnd_height_st_tab[ground_seg];
+            int ground_dist_diff = 700;
+
+            if (ground_seg >= 9) {
+                if (gnd_cnt_tab[ground_seg] == 0) {
+                    if (gnd_cnt_tab[ground_seg - 1] > 0) {
+                        ground_height = gnd_height_st_tab[ground_seg - 1];
+                    } else if (gnd_cnt_tab[ground_seg - 2] > 0) {
+                        ground_height = gnd_height_st_tab[ground_seg - 2];
+                    }
+                }
+            }
+
+            // 更新地面标记
+            if ((dist_cur2 > dist_cur && (gnd_cur2 && gnd_cur)) ||
+                (ground_height != 65535 && (height_cur - ground_height > 50))) {
+                gnd_cur = 0;
+            }
+
+            if (ground_height != 65535 && (height_cur2 - ground_height > 50)) {
+                gnd_cur2 = 0;
+            }
+
+            // 连接标志
+            bool connect_ground_flag =
+                !gnd_cur &&
+                ((height_cur - ground_height < 400 &&
+                    std::abs(gnd_dist_max - dist_cur) <= ground_dist_diff) ||
+                    (dist_cur > gnd_dist_max &&
+                    dist_cur - gnd_dist_max <= 1600 &&
+                    height_cur < 400));
+
+            bool connect_ceil_flag =
+                std::abs(dist_cur - ceil_stray_dist[2]) <= 400 ||
+                std::abs(dist_cur - ceil_stray_dist[1]) <= 400 ||
+                std::abs(dist_cur - ceil_stray_dist[0]) <= 400 ||
+                (std::abs(dist_cur - RainWall_in.dist) < 960 &&
+                    ((RainWall_in.cnt > 300) ||
+                    (RainWall_in.dist > 3000 && RainWall_in.cnt > 80)));
+
+            // 更新分类标记
+            int class_cur = (class_raw == 1)  || (class_down == 1) || (class_up == 1) ||
+                (std::abs(dist_up - dist_cur) > 400 &&
+                    std::abs(dist_down - dist_cur) > 400) ||
+                ((class_raw == 2) && (ref_cur < stray_Param.ref_del_th) && (abs(dist_cur - RainWall_in.dist) < 960));
+
+            // 杂散和镜像标志
+            bool stray_flag = (peak_mark_cur || peak_mark_l || peak_mark_r);
+            bool mirror_flag = (row_idx < RegionSize * 2) &&
+                                (dist_cur > 5000) &&
+                                (height_cur < -600);
+
+            // 删除条件
+            bool straight_del_en = crosstalk_cur && class_cur;
+            bool column_del_en =
+                (stray_chain_cnt_c >= stray_Param.stray_cnt_th &&
+                    std::abs(dist_cur - stray_chain_dist_c) < 240 && class_cur) ||
+                (stray_chain_cnt[0] >= stray_Param.stray_cnt_th &&
+                    std::abs(dist_cur - stray_chain_dist[0]) < 240 &&
+                    ((row_idx >= stray_chain_row_st[0] && row_idx <= stray_chain_row_ed[0]) || class_cur)) ||
+                (stray_chain_cnt[1] >= stray_Param.stray_cnt_th &&
+                    std::abs(dist_cur - stray_chain_dist[1]) < 240 &&
+                    ((row_idx >= stray_chain_row_st[1] && row_idx <= stray_chain_row_ed[1]) || class_cur));
+
+            bool frame_del_en =
+                (RainWall_in.cnt > 80) &&
+                (std::abs(dist_cur - RainWall_in.dist) < 960) &&
+                (height_cur > 0) &&
+                class_cur;
+
+            // 最终删除标记
+            bool stray_tag_en = (algo_Param.StrayRemoveOn &&
+                                (stray_flag || mirror_flag) &&
+                                (straight_del_en || column_del_en || frame_del_en) && !gnd_cur);
+
+            bool stray_del_en = stray_tag_en && !(connect_ground_flag && !connect_ceil_flag);
+
+            // 第二回波选择逻辑
+            bool wave1_sel_base = (smlr_cur2 >= 1) && (crosstalk_cur2 == 0);
+            bool wave1_sel_column =
+                (stray_chain_cnt_c < stray_Param.stray_cnt_th ||
+                        std::abs(dist_cur2 - stray_chain_dist_c) > 240) &&
+                (stray_chain_cnt[0] < stray_Param.stray_cnt_th ||
+                        std::abs(dist_cur2 - stray_chain_dist[0]) > 240) &&
+                (stray_chain_cnt[1] < stray_Param.stray_cnt_th ||
+                        std::abs(dist_cur2 - stray_chain_dist[1]) > 240);
+
+            bool wave1_sel_frame =
+                (RainWall_in.dist == 0) ||
+                (dist_cur2 > RainWall_in.dist + 200) ||
+                (dist_cur2 < RainWall_in.dist - 960);
+
+            bool wave1_sel_en = (wave1_sel_base && wave1_sel_column && wave1_sel_frame) || gnd_cur2;
+
+            // 设置输出掩码
+            // if (stray_del_en) {
+            //     stray_mark_out0[row_idx] = wave1_sel_en ? 2 : 3;
+            // } else if (!wave1_sel_frame) {
+            //     stray_mark_out0[row_idx] = 1;
+            // }
+            if(stray_del_en){
+                if(wave1_sel_en){
+                    stray_mark_out0[row_idx] = 1;
+                }
+                else{
+                    stray_mark_out0[row_idx] = 1;
+                    stray_mark_out1[row_idx] = 1;
+                }
+            }
+            else{
+                if(!wave1_sel_frame){
+                    stray_mark_out1[row_idx] = 1;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @brief rain enhance algorithm of lidar
+ *
+ * @param spray_col column index of the buffer
+ *                  Range: 0 - 759. Accuracy: 1.
+ * @param spray_col_buffer spray buffer column index
+ *                  Range: 0 - 6. Accuracy: 1.
+ * @param spray_col_neib_buf spray neighbor buffer column index
+ *                  Range: 0 - 6. Accuracy: 1.
+ * @param spray_mark_out0 spray wave0 buffer mark value
+ *                  Range: 0 - 1. Accuracy: 1.
+ * @param spray_mark_out1 spray wave0 buffer mark value
+ *                  Range: 0 - 1. Accuracy: 1.
+ */
+void AlgoFunction::rainEnhance(int spray_col,
+    int spray_col_buffer,
+    int* spray_col_neib_buf,
+    int* spray_mark_out0,
+    int* spray_mark_out1) {
+    if ((spray_col >= 0) && (spray_col < VIEW_W)) {
+        bool MidAreaMask = std::floor((spray_col + 1) / 50) == 7;
+        int rowStep = (MidAreaMask) ? 1 : 2;
+        int rowEnd = MidAreaMask - 1;
+        if (algo_Param.SprayRemoveOn) {
+            // 预计算行范围
+            for (int row_idx = 0; row_idx < VIEW_H + rowEnd; row_idx = row_idx + rowStep) {
+                int row_range_up = spray_Param.Area_size_y;//bias
+                int row_range_down = spray_Param.Area_size_y;//bias
+                if (row_idx <= spray_Param.Area_size_y - 1)
+                {
+                    row_range_up = row_idx;
+                }
+                if (row_idx >= VIEW_H - spray_Param.Area_size_y)
+                {
+                    row_range_down = VIEW_H - 1 - row_idx;
+                }
+                int local_dist_1[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_ref_1[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_mark_1[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_head_1[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_tail_1[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_dist_2[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_ref_2[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_mark_2[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_head_2[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_tail_2[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+
+                // 第一回波数据
+                int cur_dist_1 = dist_wave0_buffer4[spray_col_buffer][row_idx];
+                int cur_dist_2 = dist_wave1_buffer4[spray_col_buffer][row_idx];
+                /******************接地保护*******************/
+                int zone_idx = row_idx / 12;
+                if (row_idx % 12 == 0) //12个通道一个采样
+                {
+                    spray_Param.dist_cap_zone[zone_idx][0] = cur_dist_1;
+                    spray_Param.dist_cap_zone[zone_idx][1] = cur_dist_2;
+
+                    //接地判别
+                    if (zone_idx > 0 && spray_Param.ground_cap_zone[0] &&
+                        ((abs(spray_Param.dist_cap_zone[zone_idx][0] - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix &&
+                            spray_Param.dist_cap_zone[zone_idx - 1][0]) ||
+                            (abs(spray_Param.dist_cap_zone[zone_idx][0] - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix &&
+                                spray_Param.dist_cap_zone[zone_idx - 1][1])))
+                    {
+                        spray_Param.ground_cap_zone[0] = 1;
+                    }
+                    else
+                    {
+                        spray_Param.ground_cap_zone[0] = 0;
+                    }
+                    if (zone_idx > 0 && spray_Param.ground_cap_zone[1] &&
+                        ((abs(spray_Param.dist_cap_zone[zone_idx][1] - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.dist_cap_zone[zone_idx - 1][0]) ||
+                            (abs(spray_Param.dist_cap_zone[zone_idx][1] - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.dist_cap_zone[zone_idx - 1][1])))
+                    {
+                        spray_Param.ground_cap_zone[1] = 1;
+                    }
+                    else
+                    {
+                        spray_Param.ground_cap_zone[1] = 0;
+                    }
+                }
+                //data same
+                int local_dist_A[2][RAIN_SIZE_Y];
+                int local_dist_B[2][RAIN_SIZE_Y];
+                int local_dist_C[2][RAIN_SIZE_Y];
+                int local_dist_D[2][RAIN_SIZE_Y];
+                int local_dist_E[2][RAIN_SIZE_Y];
+                int* local_dist_a;
+                int* local_dist_b;
+                int* local_dist_c;
+				int MmOffsetLen[3] = { 0 };
+                int dist_diff_col[RAIN_SIZE_Y];
+                int dist_diff_row[RAIN_SIZE_Y];
+                int dist_diff_thr;
+                int dist_diff_diff_thr;
+                bool cond3;
+                bool cond4;
+                bool cond_glink_0;
+                bool cond_glink_1;
+                bool cond_glink_2;
+                bool cond_glink_3;
+                bool cond6;
+                bool local_ref_mask_1[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                bool local_ref_mask_2[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+                int local_data[5][RAIN_SIZE_X][RAIN_SIZE_Y * 2] = { 0 };
+                int* local_ref_A; // 第0行 -> A
+                int* local_ref_B; // 第1行 -> B
+                int* local_ref_C; // 第2行 -> C
+                int* local_ref_D; // 第3行 -> D
+                int* local_ref_E; // 第4行 -> E
+                int* local_ref_mask_A; // 第0行 -> A
+                int* local_ref_mask_B; // 第1行 -> B
+                int* local_ref_mask_C; // 第2行 -> C
+                int* local_ref_mask_D; // 第3行 -> D
+                int* local_ref_mask_E; // 第4行 -> E
+
+                int* local_mark_A; // 第0行 -> A
+                int* local_mark_B; // 第1行 -> B
+                int* local_mark_C; // 第2行 -> C
+                int* local_mark_D; // 第3行 -> D
+                int* local_mark_E; // 第4行 -> E
+
+                int* local_head_A; // 第0行 -> A
+                int* local_head_B; // 第1行 -> B
+                int* local_head_C; // 第2行 -> C
+                int* local_head_D; // 第3行 -> D
+                int* local_head_E; // 第4行 -> E
+
+                int* local_tail_A; // 第0行 -> A
+                int* local_tail_B; // 第1行 -> B
+                int* local_tail_C; // 第2行 -> C
+                int* local_tail_D; // 第3行 -> D
+                int* local_tail_E; // 第4行 -> E
+                bool cond0_0;
+                bool cond0_1;
+                bool cond1;
+                bool cond0_2;
+                bool cond0_3;
+
+                bool cond2;
+                int* local_ref_mask_a;
+                int* local_ref_mask_b;
+                int* local_ref_mask_c;
+                auto sign = [&](int x) {
+                    return (x > 0) - (x < 0);
+                };
+                //雨雾标记读取 第一回波
+                uint8_t cur_mark_1 = rain_wave0_buffer4[spray_col_buffer][row_idx];// 第一回波
+                bool cond_self_01 = !cur_mark_1;
+                if (cond_self_01)
+                {
+                    int cur_ref_1 = refl_wave0_buffer4[spray_col_buffer][row_idx];
+                    bool cond_self_1 = cur_dist_1 && (cur_dist_1 > spray_Param.Dist_threshold_min) &&
+                        (cur_dist_1 <= spray_Param.Dist_threshold2) && (cur_ref_1 <= spray_Param.Ref_threshold);
+                    if (cond_self_1)
+                    {
+                        bool cur_ground_1 = grnd_wave0_buffer4[spray_col_buffer][row_idx];
+                        /**********neibor statistics****************/
+                        for (int i = 0; i < RAIN_SIZE_X; i++)
+                        {
+                            for (int j = -row_range_up; j <= row_range_down; j++)
+                            {
+                                local_dist_1[i][spray_Param.Area_size_y + j] = dist_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                local_dist_2[i][spray_Param.Area_size_y + j] = dist_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                            }
+                        }
+
+                        for (int i = 0; i < RAIN_SIZE_Y; i++)
+                        {
+                            local_dist_A[0][i] = local_dist_1[0][i];
+                            local_dist_B[0][i] = local_dist_1[1][i];
+                            local_dist_C[0][i] = local_dist_1[2][i];
+                            local_dist_D[0][i] = local_dist_1[3][i];
+                            local_dist_E[0][i] = local_dist_1[4][i];
+                            local_dist_A[1][i] = local_dist_2[0][i];
+                            local_dist_B[1][i] = local_dist_2[1][i];
+                            local_dist_C[1][i] = local_dist_2[2][i];
+                            local_dist_D[1][i] = local_dist_2[3][i];
+                            local_dist_E[1][i] = local_dist_2[4][i];
+                        }
+
+                        /********************组合计算及判断*********************/
+                        //gradient
+                        if (cur_dist_1 < spray_Param.Dist_threshold)// Secondary segment, reduce the resolution by half, 8m
+                        {
+                            local_dist_a = &local_dist_A[0][0];
+                            local_dist_b = &local_dist_C[0][0];
+                            local_dist_c = &local_dist_E[0][0];
+                            MmOffsetLen[0] = 0;
+                            MmOffsetLen[1] = 2;
+                            MmOffsetLen[2] = 4;
+                        }
+                        else
+                        {
+                            local_dist_a = &local_dist_B[0][0];
+                            local_dist_b = &local_dist_C[0][0];
+                            local_dist_c = &local_dist_D[0][0];
+                            MmOffsetLen[0] = 1;
+                            MmOffsetLen[1] = 2;
+                            MmOffsetLen[2] = 3;
+                        }
+
+                        dist_diff_col[0] = local_dist_b[3] - local_dist_a[3];
+                        dist_diff_col[1] = local_dist_c[3] - local_dist_b[3];
+                        dist_diff_col[2] = local_dist_c[3] - local_dist_a[3];
+
+                        dist_diff_row[0] = local_dist_b[3] - local_dist_b[0];
+                        dist_diff_row[1] = local_dist_b[1] - local_dist_b[3];
+                        dist_diff_row[2] = local_dist_b[1] - local_dist_b[0];
+                        dist_diff_thr = spray_Param.dist_diff_thr_seq[(cur_dist_1) >> 9];
+                        dist_diff_diff_thr = spray_Param.dist_diff_diff_thr_seq[cur_dist_1 >> 9];
+
+                        //梯度一致性判断
+                        int consistency_col_1 = 1;
+                        if ((sign(dist_diff_col[0]) == sign(dist_diff_col[1]) &&
+                            abs(dist_diff_col[0]) <= dist_diff_thr && abs(dist_diff_col[1]) <= dist_diff_thr &&
+                            abs(abs(dist_diff_col[0]) - abs(dist_diff_col[1])) <= dist_diff_diff_thr) ||
+                            (abs(dist_diff_col[0]) <= 30 && abs(dist_diff_col[1]) <= 30))
+                        {
+                            consistency_col_1 = 1;
+                        }
+                        else
+                        {
+                            consistency_col_1 = 0;
+                        }
+
+                        int consistency_row_1 = 1;
+                        if ((sign(dist_diff_row[0]) == sign(dist_diff_row[1]) &&
+                            abs(dist_diff_row[0]) <= dist_diff_thr && abs(dist_diff_row[1]) <= dist_diff_thr &&
+                            abs(abs(dist_diff_row[0]) - abs(dist_diff_row[1])) <= dist_diff_diff_thr) ||
+                            (abs(dist_diff_row[0]) <= 30 && abs(dist_diff_row[1]) <= 30))
+                        {
+                            consistency_row_1 = 1;
+                        }
+                        else
+                        {
+                            consistency_row_1 = 0;
+                        }
+                        // 梯度计算
+                        cond3 = spray_Param.consistency_en && (consistency_col_1 || consistency_row_1);
+
+                        // 地面标记
+                        cond4 = spray_Param.ground_judge_en && cur_ground_1;
+                        if ((!cond3) && !cond4)
+                        {
+                            if (MidAreaMask)
+                            {
+                                rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
+                                rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                            }
+                            else
+                            {
+                                for (int i = 0; i < 3; i++)
+                                {
+                                    rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                    rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                    rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                    rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            /*****悬空计算**/
+                            bool ground_link_valid_1 = 0;
+                            cond_glink_0 = !cur_ground_1 && cur_ref_1 <= spray_Param.Ref_threshold2;
+                            cond_glink_1 = ((cur_dist_1 <= spray_Param.Dist_threshold && zone_idx > spray_Param.zone_idx_min_a && zone_idx < spray_Param.zone_idx_max_a) ||
+                                (cur_dist_1 > spray_Param.Dist_threshold && cur_dist_1 < spray_Param.Dist_threshold2&& zone_idx > spray_Param.zone_idx_min_b - 1 && zone_idx < spray_Param.zone_idx_max_b));
+                            cond_glink_2 = zone_idx > 0 && ((abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx - 1][0]) > spray_Param.dist_diff_thr_fix && abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx - 1][1]) > spray_Param.dist_diff_thr_fix) || !spray_Param.ground_cap_zone[0]);
+                            cond_glink_3 = zone_idx > 0 && ((abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[0]) ||
+                                (abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[1]));
+                            if (cond_glink_0 && cond_glink_1 && cond_glink_2 && !cond_glink_3)
+                            {
+                                ground_link_valid_1 = 1;
+                            }
+
+                            //接地判别
+                            cond6 = spray_Param.ground_link_judge_en && ground_link_valid_1;
+
+                            if (cond6 && !cond3)
+                            {
+                                if (MidAreaMask)
+                                {
+                                    rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
+                                    rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                                }
+                                else
+                                {
+                                    for (int i = 0; i < 3; i++)
+                                    {
+                                        rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                        rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                        rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                        rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                if (!cond4)
+                                {
+                                    for (int i = 0; i < RAIN_SIZE_X; i++)
+                                    {
+                                        for (int j = -row_range_up; j <= row_range_down; j++)
+                                        {
+                                            local_ref_1[i][j + spray_Param.Area_size_y] = refl_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_mark_1[i][j + spray_Param.Area_size_y] = rain_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_head_1[i][j + spray_Param.Area_size_y] = head_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_tail_1[i][j + spray_Param.Area_size_y] = tail_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+
+                                            local_ref_2[i][j + spray_Param.Area_size_y] = refl_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_mark_2[i][j + spray_Param.Area_size_y] = rain_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_head_2[i][j + spray_Param.Area_size_y] = head_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_tail_2[i][j + spray_Param.Area_size_y] = tail_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                        }
+                                        for (int k = 0; k < RAIN_SIZE_Y; k++)
+                                        {
+                                            local_ref_mask_1[i][k] = local_ref_1[i][k] <= spray_Param.Ref_threshold;
+                                            local_ref_mask_2[i][k] = local_ref_2[i][k] <= spray_Param.Ref_threshold;
+                                        }
+                                    }
+                                    memset(local_data, 0, sizeof(local_data));
+                                    // 填充局部数据
+
+                                    for (int i = 0; i < RAIN_SIZE_X; i++)
+                                    {
+                                        for (int j = 0; j < RAIN_SIZE_Y; j++) {
+                                            int wave2_j = j + RAIN_SIZE_Y;
+                                            local_data[0][i][j] = local_ref_1[i][j];
+                                            local_data[1][i][j] = local_ref_mask_1[i][j];
+                                            local_data[2][i][j] = local_mark_1[i][j];
+                                            local_data[3][i][j] = local_head_1[i][j];
+                                            local_data[4][i][j] = local_tail_1[i][j];
+                                            local_data[0][i][wave2_j] = local_ref_2[i][j];
+                                            local_data[1][i][wave2_j] = local_ref_mask_2[i][j];
+                                            local_data[2][i][wave2_j] = local_mark_2[i][j];
+                                            local_data[3][i][wave2_j] = local_head_2[i][j];
+                                            local_data[4][i][wave2_j] = local_tail_2[i][j];
+                                        }
+                                    }
+
+                                    local_ref_A = local_data[0][0]; // 第0行 -> A
+                                    local_ref_B = local_data[0][1]; // 第1行 -> B
+                                    local_ref_C = local_data[0][2]; // 第2行 -> C
+                                    local_ref_D = local_data[0][3]; // 第3行 -> D
+                                    local_ref_E = local_data[0][4]; // 第4行 -> E
+
+                                    local_ref_mask_A = local_data[1][0]; // 第0行 -> A
+                                    local_ref_mask_B = local_data[1][1]; // 第1行 -> B
+                                    local_ref_mask_C = local_data[1][2]; // 第2行 -> C
+                                    local_ref_mask_D = local_data[1][3]; // 第3行 -> D
+                                    local_ref_mask_E = local_data[1][4]; // 第4行 -> E
+
+                                    local_mark_A = local_data[2][0]; // 第0行 -> A
+                                    local_mark_B = local_data[2][1]; // 第1行 -> B
+                                    local_mark_C = local_data[2][2]; // 第2行 -> C
+                                    local_mark_D = local_data[2][3]; // 第3行 -> D
+                                    local_mark_E = local_data[2][4]; // 第4行 -> E
+
+                                    local_head_A = local_data[3][0]; // 第0行 -> A
+                                    local_head_B = local_data[3][1]; // 第1行 -> B
+                                    local_head_C = local_data[3][2]; // 第2行 -> C
+                                    local_head_D = local_data[3][3]; // 第3行 -> D
+                                    local_head_E = local_data[3][4]; // 第4行 -> E
+
+                                    local_tail_A = local_data[4][0]; // 第0行 -> A
+                                    local_tail_B = local_data[4][1]; // 第1行 -> B
+                                    local_tail_C = local_data[4][2]; // 第2行 -> C
+                                    local_tail_D = local_data[4][3]; // 第3行 -> D
+                                    local_tail_E = local_data[4][4]; // 第4行 -> E
+                                    //A列6回波
+                                        // 2. 统计各类标记数量
+                                    int mark_num[5] = { 0 }, head_num[5] = { 0 }, tail_num[5] = { 0 };
+                                    // const int dist_thr = spray_Param.dist_diff_thr_2;
+
+                                        // 辅助lambda函数减少重复代码
+                                    auto countStats = [&](const int* dist, const int* ref_mask, const int* mark,
+                                        const int* head, const int* tail, int count, int idx) {
+                                            for (int i = 0; i < count; i++) {
+                                                if (idx == 2 && i == 3) continue;
+                                                if ((dist[i] != 0) && (cur_dist_1 != 0) && (ref_mask[i] != 0) && (std::abs(dist[i] - cur_dist_1) <= spray_Param.dist_diff_thr_2)) {
+                                                    if (mark[i]) mark_num[idx]++;
+                                                    if (head[i]) head_num[idx]++;
+                                                    if (tail[i]) tail_num[idx]++;
+                                                }
+                                            }
+                                    };
+
+                                    // 统计A行（6个元素）
+                                    countStats(&local_dist_A[0][0], local_ref_mask_A, local_mark_A, local_head_A, local_tail_A, 6, 0);
+
+                                    // 统计B行（3个元素）
+                                    countStats(&local_dist_B[0][0], local_ref_mask_B, local_mark_B, local_head_B, local_tail_B, 6, 1);
+
+                                    // 统计C行（特殊处理：排除i=1位置）
+                                    countStats(&local_dist_C[0][0], local_ref_mask_C, local_mark_C, local_head_C, local_tail_C, 6, 2);
+
+                                    // 统计D行（3个元素）
+                                    countStats(&local_dist_D[0][0], local_ref_mask_D, local_mark_D, local_head_D, local_tail_D, 6, 3);
+
+                                    // 统计E行（3个元素）
+                                    countStats(&local_dist_E[0][0], local_ref_mask_E, local_mark_E, local_head_E, local_tail_E, 6, 4);
+
+                                    // 总和计算
+                                    int sum_mark_num_1 = mark_num[0] + mark_num[1] + mark_num[2] + mark_num[3] + mark_num[4];
+                                    int sum_head_num_1 = head_num[0] + head_num[1] + head_num[2] + head_num[3] + head_num[4];
+                                    int sum_tail_num_1 = tail_num[0] + tail_num[1] + tail_num[2] + tail_num[3] + tail_num[4];
+
+                                    bool cur_head_1 = head_wave0_buffer4[spray_col_buffer][row_idx];
+                                    bool cur_tail_1 = tail_wave0_buffer4[spray_col_buffer][row_idx];
+                                    // 459连波标记
+                                    bool head_tail_cur_1 = cond_self_1 & cur_head_1 & cur_tail_1;
+                                    //拆波标记
+                                    cond0_0 = spray_Param.head_tail_judge_en && head_tail_cur_1;
+                                    cond0_1 = spray_Param.head_tail_judge_en && (sum_tail_num_1 >= spray_Param.min_tail_threshold ||
+                                        sum_head_num_1 + sum_tail_num_1 >= spray_Param.min_split_threshold);
+                                    //雨雾标记
+                                    cond1 = spray_Param.rain_mark_en && sum_mark_num_1 >= spray_Param.min_mark_threshold;
+                                    cond0_3 = spray_Param.head_tail_judge_en && cur_head_1 && !cur_tail_1 && cur_dist_1 > 1000 && (cond0_1 || cond1);
+
+                                    if (cond0_3 || cond0_0)
+                                    {
+                                        if (MidAreaMask)
+                                        {
+                                            rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
+                                            rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                                        }
+                                        else {
+                                            for (int i = 0; i < 3; i++)
+                                            {
+                                                rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (!cond3)
+                                        {
+                                            //方差计算，3x3
+
+                                            if (cur_dist_1 < spray_Param.Dist_threshold)// 次发段，分辨率放一半
+                                            {
+                                                local_dist_a = &local_dist_A[0][0];
+                                                local_ref_mask_a = local_ref_mask_A;
+                                                local_dist_b = &local_dist_C[0][0];
+                                                local_ref_mask_b = local_ref_mask_C;
+                                                local_dist_c = &local_dist_E[0][0];
+                                                local_ref_mask_c = local_ref_mask_E;
+                                                MmOffsetLen[0] = 0;
+                                                MmOffsetLen[1] = 2;
+                                                MmOffsetLen[2] = 4;
+                                            }
+                                            else
+                                            {
+                                                local_dist_a = &local_dist_B[0][0];
+                                                local_ref_mask_a = local_ref_mask_B;
+                                                local_dist_b = &local_dist_C[0][0];
+                                                local_ref_mask_b = local_ref_mask_C;
+                                                local_dist_c = &local_dist_D[0][0];
+                                                local_ref_mask_c = local_ref_mask_D;
+                                                MmOffsetLen[0] = 1;
+                                                MmOffsetLen[1] = 2;
+                                                MmOffsetLen[2] = 3;
+                                            }
+                                            //第一回波
+                                            int sum_count1[3] = { 0 }, sum_dist1[3] = { 0 }, sum_sq1[3] = { 0 };
+                                            auto variCalc = [&](const int* dist, const int* ref_mask, const int count, const int idx) {
+                                                for (int i = 0; i < count; i++)
+                                                {
+                                                    if (idx == 1 && (i == 3 || i == 2))continue;
+                                                    if (dist[i] != 0 && ref_mask[i] != 0 && abs(dist[i] - cur_dist_1) < 3 * 200)
+                                                    {
+                                                        sum_count1[idx]++;
+                                                        sum_dist1[idx]++;
+                                                        sum_sq1[idx]++;
+                                                    }
+                                                }
+                                            };
+
+                                            variCalc(local_dist_a, local_ref_mask_a, 6, 0);
+                                            variCalc(local_dist_b, local_ref_mask_b, 6, 1);
+                                            variCalc(local_dist_c, local_ref_mask_c, 6, 2);
+
+                                            int count_var_1 = sum_count1[0] + sum_count1[1] + sum_count1[2];
+                                            int sum_dist_1 = sum_dist1[0] + sum_dist1[1] + sum_dist1[2];
+                                            int sum_sq_1 = sum_sq1[0] + sum_sq1[1] + sum_sq1[2];
+                                            int inv_n_1 = 0;
+                                            if (count_var_1 != 0)
+                                            {
+                                                inv_n_1 = spray_Param.inv_table[count_var_1 - 1];
+                                            }
+                                            else
+                                            {
+                                                inv_n_1 = 0;
+                                            }
+                                            int mu_1 = (sum_dist_1 * inv_n_1) >> 12;
+                                            int local_var_1 = ((sum_sq_1 - sum_dist_1 * mu_1) * inv_n_1) >> 12;
+
+                                            //方差计算
+                                            cond0_2 = spray_Param.head_tail_judge_en && !cur_head_1 && cur_tail_1 && cur_dist_1 > 1000 && (cond0_1 || cond1);
+                                            cond2 = spray_Param.local_var_en && ((local_var_1 >= spray_Param.threshold_var && row_idx > 95) ||
+                                                (local_var_1 >= spray_Param.threshold_var2 && row_idx <= 95));
+                                            if (cond0_1 || cond1 || cond2 || cond0_2) {
+                                                if (MidAreaMask)
+                                                {
+                                                    rain_wave0_buffer4[spray_col_buffer][row_idx] = 1;
+                                                    rain_final0_buffer[spray_col_buffer][row_idx] = 1;
+                                                }
+                                                else
+                                                {
+                                                    for (int i = 0; i < 3; i++)
+                                                    {
+                                                        rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                        rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                        rain_wave0_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                        rain_final0_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                    }
+                                                }
+                                            }
+
+                                        }
+                                    }
+
+                                }
+                            }
+                        }
+                    }
+                }
+                //雨雾标记读取 第二回波
+                uint8_t cur_mark_2 = rain_wave1_buffer4[spray_col_buffer][row_idx];// secondary wave
+                bool cond_self_02 = !cur_mark_2;
+                if (cond_self_02)
+                {
+                    int cur_ref_2 = refl_wave1_buffer4[spray_col_buffer][row_idx];
+                    bool cond_self_2 = cur_dist_2 && (cur_dist_2 > spray_Param.Dist_threshold_min) &&
+                        (cur_dist_2 <= spray_Param.Dist_threshold2) && (cur_ref_2 <= spray_Param.Ref_threshold);
+                    if (cond_self_2)
+                    {
+                        bool cur_ground_2 = grnd_wave1_buffer4[spray_col_buffer][row_idx];
+                        /**********neibor statistics****************/
+                        for (int i = 0; i < RAIN_SIZE_X; i++)
+                        {
+                            for (int j = -row_range_up; j <= row_range_down; j++)
+                            {
+                                local_dist_1[i][spray_Param.Area_size_y + j] = dist_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                local_dist_2[i][spray_Param.Area_size_y + j] = dist_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                            }
+                        }
+
+                        for (int i = 0; i < RAIN_SIZE_Y; i++)
+                        {
+                            local_dist_A[0][i] = local_dist_1[0][i];
+                            local_dist_B[0][i] = local_dist_1[1][i];
+                            local_dist_C[0][i] = local_dist_1[2][i];
+                            local_dist_D[0][i] = local_dist_1[3][i];
+                            local_dist_E[0][i] = local_dist_1[4][i];
+                            local_dist_A[1][i] = local_dist_2[0][i];
+                            local_dist_B[1][i] = local_dist_2[1][i];
+                            local_dist_C[1][i] = local_dist_2[2][i];
+                            local_dist_D[1][i] = local_dist_2[3][i];
+                            local_dist_E[1][i] = local_dist_2[4][i];
+                        }
+
+                        /********************组合计算及判断*********************/
+                        //gradient
+                        if (cur_dist_2 < spray_Param.Dist_threshold)// Secondary segment, reduce the resolution by half, 8m
+                        {
+                            local_dist_a = &local_dist_A[0][0];
+                            local_dist_b = &local_dist_C[0][0];
+                            local_dist_c = &local_dist_E[0][0];
+                            MmOffsetLen[0] = 0;
+                            MmOffsetLen[1] = 2;
+                            MmOffsetLen[2] = 4;
+                        }
+                        else
+                        {
+                            local_dist_a = &local_dist_B[0][0];
+                            local_dist_b = &local_dist_C[0][0];
+                            local_dist_c = &local_dist_D[0][0];
+                            MmOffsetLen[0] = 1;
+                            MmOffsetLen[1] = 2;
+                            MmOffsetLen[2] = 3;
+                        }
+
+                        dist_diff_col[0] = local_dist_b[2] - local_dist_a[2];
+                        dist_diff_col[1] = local_dist_c[2] - local_dist_b[2];
+                        dist_diff_col[2] = local_dist_c[2] - local_dist_a[2];
+
+                        dist_diff_row[0] = local_dist_b[2] - local_dist_b[4];
+                        dist_diff_row[1] = local_dist_b[5] - local_dist_b[2];
+                        dist_diff_row[2] = local_dist_b[5] - local_dist_b[4];
+                        dist_diff_thr = spray_Param.dist_diff_thr_seq[(cur_dist_2) >> 9];
+                        dist_diff_diff_thr = spray_Param.dist_diff_diff_thr_seq[cur_dist_2 >> 9];
+
+                        //梯度一致性判断
+                        int consistency_col_2 = 1;
+                        if ((sign(dist_diff_col[0]) == sign(dist_diff_col[1]) &&
+                            abs(dist_diff_col[0]) <= dist_diff_thr && abs(dist_diff_col[1]) <= dist_diff_thr &&
+                            abs(abs(dist_diff_col[0]) - abs(dist_diff_col[1])) <= dist_diff_diff_thr) ||
+                            (abs(dist_diff_col[0]) <= 30 && abs(dist_diff_col[1]) <= 30))
+                        {
+                            consistency_col_2 = 1;
+                        }
+                        else
+                        {
+                            consistency_col_2 = 0;
+                        }
+
+                        int consistency_row_2 = 1;
+                        if ((sign(dist_diff_row[0]) == sign(dist_diff_row[1]) &&
+                            abs(dist_diff_row[0]) <= dist_diff_thr && abs(dist_diff_row[1]) <= dist_diff_thr &&
+                            abs(abs(dist_diff_row[0]) - abs(dist_diff_row[1])) <= dist_diff_diff_thr) ||
+                            (abs(dist_diff_row[0]) <= 30 && abs(dist_diff_row[1]) <= 30))
+                        {
+                            consistency_row_2 = 1;
+                        }
+                        else
+                        {
+                            consistency_row_2 = 0;
+                        }
+                        // 梯度计算
+                        cond3 = spray_Param.consistency_en && (consistency_col_2 || consistency_row_2);
+
+                        // 地面标记
+                        cond4 = spray_Param.ground_judge_en && cur_ground_2;
+                        if ((!cond3) && !cond4)
+                        {
+                            if (MidAreaMask)
+                            {
+                                rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
+                                rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                            }
+                            else
+                            {
+                                for (int i = 0; i < 3; i++)
+                                {
+                                    rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                    rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                    rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                    rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            /*****悬空计算**/
+                            bool ground_link_valid_2 = 0;
+                            cond_glink_0 = !cur_ground_2 && cur_ref_2 <= spray_Param.Ref_threshold2;
+                            cond_glink_1 = ((cur_dist_2 <= spray_Param.Dist_threshold && zone_idx > spray_Param.zone_idx_min_a && zone_idx < spray_Param.zone_idx_max_a) ||
+                                (cur_dist_2 > spray_Param.Dist_threshold && cur_dist_2 < spray_Param.Dist_threshold2&& zone_idx > spray_Param.zone_idx_min_b && zone_idx < spray_Param.zone_idx_max_b));
+                            cond_glink_2 = zone_idx > 0 && ((abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx - 1][0]) > spray_Param.dist_diff_thr_fix && abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx - 1][1]) > spray_Param.dist_diff_thr_fix) || !spray_Param.ground_cap_zone[0]);
+                            cond_glink_3 = zone_idx > 0 && ((abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[0]) ||
+                                (abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[1]));
+                            if (cond_glink_0 && cond_glink_1 && cond_glink_2 && !cond_glink_3)
+                            {
+                                ground_link_valid_2 = 1;
+                            }
+
+                            //接地判别
+                            cond6 = spray_Param.ground_link_judge_en && ground_link_valid_2;
+                            if (cond6 && !cond3)
+                            {
+                                if (MidAreaMask)
+                                {
+                                    rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
+                                    rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                                }
+                                else
+                                {
+                                    for (int i = 0; i < 3; i++)
+                                    {
+                                        rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                        rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                        rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                        rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                if (!cond4)
+                                {
+                                    for (int i = 0; i < RAIN_SIZE_X; i++)
+                                    {
+                                        for (int j = -row_range_up; j <= row_range_down; j++)
+                                        {
+                                            local_ref_1[i][j + spray_Param.Area_size_y] = refl_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_mark_1[i][j + spray_Param.Area_size_y] = rain_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_head_1[i][j + spray_Param.Area_size_y] = head_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_tail_1[i][j + spray_Param.Area_size_y] = tail_wave0_buffer4[spray_col_neib_buf[i]][row_idx + j];
+
+                                            local_ref_2[i][j + spray_Param.Area_size_y] = refl_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_mark_2[i][j + spray_Param.Area_size_y] = rain_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_head_2[i][j + spray_Param.Area_size_y] = head_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                            local_tail_2[i][j + spray_Param.Area_size_y] = tail_wave1_buffer4[spray_col_neib_buf[i]][row_idx + j];
+                                        }
+                                        for (int k = 0; k < RAIN_SIZE_Y; k++)
+                                        {
+                                            local_ref_mask_1[i][k] = local_ref_1[i][k] <= spray_Param.Ref_threshold;
+                                            local_ref_mask_2[i][k] = local_ref_2[i][k] <= spray_Param.Ref_threshold;
+                                        }
+                                    }
+
+                                    memset(local_data, 0, sizeof(local_data));
+                                    // 填充局部数据
+
+                                    for (int i = 0; i < RAIN_SIZE_X; i++)
+                                    {
+                                        for (int j = 0; j < (row_range_up + row_range_down + 1); j++) {
+                                            int wave2_j = j + RAIN_SIZE_Y;
+                                            local_data[0][i][j] = local_ref_1[i][j];
+                                            local_data[1][i][j] = local_ref_mask_1[i][j];
+                                            local_data[2][i][j] = local_mark_1[i][j];
+                                            local_data[3][i][j] = local_head_1[i][j];
+                                            local_data[4][i][j] = local_tail_1[i][j];
+                                            local_data[0][i][wave2_j] = local_ref_2[i][j];
+                                            local_data[1][i][wave2_j] = local_ref_mask_2[i][j];
+                                            local_data[2][i][wave2_j] = local_mark_2[i][j];
+                                            local_data[3][i][wave2_j] = local_head_2[i][j];
+                                            local_data[4][i][wave2_j] = local_tail_2[i][j];
+                                        }
+                                    }
+
+                                    local_ref_A = local_data[0][0]; // 第0行 -> A
+                                    local_ref_B = local_data[0][1]; // 第1行 -> B
+                                    local_ref_C = local_data[0][2]; // 第2行 -> C
+                                    local_ref_D = local_data[0][3]; // 第3行 -> D
+                                    local_ref_E = local_data[0][4]; // 第4行 -> E
+
+                                    local_ref_mask_A = local_data[1][0]; // 第0行 -> A
+                                    local_ref_mask_B = local_data[1][1]; // 第1行 -> B
+                                    local_ref_mask_C = local_data[1][2]; // 第2行 -> C
+                                    local_ref_mask_D = local_data[1][3]; // 第3行 -> D
+                                    local_ref_mask_E = local_data[1][4]; // 第4行 -> E
+
+                                    local_mark_A = local_data[2][0]; // 第0行 -> A
+                                    local_mark_B = local_data[2][1]; // 第1行 -> B
+                                    local_mark_C = local_data[2][2]; // 第2行 -> C
+                                    local_mark_D = local_data[2][3]; // 第3行 -> D
+                                    local_mark_E = local_data[2][4]; // 第4行 -> E
+
+                                    local_head_A = local_data[3][0]; // 第0行 -> A
+                                    local_head_B = local_data[3][1]; // 第1行 -> B
+                                    local_head_C = local_data[3][2]; // 第2行 -> C
+                                    local_head_D = local_data[3][3]; // 第3行 -> D
+                                    local_head_E = local_data[3][4]; // 第4行 -> E
+
+                                    local_tail_A = local_data[4][0]; // 第0行 -> A
+                                    local_tail_B = local_data[4][1]; // 第1行 -> B
+                                    local_tail_C = local_data[4][2]; // 第2行 -> C
+                                    local_tail_D = local_data[4][3]; // 第3行 -> D
+                                    local_tail_E = local_data[4][4]; // 第4行 -> E
+                                    //A列6回波
+                                        // 2. 统计各类标记数量
+                                    int mark_num_2[5] = { 0 }, head_num_2[5] = { 0 }, tail_num_2[5] = { 0 };
+
+                                    // 辅助lambda函数减少重复代码
+                                    auto countStats2 = [&](const int* dist, const int* ref_mask, const int* mark,
+                                        const int* head, const int* tail, int count, int idx) {
+                                            for (int i = 0; i < count; i++) {
+                                                if (idx == 2 && i == 3) continue;
+                                                if ((dist[i] != 0) && (cur_dist_2 != 0) && (ref_mask[i] != 0) && (std::abs(dist[i] - cur_dist_2) <= spray_Param.dist_diff_thr_2)) {
+                                                    if (mark[i]) mark_num_2[idx]++;
+                                                    if (head[i]) head_num_2[idx]++;
+                                                    if (tail[i]) tail_num_2[idx]++;
+                                                }
+                                            }
+                                    };
+
+                                    // 统计A行（6个元素）
+                                    countStats2(&local_dist_A[0][0], local_ref_mask_A, local_mark_A, local_head_A, local_tail_A, 6, 0);
+
+                                    // 统计B行（6个元素）
+                                    countStats2(&local_dist_B[0][0], local_ref_mask_B, local_mark_B, local_head_B, local_tail_B, 6, 1);
+
+                                    // 统计C行（特殊处理：排除i=1位置）
+                                    countStats2(&local_dist_C[0][0], local_ref_mask_C, local_mark_C, local_head_C, local_tail_C, 6, 2);
+
+                                    // 统计D行（6个元素）
+                                    countStats2(&local_dist_D[0][0], local_ref_mask_D, local_mark_D, local_head_D, local_tail_D, 6, 3);
+
+                                    // 统计E行（6个元素）
+                                    countStats2(&local_dist_E[0][0], local_ref_mask_E, local_mark_E, local_head_E, local_tail_E, 6, 4);
+
+                                    // 总和计算
+                                    int sum_mark_num_2 = mark_num_2[0] + mark_num_2[1] + mark_num_2[2] + mark_num_2[3] + mark_num_2[4];
+                                    int sum_head_num_2 = head_num_2[0] + head_num_2[1] + head_num_2[2] + head_num_2[3] + head_num_2[4];
+                                    int sum_tail_num_2 = tail_num_2[0] + tail_num_2[1] + tail_num_2[2] + tail_num_2[3] + tail_num_2[4];
+
+                                    bool cur_head_2 = head_wave1_buffer4[spray_col_buffer][row_idx];
+                                    bool cur_tail_2 = tail_wave1_buffer4[spray_col_buffer][row_idx];
+                                    // 459连波标记
+                                    bool head_tail_cur_2 = cond_self_2 & cur_head_2 & cur_tail_2;
+                                    //拆波标记
+                                    cond0_0 = spray_Param.head_tail_judge_en && head_tail_cur_2;
+                                    cond0_1 = spray_Param.head_tail_judge_en && (sum_tail_num_2 >= spray_Param.min_tail_threshold ||
+                                        sum_head_num_2 + sum_tail_num_2 >= spray_Param.min_split_threshold);
+                                    //雨雾标记
+                                    cond1 = spray_Param.rain_mark_en && sum_mark_num_2 >= spray_Param.min_mark_threshold;
+                                    cond0_2 = spray_Param.head_tail_judge_en && !cur_head_2 && cur_tail_2 && cur_dist_2 > 1000 && (cond0_1 || cond1);
+                                    cond0_3 = spray_Param.head_tail_judge_en && cur_head_2 && !cur_tail_2 && cur_dist_2 > 1000 && (cond0_1 || cond1);
+
+                                    if (cond0_3 || cond0_0)
+                                    {
+                                        if (MidAreaMask)
+                                        {
+                                            rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
+                                            rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                                        }
+                                        else
+                                        {
+                                            for (int i = 0; i < 3; i++)
+                                            {
+                                                rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (!cond3)
+                                        {
+                                            //方差计算，3x3
+                                            if (cur_dist_1 < spray_Param.Dist_threshold)// 次发段，分辨率放一半
+                                            {
+                                                local_dist_a = &local_dist_A[0][0];
+                                                local_ref_mask_a = local_ref_mask_A;
+                                                local_dist_b = &local_dist_C[0][0];
+                                                local_ref_mask_b = local_ref_mask_C;
+                                                local_dist_c = &local_dist_E[0][0];
+                                                local_ref_mask_c = local_ref_mask_E;
+                                                MmOffsetLen[0] = 0;
+                                                MmOffsetLen[1] = 2;
+                                                MmOffsetLen[2] = 4;
+                                            }
+                                            else
+                                            {
+                                                local_dist_a = &local_dist_B[0][0];
+                                                local_ref_mask_a = local_ref_mask_B;
+                                                local_dist_b = &local_dist_C[0][0];
+                                                local_ref_mask_b = local_ref_mask_C;
+                                                local_dist_c = &local_dist_D[0][0];
+                                                local_ref_mask_c = local_ref_mask_D;
+                                                MmOffsetLen[0] = 1;
+                                                MmOffsetLen[1] = 2;
+                                                MmOffsetLen[2] = 3;
+                                            }
+                                            //第一回波
+                                            int sum_count2[3] = { 0 }, sum_dist2[3] = { 0 }, sum_sq2[3] = { 0 };
+                                            auto variCalc2 = [&](const int* dist, const int* ref_mask, const int count, const int idx) {
+                                                for (int i = 0; i < count; i++)
+                                                {
+                                                    if (idx == 1 && (i == 3 || i == 2))continue;
+                                                    if (dist[i] != 0 && ref_mask[i] != 0 && abs(dist[i] - cur_dist_2) < 3 * 200)
+                                                    {
+                                                        sum_count2[idx]++;
+                                                        sum_dist2[idx]++;
+                                                        sum_sq2[idx]++;
+                                                    }
+                                                }
+                                            };
+
+                                            variCalc2(local_dist_a, local_ref_mask_a, 6, 0);
+                                            variCalc2(local_dist_b, local_ref_mask_b, 6, 1);
+                                            variCalc2(local_dist_c, local_ref_mask_c, 6, 2);
+
+                                            int count_var_2 = sum_count2[0] + sum_count2[1] + sum_count2[2];
+                                            int sum_dist_2 = sum_dist2[0] + sum_dist2[1] + sum_dist2[2];
+                                            int sum_sq_2 = sum_sq2[0] + sum_sq2[1] + sum_sq2[2];
+                                            int inv_n_2 = 0;
+                                            if (count_var_2 != 0)
+                                            {
+                                                inv_n_2 = spray_Param.inv_table[count_var_2 - 1];
+                                            }
+                                            else
+                                            {
+                                                inv_n_2 = 0;
+                                            }
+                                            int mu_2 = (sum_dist_2 * inv_n_2) >> 12;
+                                            int local_var_2 = ((sum_sq_2 - sum_dist_2 * mu_2) * inv_n_2) >> 12;
+
+                                            //方差计算
+
+                                            cond2 = spray_Param.local_var_en && ((local_var_2 >= spray_Param.threshold_var && row_idx > 95) ||
+                                                (local_var_2 >= spray_Param.threshold_var2 && row_idx <= 95));
+                                            if (cond0_1 || cond1 || cond2 || cond0_2) {
+                                                if (MidAreaMask)
+                                                {
+                                                    rain_wave1_buffer4[spray_col_buffer][row_idx] = 1;
+                                                    rain_final1_buffer[spray_col_buffer][row_idx] = 1;
+                                                }
+                                                else
+                                                {
+                                                    for (int i = 0; i < 3; i++)
+                                                    {
+                                                        rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                        rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx] = 1;
+                                                        rain_wave1_buffer4[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                        rain_final1_buffer[spray_col_neib_buf[MmOffsetLen[i]]][row_idx + 1] = 1;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                //雨雾标记读取 第二回波
+            }
+        }
+    }
+
+    // 第二部分：雨滴过滤
+    int spray_filter_col = spray_col - SprayFilterDelayCol;
+    if (spray_filter_col < 0 || spray_filter_col >= VIEW_W) return;
+    int spray_filter_col_buffer = matlabMod(spray_col_buffer + 1 - SprayFilterDelayCol - 1, buffer_size_spray);
+
+    // 计算过滤邻居列索引
+    int spray_filter_col_neib_buf[RAIN_SIZE_X];
+    for (int i = 0; i < RAIN_SIZE_X; i++) {
+        spray_filter_col_neib_buf[i] = matlabMod((spray_filter_col_buffer - spray_Param.Area_size_x + i), buffer_size_spray);
+    }
+
+    if (algo_Param.SprayRemoveOn) {
+        for (int row_idx = 0; row_idx < VIEW_H; row_idx++) {
+            int cur_dist_1 = dist_wave0_buffer4[spray_filter_col_buffer][row_idx];
+            bool cur_mark_1 = rain_wave0_buffer4[spray_filter_col_buffer][row_idx];
+            int cur_dist_2 = dist_wave1_buffer4[spray_filter_col_buffer][row_idx];
+            bool cur_mark_2 = rain_wave1_buffer4[spray_filter_col_buffer][row_idx];
+            int cur_ref_1 = refl_wave0_buffer4[spray_filter_col_buffer][row_idx];
+            int cur_ref_2 = refl_wave1_buffer4[spray_filter_col_buffer][row_idx];
+            bool cur_gnd_1 = grnd_wave0_buffer4[spray_filter_col_buffer][row_idx];
+            bool cur_gnd_2 = grnd_wave1_buffer4[spray_filter_col_buffer][row_idx];
+
+            // 计算行范围
+            int row_range_up = (row_idx <= 0) ? 0 : spray_Param.Area_size_y;
+            int row_range_down = (row_idx >= VIEW_H - 1) ? 0 : spray_Param.Area_size_y;
+            int total_rows = row_range_up + row_range_down + 1;
+
+            // 局部数据缓冲区
+            int local_dist_1[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+            bool local_mark_1[RAIN_SIZE_X][RAIN_SIZE_Y] = { false };
+            int local_dist_2[RAIN_SIZE_X][RAIN_SIZE_Y] = { 0 };
+            bool local_mark_2[RAIN_SIZE_X][RAIN_SIZE_Y] = { false };
+
+            // 填充局部数据
+            for (int i = 0; i < RAIN_SIZE_X; i++) {
+                int col_idx = spray_filter_col_neib_buf[i];
+                for (int j = -row_range_up; j <= row_range_down; j++) {
+                    int r = row_idx + j;
+                    if (r < 0 || r >= VIEW_H) continue;
+
+                    local_dist_1[i][j + 1] = dist_wave0_buffer4[col_idx][r];
+                    local_mark_1[i][j + 1] = rain_wave0_buffer4[col_idx][r];
+                    local_dist_2[i][j + 1] = dist_wave1_buffer4[col_idx][r];
+                    local_mark_2[i][j + 1] = rain_wave1_buffer4[col_idx][r];
+                }
+            }
+
+            // 第一回波过滤
+            int count_1 = 15; // 初始化为最大值
+            if (cur_dist_1 > 0 && !cur_mark_1 &&
+                cur_dist_1 <= spray_Param.filter_dist_max &&
+                cur_ref_1 <= spray_Param.filter_ref_max) {
+
+                count_1 = 0;
+                for (int i = 0; i < RAIN_SIZE_X; i++) {
+                    for (int j = 0; j < RAIN_SIZE_Y; j++) {
+                        // 跳过中心点
+                        if (i == spray_Param.Area_size_x && j == spray_Param.Area_size_y) continue;
+
+                        if (local_dist_1[i][j] > 0 && !local_mark_1[i][j] &&
+                            std::abs(local_dist_1[i][j] - cur_dist_1) <= spray_Param.dist_diff_thr) {
+                            count_1++;
+                        }
+                        else if (local_dist_2[i][j] > 0 && !local_mark_2[i][j] &&
+                            std::abs(local_dist_2[i][j] - cur_dist_1) <= spray_Param.dist_diff_thr) {
+                            count_1++;
+                        }
+                    }
+                }
+            }
+
+            // 第二回波过滤（类似）
+            int count_2 = 15;
+            if (cur_dist_2 > 0 && !cur_mark_2 &&
+                cur_dist_2 <= spray_Param.filter_dist_max &&
+                cur_ref_2 <= spray_Param.filter_ref_max) {
+
+                count_2 = 0;
+                for (int i = 0; i < RAIN_SIZE_X; i++) {
+                    for (int j = 0; j < RAIN_SIZE_Y; j++) {
+                        // 跳过中心点
+                        if (i == spray_Param.Area_size_x && j == spray_Param.Area_size_y) continue;
+
+                        if (local_dist_1[i][j] > 0 && !local_mark_1[i][j] &&
+                            std::abs(local_dist_1[i][j] - cur_dist_2) <= spray_Param.dist_diff_thr) {
+                            count_2++;
+                        }
+                        else if (local_dist_2[i][j] > 0 && !local_mark_2[i][j] &&
+                            std::abs(local_dist_2[i][j] - cur_dist_2) <= spray_Param.dist_diff_thr) {
+                            count_2++;
+                        }
+                    }
+                }
+            }
+
+            // 更新最终标记
+            bool cur_filter_mask_1 = (cur_mark_1 || count_1 < spray_Param.filter_count_thr) && !cur_gnd_1;
+            bool cur_filter_mask_2 = (cur_mark_2 || count_2 < spray_Param.filter_count_thr) && !cur_gnd_2;
+
+            if (cur_filter_mask_1 && cur_filter_mask_2) {
+                rain_final0_buffer[spray_filter_col_buffer][row_idx] = 1;
+                rain_final1_buffer[spray_filter_col_buffer][row_idx] = 1;
+            }
+            else if (cur_filter_mask_1) {
+                rain_final0_buffer[spray_filter_col_buffer][row_idx] = 1;
+                rain_final1_buffer[spray_filter_col_buffer][row_idx] = 0;
+            }
+            else if (cur_filter_mask_2) {
+                rain_final0_buffer[spray_filter_col_buffer][row_idx] = 0;
+                rain_final1_buffer[spray_filter_col_buffer][row_idx] = 1;
+            }
+        }
+    }
+
+    // 第三部分：输出处理
+    int spray_out_col = spray_filter_col - SprayOutDelayCol;
+    if (spray_out_col < 0 || spray_out_col >= VIEW_W) return;
+    int spray_out_col_buffer = matlabMod(spray_filter_col_buffer + 1 - SprayOutDelayCol - 1, buffer_size_spray);
+
+    // 复制输出数据
+    if (algo_Param.SprayRemoveOn)
+    {
+        for (int i = 0; i < VIEW_H; i++) {
+            spray_mark_out0[i] = rain_final0_buffer[spray_out_col_buffer][i];
+            spray_mark_out1[i] = rain_final1_buffer[spray_out_col_buffer][i];
+        }
+    }
+}
+
+/**
+ * @brief point cloud algorithm main process
+ *
+ * @param col_idx column index of the buffer
+ *                  Range: 0 - 759. Accuracy: 1.
+ * @param pstFrameBuffer frame buffer of whole point cloud
+ *                  Range: N/A. Accuracy: N/A.
+ * @param task_id thread tash id of algorithm
+ *                  Range: 0 - 2. Accuracy: 1.
+ * @return int process column of point cloud
+ *                  Range: 0 - 759. Accuracy: 1.
+ */
 int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, int task_id)
 {
     int proc_col = -1;
     switch (task_id)
     {
-        case FILTER_ALGO: {
-
-        static bool first{true};
-        if (first) {
-            pid_t tid = gettid();
-            std::cout << "==================== filter algo tid:" << std::dec << tid << std::endl;
-            utils::addThread(tid, "pcAlgoMainFunc");
-            first = false;
-        }
-        circularCalcIdx(rear1, buffer_size_filter);
-        circularCalcIdx(filter_rear, filter_valid_size);
-        circularCalcIdx(empty_rear, empty_size);
-        //帧间数据缓存
-        int filter_col_in = col_idx - FilterInDelayCol;
-        if (filter_col_in >= 0 && filter_col_in < VIEW_W){
-            memcpy(dist_wave0_buffer1[rear1], pstFrameBuffer->dist0[filter_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(dist_wave1_buffer1[rear1], pstFrameBuffer->dist1[filter_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(refl_wave0_buffer1[rear1], pstFrameBuffer->ref0[filter_col_in], sizeof(uint8_t) * VIEW_H);
-            memcpy(refl_wave1_buffer1[rear1], pstFrameBuffer->ref1[filter_col_in], sizeof(uint8_t) * VIEW_H);
-            memcpy(attr_wave0_buffer1[rear1], pstFrameBuffer->att0[filter_col_in], sizeof(uint8_t) * VIEW_H);
-            memcpy(attr_wave1_buffer1[rear1], pstFrameBuffer->att1[filter_col_in], sizeof(uint8_t) * VIEW_H);
-            memcpy(high_wave0_buffer1[rear1], pstFrameBuffer->high0[filter_col_in], sizeof(int) * VIEW_H);
-            memcpy(high_wave1_buffer1[rear1], pstFrameBuffer->high1[filter_col_in], sizeof(int) * VIEW_H);
-        }
-        else {
-            //超过最大列，帧间buffer补0
-            memset(dist_wave0_buffer1[rear1], 0, sizeof(uint16_t) * VIEW_H);
-            memset(dist_wave1_buffer1[rear1], 0, sizeof(uint16_t) * VIEW_H);
-            memset(refl_wave0_buffer1[rear1], 0, sizeof(uint8_t) * VIEW_H);
-            memset(refl_wave1_buffer1[rear1], 0, sizeof(uint8_t) * VIEW_H);
-            memset(attr_wave0_buffer1[rear1], 0, sizeof(uint8_t) * VIEW_H);
-            memset(attr_wave1_buffer1[rear1], 0, sizeof(uint8_t) * VIEW_H);
-            memset(high_wave0_buffer1[rear1], 0, sizeof(int) * VIEW_H);
-            memset(high_wave1_buffer1[rear1], 0, sizeof(int) * VIEW_H);
-        }
-        memset(filter_valid_buffer[filter_rear], 0, sizeof(int) * VIEW_H);
-
-        //线程1:帧间
-        int filter_col = filter_col_in - FilterDelayCol;
-        int filter_col_buffer = matlabMod(rear1 + 1 - FilterDelayCol - 1, buffer_size_filter);
-        int filter_col_neib_buf[filter_valid_size] = { 0 };
-        for (int i = 0; i < filter_valid_size; i++) {
-            filter_col_neib_buf[i] = matlabMod((filter_col_buffer + 1 - Filter_params.filter_L + i) - 1, buffer_size_filter);
-        }
-        int filter_col_valid = matlabMod(filter_rear + 1 - FilterDelayCol - 1, filter_valid_size);
-        int filter_col_neib_vld[filter_valid_size] = { 0 };
-        for (int i = 0; i < filter_valid_size; i++) {
-            filter_col_neib_vld[i] = matlabMod((filter_col_valid + 1 - Filter_params.filter_L + i) - 1, filter_valid_size);
-        }
-        int empty_col = empty_rear;
-        int empty_out_col = (empty_col + 1) % empty_size;
-
-        int filter_col_del = filter_col - FilterDelDelayCol;
-        int filter_col_del_buf = matlabMod(filter_col_buffer + 1 - FilterDelDelayCol - 1, buffer_size_filter);
-        int filter_col_del_vld = matlabMod(filter_col_valid + 1 - FilterDelDelayCol - 1, filter_valid_size);
-
-        //帧间
-        frameFilter(filter_col, filter_col_buffer, filter_col_valid, filter_col_neib_buf,
-            filter_col_neib_vld, empty_col, empty_out_col/*, filter_col_del, filter_col_del_buf*/);
-
-        //帧间滤波删点
-        if (filter_col_del >= 0 && filter_col_del < algo_Param.ViewField_Wide) // 转换到0-based范围检查
+        case STRAY_ALGO:
         {
-            for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
-                int valid_tmp = filter_valid_buffer[filter_col_del_vld][row_idx];
-                if (valid_tmp != 1)
-                {
-                    dist_wave0_buffer1[filter_col_del_buf][row_idx] = 0;
-                    refl_wave0_buffer1[filter_col_del_buf][row_idx] = 0;
-                    high_wave0_buffer1[filter_col_del_buf][row_idx] = 0;
-                    attr_wave0_buffer1[filter_col_del_buf][row_idx] = 0;
+            static bool first{true};
+
+            if (first) {
+                pid_t tid = gettid();
+                utils::addThread(tid, "Stray_Algo");
+                first = false;
+            }
+            // 地面拟合
+            if(col_idx >= 0 && col_idx < VIEW_W){
+                if((col_idx % gnd_step) == 0){
+                    uint16_t dist_line[VIEW_H];
+                    uint16_t col_pos = col_idx / gnd_step;
+                    memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+
+                    int surface_id = pstFrameBuffer->surface_id.load();
+                    int real_col;
+                    if(0 == surface_id)
+                    {
+                        real_col = (col_idx << 1);
+                    }
+                    else
+                    {
+                        real_col = UP_VIEW_W - (col_idx << 1) - 1;
+                    }
+
+                    for(int row = 0; row < VIEW_H; ++row){
+                        int idx = row * GND_VIEW_W + col_pos;
+                        dist_wave0_buffer6[idx] = dist_line[row];
+                        int dist = dist_line[row];
+                        X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
+                        Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
+                        Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
+                    }
+                    if(col_idx == (VIEW_W - gnd_step)){
+                        selectGroundFitFunc(best_model_fit);
+                    }
                 }
             }
-        }
+            circularCalcIdx(rear3, buffer_size_stray);
 
-        if(col_idx >= 0 && col_idx < VIEW_W){
-            if((col_idx % gnd_step) == 0){
-                uint16_t dist_line[VIEW_H];
-                uint16_t col_pos = col_idx / gnd_step;
-                memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
-
-                int surface_id = pstFrameBuffer->surface_id.load();
-                int real_col;
-                if(0 == surface_id)
-                {
-                    real_col = UP_VIEW_W - (col_idx << 1) - 2;
-                }
-                else
-                {
-                    real_col = (col_idx << 1) + 1;
-                }
-
-                for(int row = 0; row < VIEW_H; ++row){
-                    int idx = row * GND_VIEW_W + col_pos;
-                    dist_wave0_buffer6[idx] = dist_line[row];
-                    int dist = dist_line[row];
-                    X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
-                    Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
-                    Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
-                }
-                if(col_idx == (VIEW_W - gnd_step)){
-                    selectGroundFitFunc(best_model_fit);
+            int stray_col_in = col_idx - StrayInDelayCol;
+            if (stray_col_in >= 0 && stray_col_in < VIEW_W){
+                memcpy(dist_wave0_buffer3[rear3], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(dist_wave1_buffer3[rear3], pstFrameBuffer->dist1[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(refl_wave0_buffer3[rear3], pstFrameBuffer->ref0[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(refl_wave1_buffer3[rear3], pstFrameBuffer->ref1[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(grnd_wave0_buffer3[rear3], pstFrameBuffer->gnd_mark0[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(grnd_wave1_buffer3[rear3], pstFrameBuffer->gnd_mark1[stray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(high_wave0_buffer3[rear3], pstFrameBuffer->high0[stray_col_in], sizeof(int) * VIEW_H);
+                memcpy(high_wave1_buffer3[rear3], pstFrameBuffer->high1[stray_col_in], sizeof(int) * VIEW_H);
+                for(int i = 0; i < VIEW_H; ++i){
+                    uint8_t att0 = pstFrameBuffer->att0[stray_col_in][i];
+                    uint8_t att1 = pstFrameBuffer->att1[stray_col_in][i];
+                    smlr_wave0_buffer3[rear3][i] = (att0 >> 5) & 0x03;
+                    smlr_wave1_buffer3[rear3][i] = (att1 >> 5) & 0x03;
+                    peak_wave0_buffer3[rear3][i] = (att0 >> 3) & 0x01;
+                    peak_wave1_buffer3[rear3][i] = (att1 >> 3) & 0x01;
+                    crtk_wave0_buffer3[rear3][i] = att0 & 0x01;
+                    crtk_wave1_buffer3[rear3][i] = att1 & 0x01;
+                    rain_wave0_buffer3[rear3][i] = att0 >> 7;
+                    rain_wave1_buffer3[rear3][i] = att1 >> 7;
+                    head_wave0_buffer3[rear3][i] = (att0 >> 1) & 0x01;
+                    head_wave1_buffer3[rear3][i] = (att1 >> 1) & 0x01;
+                    tail_wave0_buffer3[rear3][i] = (att0 >> 2) & 0x01;
+                    tail_wave0_buffer3[rear3][i] = (att1 >> 2) & 0x01;
                 }
             }
-        }
+            else {
+                //超过最大列，帧间buffer补0
+                memset(dist_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                memset(dist_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                memset(refl_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(refl_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(grnd_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(grnd_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(high_wave0_buffer3[rear3], 0, sizeof(int) * VIEW_H);
+                memset(high_wave1_buffer3[rear3], 0, sizeof(int) * VIEW_H);
+                memset(smlr_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(smlr_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(peak_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(peak_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(crtk_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(crtk_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(head_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(head_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+            }
+            int stray_col = stray_col_in - StrayDelayCol;
+            int stray_col_buffer = matlabMod(rear3 + 1 - StrayDelayCol - 1, buffer_size_stray);
+            int stray_col_neib_buf[3];
+            for (int i = 0; i < 3; i++) {
+                stray_col_neib_buf[i] = matlabMod((stray_col_buffer + 1 - 1 + i) - 1, buffer_size_stray);
+            }
+            int stray_mark_out0[VIEW_H] = { 0 };
+            int stray_mark_out1[VIEW_H] = { 0 };
 
-        //水平平滑
-        int hor_smooth_col = filter_col - HorSmoothDelayCol;//idx
-        int hor_smooth_col_buffer = matlabMod(filter_col_buffer + 1 - HorSmoothDelayCol - 1, buffer_size_filter);//idx
-        int hor_smooth_col_neib_buf[5] = { 0 };//idx
-        for (int i = 0; i < 5; i++) {
-            hor_smooth_col_neib_buf[i] = matlabMod(hor_smooth_col_buffer + 1 - Smooth_params.SmoothH + i - 1, buffer_size_filter);
-        }
-        hSmooth(hor_smooth_col, hor_smooth_col_buffer, hor_smooth_col_neib_buf);
+            //杂散删除 初始化输出
+            if(0 == col_idx){
+                memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
+                RainWall_out = {0, 0, 0};
+            }
+            strayDelete(stray_col, stray_col_buffer, stray_col_neib_buf, stray_mark_out0, stray_mark_out1);
 
-        //垂直平滑
-        int ver_smooth_col = hor_smooth_col - VerSmoothDelayCol;
-        int ver_smooth_col_buffer = matlabMod(hor_smooth_col_buffer + 1 - VerSmoothDelayCol - 1, buffer_size_filter);//idx
-        vSmooth(ver_smooth_col, ver_smooth_col_buffer);
-
-        //线程一：：：：模块输出: 双回波距离、反射率
-        int filter_col_out = ver_smooth_col - FilterOutDelayCol;
-        int filter_col_out_buffer = matlabMod(ver_smooth_col_buffer + 1 - FilterOutDelayCol - 1, buffer_size_filter);//idx
-
-        if(filter_col_out >= 0 && filter_col_out < VIEW_W)
-        {
-            memcpy(stFilterFrmBuffer.dist_wave0[filter_col_out], dist_wave0_buffer1[filter_col_out_buffer], sizeof(uint16_t) * VIEW_H);
-            memcpy(stFilterFrmBuffer.dist_wave1[filter_col_out], dist_wave1_buffer1[filter_col_out_buffer], sizeof(uint16_t) * VIEW_H);
-            memcpy(stFilterFrmBuffer.refl_wave0[filter_col_out], refl_wave0_buffer1[filter_col_out_buffer], sizeof(uint8_t) * VIEW_H);
-            memcpy(stFilterFrmBuffer.refl_wave1[filter_col_out], refl_wave1_buffer1[filter_col_out_buffer], sizeof(uint8_t) * VIEW_H);
-            proc_col = filter_col_out;
-        }
-        if(filter_col_out >= VIEW_W)
-        {
-            proc_col = VIEW_W - 1;
-        }
-        } break;
-        case TRAIL_ALGO:
-        {
-        circularCalcIdx(rear2, buffer_size_trail);
-        //拖点数据
-        int trail_col_in = col_idx - TrailInDelayCol;
-        if (trail_col_in >= 0 && trail_col_in < VIEW_W) {
-                memcpy(dist_wave0_buffer2[rear2], pstFrameBuffer->dist0[trail_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(refl_wave0_buffer2[rear2], pstFrameBuffer->ref0[trail_col_in], sizeof(uint8_t) * VIEW_H);
-        }
-        else {
-            memset(dist_wave0_buffer2[rear2], 0, sizeof(uint16_t) * VIEW_H);
-            memset(refl_wave0_buffer2[rear2], 0, sizeof(uint8_t) * VIEW_H);
-        }
-
-        //线程二：：：：拖点
-        int trail_col = trail_col_in - TrailDelayCol;  // 目标列偏移计算‌
-        int trail_col_buffer = matlabMod(rear2 + 1 - TrailDelayCol - 1, buffer_size_trail);  // 环形缓冲区计算‌
-        int trail_col_neib_buf[5] = { 0 };
-        for (int i = 0; i < 5; i++) {
-            trail_col_neib_buf[i] = matlabMod((trail_col_buffer + 1 - 2 + i) - 1, buffer_size_trail);
-        }
-        int trail_mask_out[VIEW_H] = { 0 };
-        int trail_refer_mask[VIEW_H] = { 0 };
-        /* 预处理：拖点算法 */
-        trailPreProc(trail_col, trail_col_buffer,trail_col_neib_buf, trail_refer_mask);
-
-        trailRemove(trail_col, trail_col_buffer,trail_col_neib_buf, trail_refer_mask,trail_mask_out);
-
-        if(trail_col >= 0 && trail_col < VIEW_W)
-        {
-            memcpy(trail_mask_out_frm[trail_col], trail_mask_out, sizeof(trail_mask_out));
-            proc_col = trail_col;
-        }
-        if(trail_col >= VIEW_W)
-        {
-            proc_col = VIEW_W - 1;
-        }
+            if(stray_col >= 0 && stray_col < VIEW_W){
+                memcpy(stray_mask_out_frm0[stray_col], stray_mark_out0, sizeof(stray_mark_out0));
+                memcpy(stray_mask_out_frm1[stray_col], stray_mark_out1, sizeof(stray_mark_out1));
+            }
         }break;
-        case DENOISE_ALGO: {
-        static bool first{true};
-
-        if (first) {
-            pid_t tid = gettid();
-            std::cout << "==================== denoise algo tid:" << std::dec << tid << std::endl;
-            utils::addThread(tid, "Denoise_Algo");
-            first = false;
-        }
-        circularCalcIdx(rear4, buffer_size_denoise);
-        circularCalcIdx(basic_rear, denoise_valid_size);
-
-        //去噪
-        int denoise_col_in = col_idx - DenoiseInDelayCol;
-
-        if (denoise_col_in >= 0 && denoise_col_in < VIEW_W) {
-            memcpy(dist_wave0_buffer4[rear4], pstFrameBuffer->dist0[denoise_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(refl_wave0_buffer4[rear4], pstFrameBuffer->ref0[denoise_col_in], sizeof(uint8_t) * VIEW_H);
-            memcpy(high_wave0_buffer4[rear4], pstFrameBuffer->high0[denoise_col_in], sizeof(int) * VIEW_H);
-        }
-        else {
-            memset(dist_wave0_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-            memset(refl_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
-            memset(high_wave0_buffer4[rear4], 0, sizeof(int) * VIEW_H);
-        }
-        memset(denoise_valid_buffer[basic_rear], 0, sizeof(int) * VIEW_H);
-
-        int valid_pre_mask[VIEW_H][5] = { 0 };
-        int denoise_col = denoise_col_in - DenoiseDelayCol;
-        int denoise_col_buffer = matlabMod(rear4 + 1 - DenoiseDelayCol - 1, buffer_size_denoise);
-        int denoise_col_neib_buf[5];//索引
-        for (int i = 0; i < 5; i++) {
-            denoise_col_neib_buf[i] = matlabMod(denoise_col_buffer + 1 - 2 + i - 1, buffer_size_denoise);
-        }
-        int denoise_col_valid = matlabMod(basic_rear + 1 - DenoiseDelayCol - 1, denoise_valid_size);
-        int denoise_col_neib_vld[5];//索引
-        for (int i = 0; i < 5; i++) {
-            denoise_col_neib_vld[i] = matlabMod(denoise_col_valid + 1 - 2 + i - 1, denoise_valid_size);
-        }
-        int denoise_col_out = denoise_col - DenoiseOutDelayCol;
-        int denoise_col_out_vld = matlabMod(denoise_col_valid + 1 - DenoiseOutDelayCol - 1, denoise_valid_size);
-
-        int denoise_refer_mask[VIEW_H] = { 0 };
-        int valid_pre_2[VIEW_H] = { 0 };
-
-        // 去噪算法预处理
-        denoisePreProc(denoise_col, denoise_col_buffer, denoise_col_neib_buf,
-            valid_pre_2, denoise_refer_mask, valid_pre_mask);
-
-        // 去噪算法
-        denoiseProcessing(denoise_col_buffer, denoise_col_valid, denoise_col_neib_buf,
-            denoise_col_neib_vld, denoise_col, denoise_refer_mask, valid_pre_2, valid_pre_mask);
-
-        if(denoise_col_out >= 0 && denoise_col_out < VIEW_W)
+        case RAIN_ALGO:
         {
-            memcpy(denoise_mask_out_frm[denoise_col_out], denoise_valid_buffer[denoise_col_out_vld], sizeof(int) * VIEW_H);
-        }
+            static bool first{true};
 
-        circularCalcIdx(rear2, buffer_size_trail);
-        //拖点数据
-        int trail_col_in = col_idx - TrailInDelayCol;
-        if (trail_col_in >= 0 && trail_col_in < VIEW_W) {
-                memcpy(dist_wave0_buffer2[rear2], pstFrameBuffer->dist0[trail_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(refl_wave0_buffer2[rear2], pstFrameBuffer->ref0[trail_col_in], sizeof(uint8_t) * VIEW_H);
-        }
-        else {
-            memset(dist_wave0_buffer2[rear2], 0, sizeof(uint16_t) * VIEW_H);
-            memset(refl_wave0_buffer2[rear2], 0, sizeof(uint8_t) * VIEW_H);
-        }
+            if (first) {
+                pid_t tid = gettid();
+                utils::addThread(tid, "Rain_Algo");
+                first = false;
+            }
+            circularCalcIdx(rear4, buffer_size_spray);
+            int spray_col_in = col_idx - SprayInDelayCol;
+            if (spray_col_in >= 0 && spray_col_in < VIEW_W) {
+                memcpy(dist_wave0_buffer4[rear4], pstFrameBuffer->dist0[spray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(dist_wave1_buffer4[rear4], pstFrameBuffer->dist1[spray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(refl_wave0_buffer4[rear4], pstFrameBuffer->ref0[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(refl_wave1_buffer4[rear4], pstFrameBuffer->ref1[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(grnd_wave0_buffer4[rear4], pstFrameBuffer->gnd_mark0[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                memcpy(grnd_wave1_buffer4[rear4], pstFrameBuffer->gnd_mark1[spray_col_in], sizeof(uint8_t) * VIEW_H);
+                for (int i = 0; i < VIEW_H; ++i) {
+                    uint8_t att0 = pstFrameBuffer->att0[spray_col_in][i];
+                    uint8_t att1 = pstFrameBuffer->att1[spray_col_in][i];
+                    rain_wave0_buffer4[rear4][i] = att0 >> 7;
+                    rain_wave1_buffer4[rear4][i] = att1 >> 7;
+                    head_wave0_buffer4[rear4][i] = (att0 >> 1) & 0x01;
+                    head_wave1_buffer4[rear4][i] = (att1 >> 1) & 0x01;
+                    tail_wave0_buffer4[rear4][i] = (att0 >> 2) & 0x01;
+                    tail_wave1_buffer4[rear4][i] = (att1 >> 2) & 0x01;
+                    rain_final0_buffer[rear4][i] = att0 >> 7;
+                    rain_final1_buffer[rear4][i] = att1 >> 7;
+                }
+            }
+            else {
+                //超过最大列，帧间buffer补0
+                memset(dist_wave0_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
+                memset(dist_wave1_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
+                memset(refl_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(refl_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(grnd_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(grnd_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(head_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(head_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(tail_wave0_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(tail_wave1_buffer4[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_final0_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
+                memset(rain_final1_buffer[rear4], 0, sizeof(uint8_t) * VIEW_H);
+            }
+            int spray_col = spray_col_in - SprayDelayCol;
+            int spray_col_buffer = matlabMod(rear4 + 1 - SprayDelayCol - 1, buffer_size_spray);
+            int spray_col_neib_buf[RAIN_SIZE_X];
+            for (int i = 0; i < RAIN_SIZE_X; i++) {
+                spray_col_neib_buf[i] = matlabMod((spray_col_buffer + 1 - spray_Param.Area_size_x + i) - 1, buffer_size_spray);
+            }
+            int spray_mark_out0[VIEW_H]{ 0 };
+            int spray_mark_out1[VIEW_H]{ 0 };
+            rainEnhance(spray_col, spray_col_buffer, spray_col_neib_buf, spray_mark_out0, spray_mark_out1);
 
-        //线程二：：：：拖点
-        int trail_col = trail_col_in - TrailDelayCol;  // 目标列偏移计算‌
-        int trail_col_buffer = matlabMod(rear2 + 1 - TrailDelayCol - 1, buffer_size_trail);  // 环形缓冲区计算‌
-        int trail_col_neib_buf[5] = { 0 };
-        for (int i = 0; i < 5; i++) {
-            trail_col_neib_buf[i] = matlabMod((trail_col_buffer + 1 - 2 + i) - 1, buffer_size_trail);
-        }
-        int trail_mask_out[VIEW_H] = { 0 };
-        int trail_refer_mask[VIEW_H] = { 0 };
-        /* 预处理：拖点算法 */
-        trailPreProc(trail_col, trail_col_buffer,trail_col_neib_buf, trail_refer_mask);
-
-        trailRemove(trail_col, trail_col_buffer,trail_col_neib_buf, trail_refer_mask,trail_mask_out);
-
-        if(trail_col >= 0 && trail_col < VIEW_W)
-        {
-            memcpy(trail_mask_out_frm[trail_col], trail_mask_out, sizeof(trail_mask_out));
-            proc_col = trail_col;
-        }
-        if(trail_col >= VIEW_W)
-        {
-            proc_col = VIEW_W - 1;
-        }
+            int spray_out_col = spray_col - SprayFilterDelayCol - SprayOutDelayCol;
+            if (spray_out_col >= 0 && spray_out_col < VIEW_W) {
+                memcpy(spray_mark_out_frm0[spray_out_col], spray_mark_out0, sizeof(spray_mark_out0));
+                memcpy(spray_mark_out_frm1[spray_out_col], spray_mark_out1, sizeof(spray_mark_out1));
+            }
         }break;
         default:
         break;

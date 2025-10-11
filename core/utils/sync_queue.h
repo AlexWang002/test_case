@@ -1,6 +1,26 @@
+/*******************************************************************************
+ * \addtogroup utils
+ * \{
+ * \headerfile sync_queue.h
+ * \brief
+ * \version 0.1
+ * \date 2025-08-08
+ *
+ * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
+ *
+ * \details
+ * #### Modification History :
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.1 | 2025-06-07 | Init version |
+ *
+ ******************************************************************************/
 #ifndef ROBSENSE_LIDAR_SYNC_QUEUE_HPP
 #define ROBSENSE_LIDAR_SYNC_QUEUE_HPP
 
+/******************************************************************************/
+/*                         Include dependant headers                          */
+/******************************************************************************/
 #include <mutex>
 #include <condition_variable>
 #include <vector>
@@ -8,11 +28,24 @@
 #include <utility>
 #include <stdexcept>
 #include <functional>
+/******************************************************************************/
+/*                      Include headers of the component                      */
+/******************************************************************************/
 
+/******************************************************************************/
+/*                  Using namespace, type or template alias                   */
+/******************************************************************************/
 namespace robosense
 {
 namespace lidar
 {
+/******************************************************************************/
+/*        Definition of exported types (typedef, enum, struct, union)         */
+/******************************************************************************/
+
+/******************************************************************************/
+/*                   Definition of classes or templates                       */
+/******************************************************************************/
 template <typename T>
 class SyncQueue
 {
@@ -57,7 +90,7 @@ public:
   bool tryPop(T& value)
   {
     std::lock_guard<std::mutex> lock(mtx_);
-    if (stopped_ || size_ == 0)
+    if (stopped_ || (size_ == 0))
     {
       return false;
     }
@@ -72,7 +105,7 @@ public:
   bool pop(T& value)
   {
     std::unique_lock<std::mutex> lock(mtx_);
-    cv_.wait(lock, [this] { return size_ > 0 || stopped_; });
+    cv_.wait(lock, [this] { return (size_ > 0) || stopped_; });
 
     if (stopped_)
     {
@@ -90,7 +123,7 @@ public:
   {
     std::unique_lock<std::mutex> lock(mtx_);
 
-    if (!cv_.wait_for(lock, std::chrono::microseconds(usec), [this] { return size_ > 0 || stopped_; }))
+    if (!cv_.wait_for(lock, std::chrono::microseconds(usec), [this] { return (size_ > 0) || stopped_; }))
     {
       return false;  // Timeout
     }
@@ -226,5 +259,5 @@ private:
 
 }  // namespace lidar
 }  // namespace robosense
-
-#endif  // ROBOSENSE_LIDAR_SYNC_QUEUE_HPP
+/** \} utils */
+#endif  /* ROBSENSE_LIDAR_SYNC_QUEUE_HPP */
