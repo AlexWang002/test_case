@@ -23,15 +23,15 @@
 /******************************************************************************/
 /*                     Include dependant library headers                      */
 /******************************************************************************/
-#include <iostream>
-#include <fstream>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <iostream>
 #include <string>
 #include <vector>
 
 #if defined(__arm__) || defined(__aarch64__)
-#include <arm_acle.h> // ARM 内置函数头文件
+#    include <arm_acle.h> // ARM 内置函数头文件
 #endif
 
 /******************************************************************************/
@@ -66,9 +66,9 @@ enum class CrcErrorCode : uint8_t {
 /******************************************************************************/
 /*           Declaration and definition of exported constant data             */
 /******************************************************************************/
-static constexpr uint32_t kEndValue{0xFFFFFFFFU};
-static constexpr uint32_t kStartValue{0xFFFFFFFFU};
-static constexpr uint32_t kPolynomial{0xEDB88320U};   // reverse: 0x04C11DB7
+static constexpr uint32_t kEndValue {0xFFFFFFFFU};
+static constexpr uint32_t kStartValue {0xFFFFFFFFU};
+static constexpr uint32_t kPolynomial {0xEDB88320U}; // reverse: 0x04C11DB7
 
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
@@ -81,14 +81,13 @@ static constexpr uint32_t kPolynomial{0xEDB88320U};   // reverse: 0x04C11DB7
  * \param[in] length The length of the data block.
  * \return The CRC32 value.
  */
-inline uint32_t calculate_crc32(const void *const in_buf,
-                                const size_t& length) noexcept {
+inline uint32_t calculate_crc32(const void* const in_buf, const size_t& length) noexcept {
     if (nullptr == in_buf || 0 == length) {
         return kEndValue;
     }
 
-    const uint8_t *data = static_cast<const uint8_t *>(in_buf);
-    const uint8_t *end = data + length;
+    const uint8_t* data = static_cast<const uint8_t*>(in_buf);
+    const uint8_t* end = data + length;
     uint32_t crc = kStartValue;
     uint64_t u64_val;
     uint32_t u32_val;
@@ -146,21 +145,19 @@ inline uint32_t calculate_byte(const int32_t& f_data_r) noexcept {
  * \param[in] length The length of the data block.
  * \return The CRC32 value.
  */
-inline uint32_t calculate_crc32(const void *const in_buf,
-                                const size_t& length) noexcept {
+inline uint32_t calculate_crc32(const void* const in_buf, const size_t& length) noexcept {
     if (nullptr == in_buf || 0 == length) {
         return kEndValue;
     }
 
     // 初始化 CRC32 为 0xFFFFFFFF
     uint32_t crc = kStartValue; // 标准 CRC32 初始化值
-    const uint8_t *data = static_cast<const uint8_t *>(in_buf);
-    const uint8_t *end = data + length;
+    const uint8_t* data = static_cast<const uint8_t*>(in_buf);
+    const uint8_t* end = data + length;
 
     while (data < end) {
         uint32_t ulCrcDark = (crc >> 8) & 0x00FFFFFFU;
-        uint32_t ulCrcWhite = calculate_byte(
-                            static_cast<int32_t>((crc ^ (*data)) & 0xFFU));
+        uint32_t ulCrcWhite = calculate_byte(static_cast<int32_t>((crc ^ (*data)) & 0xFFU));
         crc = ulCrcDark ^ ulCrcWhite;
         data++;
     }
@@ -178,8 +175,7 @@ inline uint32_t calculate_crc32(const void *const in_buf,
  * \param[out] result The CRC32 value.
  * \return The error code.
  */
-CrcErrorCode read_json_file_crc32(const std::string& file_path,
-                                    uint32_t& result);
+CrcErrorCode read_json_file_crc32(const std::string& file_path, uint32_t& result);
 
 /**
  * \brief Calculate CRC32 value of a binary file.
@@ -187,8 +183,7 @@ CrcErrorCode read_json_file_crc32(const std::string& file_path,
  * \param[out] result The CRC32 value.
  * \return The error code.
  */
-CrcErrorCode calculate_bin_file_crc32(const std::string& file_path,
-                                    uint32_t& result);
+CrcErrorCode calculate_bin_file_crc32(const std::string& file_path, uint32_t& result);
 
 /**
  * \brief Calculate CRC32 value of a string.
@@ -235,8 +230,7 @@ inline uint32_t calculate_crc32(const std::vector<uint8_t>& vector) noexcept {
  * \param[in] json_file_path The path of the JSON file.
  * \return The error code.
  */
-bool verify_crc32(const std::string& bin_file_path,
-                const std::string& json_file_path);
+bool verify_crc32(const std::string& bin_file_path, const std::string& json_file_path);
 
 /**
  * \brief Verify CRC32 value of a data block.
@@ -245,8 +239,7 @@ bool verify_crc32(const std::string& bin_file_path,
  * \param[in] crc32 The CRC32 value.
  * \return The error code.
  */
-inline bool verify_crc32(const void *const in_buf, const size_t& length,
-                        const uint32_t& crc32) noexcept {
+inline bool verify_crc32(const void* const in_buf, const size_t& length, const uint32_t& crc32) noexcept {
     return (crc32 == calculate_crc32(in_buf, length));
 }
 
@@ -256,8 +249,7 @@ inline bool verify_crc32(const void *const in_buf, const size_t& length,
  * \param[in] crc32 The CRC32 value.
  * \return The error code.
  */
-inline bool verify_crc32(const std::vector<uint8_t>& vector,
-                        const uint32_t& crc32) noexcept {
+inline bool verify_crc32(const std::vector<uint8_t>& vector, const uint32_t& crc32) noexcept {
     return (crc32 == calculate_crc32(vector));
 }
 

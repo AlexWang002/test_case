@@ -67,19 +67,19 @@ enum SensorName {
  */
 enum class AppType : uint32_t {
     CAM_DEMO_CONSUMER = 0,      ///< 创建demo consumer
-    CAM_IRC_CONSUMER,           ///< 
-    CAM_MMTENC_CONSUMER,        ///< 
-    CAM_MMTCUDA_CONSUMER,       ///< 
-    CAM_DJIENC_CONSUMER,        ///< 
-    CAM_DJICUDA_CONSUMER,       ///< 
-    CAM_VIC_CONSUMER,           ///< 
-    CAM_INENC_CONSUMER,         ///< 
+    CAM_IRC_CONSUMER,           ///<
+    CAM_MMTENC_CONSUMER,        ///<
+    CAM_MMTCUDA_CONSUMER,       ///<
+    CAM_DJIENC_CONSUMER,        ///<
+    CAM_DJICUDA_CONSUMER,       ///<
+    CAM_VIC_CONSUMER,           ///<
+    CAM_INENC_CONSUMER,         ///<
     /* 雷达 */
     SEN_DEMO_CONSUMER,          ///< 创建demo consumer
-    SEN_IRC_RADAR_CONSUMER,     ///< 
-    SEN_IRC_LIDAR_CONSUMER,     ///< 
-    SEN_ABS_CONSUMER,           ///< 
-    IPC_NOTHING                 ///< 
+    SEN_IRC_RADAR_CONSUMER,     ///<
+    SEN_IRC_LIDAR_CONSUMER,     ///<
+    SEN_ABS_CONSUMER,           ///<
+    IPC_NOTHING                 ///<
 };
 
 
@@ -102,7 +102,7 @@ enum ClientErrorCode : std::int32_t {
     CLIENT_SUCCESS = 0,               ///< 成功
 };
 /**
- * @brief  SensorType 
+ * @brief  SensorType
  * @details 雷达类型定义，请使用定义名称检索雷达类型，避免后续雷达调整ID值
  */
 enum class SensorType : std::uint32_t {
@@ -161,7 +161,7 @@ struct FrameBufObj {
     uint32_t objIndex;          // 当前帧在队列中的index
     uint32_t rawObjIndex;       // 当前帧在队列中的index
     uint32_t frameIndex;        // 当前帧的帧序号
-    uint64_t frameUuid;   
+    uint64_t frameUuid;
     uint64_t tsof;              // 当前帧的Tsof时间戳
     uint64_t teof;              // 当前帧的Teof时间戳
     uint64_t frameCaptureTSC;   // 当前帧TSC时间戳

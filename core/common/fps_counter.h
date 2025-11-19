@@ -17,10 +17,10 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.2 | 2025-08-06 | Add comments;|
- * 
+ *
  ******************************************************************************/
-#ifndef ROBSENSE_LIDAR_FPS_COUNTER_H
-#define ROBSENSE_LIDAR_FPS_COUNTER_H
+#ifndef ROBOSENSE_LIDAR_FPS_COUNTER_H
+#define ROBOSENSE_LIDAR_FPS_COUNTER_H
 
 /******************************************************************************/
 /*                         Include dependant headers                          */
@@ -48,7 +48,7 @@ public:
      * @param tolerance_percent 允许的波动百分比（如10表示±10%）
      * @param updateInterval 平均帧率更新间隔（单位：秒）
      */
-    explicit FPSCounter(const std::string& name, double base_fps = 30.0, 
+    explicit FPSCounter(const std::string& name, double base_fps = 30.0,
                        double tolerance_percent = 10.0, double updateInterval = 1.0);
 
     /**
@@ -108,4 +108,4 @@ private:
 }  // namespace lidar
 }  // namespace robosense
 
-#endif  // ROBSENSE_LIDAR_FPS_COUNTER_H
+#endif  // ROBOSENSE_LIDAR_FPS_COUNTER_H

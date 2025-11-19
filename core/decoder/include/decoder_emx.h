@@ -44,10 +44,16 @@ namespace robosense::lidar {
 #define EMX_PIXELS_PER_VCSEL   (8U)
 #define EMX_GMSL_WIDTH         (1920U)
 #define EMX_GMSL_HEIGHT        (562U)
-
-#define EMX_MIPI_DATA_LEN      (EMX_GMSL_WIDTH * EMX_GMSL_HEIGHT)
 #define EMX_PKT_SEQ_MIN        (1U)
 #define EMX_PKT_SEQ_MAX        (1520U)
+
+#ifdef MIPI_10HZ
+#define EMX_MIPI_PART_LEN        (EMX_GMSL_WIDTH * EMX_GMSL_HEIGHT)
+#define EMX_MIPI_DATA_LEN        (EMX_MIPI_PART_LEN * 6)
+#else
+#define EMX_MIPI_DATA_LEN        (EMX_GMSL_WIDTH * EMX_GMSL_HEIGHT)
+#endif
+#define EMX_EMBED_MIPI_DATA_LEN  (EMX_MIPI_DATA_LEN + EMX_GMSL_WIDTH)
 
 /******************************************************************************/
 /*        Definition of exported types (typedef, enum, struct, union)         */
@@ -91,19 +97,21 @@ typedef struct {
 } RSEMXWorkInfo;                 // 24 bytes
 
 typedef struct {
-    uint8_t id[4];                     //   4 bytes
-    RSEMXDeviceVersion device_version; //  21 bytes
-    uint8_t reserved[6];               //   6 bytes
-    uint8_t customer_sn[25];           //  25 bytes
-    RSEMXWorkInfo work_info;           //  24 bytes
-    RSEMXTimeInfo time_info;           //  18 bytes
-    uint8_t reserved_1[77];            //  77 bytes
-    uint8_t fault_level;               //   1 byte
-    uint16_t fault_id;                 //   2 bytes
-    uint8_t fault_value[4];            //   4 bytes
-    uint32_t dtc;                      //   4 bytes
-    uint8_t reserved_2[36];            //  36 bytes
-} RSEMXDeviceInfoPkt;                  // 500 bytes
+    uint8_t id[4];                     //   4 bytes    byte 0   / size 4
+    RSEMXDeviceVersion device_version; //  21 bytes    byte 4   / size 21
+    uint8_t reserved[6];               //   6 bytes    byte 25  / size 6
+    uint8_t customer_sn[25];           //  25 bytes    byte 31  / size 25
+    RSEMXWorkInfo work_info;           //  26 bytes    byte 56  / size 26
+    RSEMXTimeInfo time_info;           //  18 bytes    byte 82  / size 18
+    uint8_t reserved_1[77];            //  77 bytes    byte 100 / size 77
+    uint8_t fault_level;               //   1 byte     byte 177 / size 1
+    uint16_t fault_id1;                //   2 bytes    byte 178 / size 2
+    uint8_t fault_value1[4];           //   4 bytes    byte 180 / size 4
+    uint16_t fault_id2;                //   2 bytes    byte 178 / size 2
+    uint8_t fault_value2[4];           //   4 bytes    byte 180 / size 4
+    uint32_t dtc;                      //   4 bytes    byte 190 / size 4
+    uint8_t reserved_2[30];            //  36 bytes    byte 194 / size 30
+} RSEMXDeviceInfoPkt;                  // 500 bytes    size 224
 
 typedef struct {
     uint16_t radius;   // 2 bytes
@@ -166,7 +174,9 @@ class DecoderRSEMX : public Decoder {
     std::array<int32_t, EMX_SURFACE_NUM> surface_pitch_offset_;
     std::vector<uint64_t> cached_pkt_timestamps_;
     std::uint8_t difop2_[500];
-    bool difop2_received_ {false};
+    bool difop2_received_{false};
+    std::chrono::steady_clock::time_point obstruct_start_time_;
+    bool obstruct_detected_{false};
 
     static RSDecoderConstParam& getConstParam() {
         static RSDecoderConstParam param = {

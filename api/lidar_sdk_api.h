@@ -3,8 +3,8 @@
  * @brief lidar SDK对外接口文件定义
  * @details 定义调用底软函数指针，sdk函数指针等
  * @author
- * @version 1.0.17
- * @date 2025/09/11
+ * @version 1.0.18
+ * @date 2025/10/13
  * @copyright copyright(c)2025 比亚迪股份有限公司
  */
 
@@ -20,7 +20,7 @@ extern "C" {
 
 #define LIDAR_SDK_API_VER_MAJOR 1
 #define LIDAR_SDK_API_VER_MINOR 0
-#define LIDAR_SDK_API_VER_PATCH 17
+#define LIDAR_SDK_API_VER_PATCH 18
 
 #define LIDAR_SDK_API_VER_MACRO(major, minor, patch) (major << 16 | minor << 8 | patch)
 
@@ -78,7 +78,7 @@ typedef struct
 {
   uint16_t time_offset;          // 可以精确到10us的级别
   int16_t motor_speed;          // 电机转速
-  int16_t azimuth;              // 水平角 
+  int16_t azimuth;              // 水平角
   ChannelData channel_data[192]; // 192个通道数据
 }__attribute__((packed)) DataBlock;
 
@@ -172,6 +172,8 @@ typedef struct
   LidarSdkErrorCode (*deInit)(void);
   LidarSdkErrorCode (*start)(void);
   LidarSdkErrorCode (*stop)(void);
+  LidarSdkErrorCode (*powerOff)(void); //预下电使用
+  LidarSdkErrorCode (*setCalibrationEnable)(const bool enabled);//设置lidar标定状态，enabled：true--进入标定，false--退出标定
 
   LidarSdkErrorCode (*injectAdc)(LidarSensorIndex sensor, const void* ptrAdc);  ////ptrAdc为结构体LidarAdcBuffer
   LidarSdkErrorCode (*injectAlarmInfo)(const LidarAlarmInfo& lidarAlarmInfo);//中间件收到底软上报的alarmID后，直接转发给SDK

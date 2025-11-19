@@ -36,7 +36,6 @@
 /*                         Include dependant headers                          */
 /******************************************************************************/
 #include "algo_process.h"
-#include "yaml_manager.h"
 #include "thread_config.h"
 #include "cpu_load.h"
 #include "rs_new_logger.h"
@@ -70,6 +69,11 @@ void CloudManager::setThreadName(const std::string& kName)
     int32_t ret = pthread_setname_np(pthread_self(), kName.substr(0, 15).c_str());
     if (ret != 0) {
         LogError("ERROR: setThreadName error: {}, thread name: {}", ret, kName);
+        FaultManager8::getInstance().setFault(FaultBits8::LidarThreadNameFault);
+    }
+    else{
+        if (FaultManager8::getInstance().hasFault(FaultBits8::LidarThreadNameFault))
+            FaultManager8::getInstance().clearFault(FaultBits8::LidarThreadNameFault);
     }
 }
 
@@ -172,17 +176,17 @@ void CloudManager::start(void)
     }
     for (uint32_t i = 0; i < ALGO_THREAD_NUM; ++i) {
         cacl_done_[i].store(0);
-        yaml::ThreadConfig config;
-        if (yaml::thread_params.size() > i+3)
-            config = yaml::thread_params[i+3];
+        thread::ThreadConfig config;
+        if (thread::thread_params.size() > i+3)
+            config = thread::thread_params[i+3];
         algo_handle_threads_.emplace_back(createConfiguredStdThread(config, [this, i] {
             setThreadName("RS-AlgoProc-" + std::to_string(i));
             this->algoProcess(i);
         }));
     }
-    yaml::ThreadConfig config;
-    if (yaml::thread_params.size() > 2)
-        config = yaml::thread_params[2];
+    thread::ThreadConfig config;
+    if (thread::thread_params.size() > 2)
+        config = thread::thread_params[2];
     handle_thread_ = createConfiguredStdThread(config, [this] {
         setThreadName("RS-FinalProc");
         this->algoFinalProcess();
@@ -293,21 +297,25 @@ void CloudManager::algoFinalProcess(void)
             if (sendEnoughData(algo_func_.VIEW_W - 1)) {
                 memcpy(dist_wave0, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(dist_wave1, frame_buffer->dist1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);//加入双回波数据
-                memcpy(refl_wave0, frame_buffer->ref0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(refl_wave1, frame_buffer->ref1, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(refl_wave0, frame_buffer->ref0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(refl_wave1, frame_buffer->ref1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(attr_wave0, frame_buffer->att0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(attr_wave1, frame_buffer->att1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 for (int col_idx = 0; col_idx < algo_func_.VIEW_W; col_idx++)
                 {
                     // 获取掩码指针
                     uint16_t* trail_mask_out = algo_func_.trail_mask_out_frm[col_idx];
                     uint16_t* denoise_mask_out = algo_func_.denoise_mask_out_frm[col_idx];
-                    int* stray_mask_out0 = algo_func_.stray_mask_out_frm0[col_idx];
-                    int* stray_mask_out1 = algo_func_.stray_mask_out_frm1[col_idx];
-                    int* spray_mask_out0 = algo_func_.spray_mark_out_frm0[col_idx];
-                    int* spray_mask_out1 = algo_func_.spray_mark_out_frm1[col_idx];
+                    uint16_t* stray_mask_out0 = algo_func_.stray_mask_out_frm0[col_idx];
+                    uint16_t* stray_mask_out1 = algo_func_.stray_mask_out_frm1[col_idx];
+                    uint16_t* spray_mask_out0 = algo_func_.spray_mark_out_frm0[col_idx];
+                    uint16_t* spray_mask_out1 = algo_func_.spray_mark_out_frm1[col_idx];
                     uint16_t* Distwave0 = dist_wave0[col_idx];
                     uint16_t* Distwave1 = dist_wave1[col_idx];
-                    uint8_t* Refwave0 = refl_wave0[col_idx];
-                    uint8_t* Refwave1 = refl_wave1[col_idx];
+                    uint16_t* Refwave0 = refl_wave0[col_idx];
+                    uint16_t* Refwave1 = refl_wave1[col_idx];
+                    uint16_t* Attrwave0 = attr_wave0[col_idx];
+                    uint16_t* Attrwave1 = attr_wave1[col_idx];
                     for (int row_idx = 0; row_idx < algo_func_.VIEW_H; row_idx++){
                         const bool trail = trail_mask_out[row_idx];
                         const bool denoise = denoise_mask_out[row_idx];
@@ -315,6 +323,12 @@ void CloudManager::algoFinalProcess(void)
                         const bool stray1 = stray_mask_out1[row_idx];
                         const bool spray0 = spray_mask_out0[row_idx];
                         const bool spray1 = spray_mask_out1[row_idx];
+                        const int attr0 = (trail != 0 || denoise != 1) ? 0 : Attrwave0[row_idx];
+                        const int attr1 = Attrwave1[row_idx];
+
+                        Attrwave0[row_idx] = ((spray0) << 7) + (attr0 & 0x7E) + stray0;
+                        Attrwave1[row_idx] = ((spray1) << 7) + (attr1 & 0x7E) + stray1;
+
                         const bool wave0_del_flag = stray0 || spray0 || trail || !denoise;
                         const bool wave1_sel_flag = !stray1 && !spray1 && !trail && denoise;
 
@@ -322,21 +336,31 @@ void CloudManager::algoFinalProcess(void)
                         if (wave0_del_flag && !wave1_sel_flag) {
                             Distwave0[row_idx] = 0;
                             Refwave0[row_idx] = 0;
+                            Attrwave0[row_idx] = 0;
                         }
                         // 情况2: 第一回波无效点，第二回波有效点
                         else if (wave0_del_flag && wave1_sel_flag) {
                             Distwave0[row_idx] = Distwave1[row_idx];
                             Refwave0[row_idx] = Refwave1[row_idx];
+                            Attrwave0[row_idx] = Attrwave1[row_idx];
                         }
+                        Attrwave0[row_idx] &= 0xF7;
                     }
                 }
                 /** Data initialization */
                 memcpy(DistDownIn_h, dist_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(DistRawIn_h, frame_buffer->dist0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(RefDownIn_h, refl_wave0, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint8_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(RefDownIn_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 //auto start = std::chrono::steady_clock::now();
                 upsample_main();
+                /** 最后一列置0 */
+                uint32_t start_idx = (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H;
+                memset(&DistOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
+                memset(&RefOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
+                memset(&AttrOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
+
                 //auto end = std::chrono::steady_clock::now();
                 //auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
                 //std::cout << "upsample_main time: " << duration.count() << " us" << std::endl;
@@ -353,11 +377,13 @@ void CloudManager::algoFinalProcess(void)
                                 for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
                                     cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
                                     cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
+                                    cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
                                 }
                             } else {
                                 for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
                                     cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
                                     cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
+                                    cloud.pixels[i].waves[0].attribute = AttrOutUp_h[offset + i];
                                 }
                             }
                             cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
@@ -369,6 +395,7 @@ void CloudManager::algoFinalProcess(void)
                             for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
                                 cloud.pixels[i].waves[0].radius = 0;
                                 cloud.pixels[i].waves[0].intensity = 0;
+                                cloud.pixels[i].waves[0].attribute = 0;
                             }
                             cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
 
@@ -379,11 +406,13 @@ void CloudManager::algoFinalProcess(void)
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
                                         cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
                                         cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
+                                        cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
                                     }
                                 } else {
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
                                         cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
                                         cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
+                                        cloud.pixels[i].waves[0].attribute = AttrOutUp_h[offset + i];
                                     }
                                 }
                                 cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
@@ -395,6 +424,7 @@ void CloudManager::algoFinalProcess(void)
                             for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
                                 cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
                                 cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
+                                cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
                             }
                             cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                         } else{
@@ -405,11 +435,13 @@ void CloudManager::algoFinalProcess(void)
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
                                         cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
                                         cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
+                                        cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
                                     }
                                 } else {
                                     for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
                                         cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
                                         cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
+                                        cloud.pixels[i].waves[0].attribute = AttrOutUp_h[offset + i];
                                     }
                                 }
                                 cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
@@ -444,6 +476,7 @@ void CloudManager::algoFinalProcess(void)
     }
     catch (const std::exception& kE) {
         LogError("ERROR: algoProcess thread:{}, crashed:{}", ALGO_THREAD_NUM, kE.what());
+        FaultManager8::getInstance().setFault(FaultBits8::LidarThreadCrash);
     }
 }
 
@@ -456,9 +489,9 @@ void CloudManager::algoFinalProcess(void)
 void CloudManager::algoProcess(int32_t task_id)
 {
     try {
-        std::cout << "*******************" << std::endl;
-        std::cout << "task_id: " << task_id << std::endl;
-        std::cout << "*******************" << std::endl;
+        // std::cout << "*******************" << std::endl;
+        // std::cout << "task_id: " << task_id << std::endl;
+        // std::cout << "*******************" << std::endl;
 
         if (task_id == 0) {
             pid_t tid = gettid();
@@ -517,6 +550,28 @@ void CloudManager::algoProcess(int32_t task_id)
                                         }
                                     }
                                 }
+
+                                if (algo_func_.algo_Param.StrayRemoveOn) {
+                                    //auto stray_start = std::chrono::steady_clock::now();
+                                    algo_func_.strayDeleteCombine(frame_buffer);
+                                    //auto stray_end = std::chrono::steady_clock::now();
+                                    //auto stray_duration = std::chrono::duration_cast<std::chrono::microseconds>(stray_end - stray_start);
+                                    //std::cout << "stray duration: " << stray_duration.count() << "us" << std::endl;
+                                }
+                                else {
+                                    for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
+                                        for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
+                                            algo_func_.stray_mask_out_frm0[cc][rr] = 0;
+                                            algo_func_.stray_mask_out_frm1[cc][rr] = 0;
+                                        }
+                                    }
+                                }
+
+                                //auto spray_start = std::chrono::steady_clock::now();
+                                algo_func_.sprayRemoveExec(frame_buffer);
+                                //auto spray_end = std::chrono::steady_clock::now();
+                                //auto spray_duration = std::chrono::duration_cast<std::chrono::microseconds>(spray_end - spray_start);
+                                //std::cout << "spray duration: " << spray_duration.count() << "us" << std::endl;
                             }
                         }
                         else{
@@ -559,6 +614,7 @@ void CloudManager::algoProcess(int32_t task_id)
     }
     catch (const std::exception& kE) {
         LogError("ERROR: algoProcess thread:{}, crashed:{}", task_id, kE.what());
+        FaultManager8::getInstance().setFault(FaultBits8::LidarThreadCrash);
     }
 }
 
@@ -638,17 +694,21 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
         if (0 == pkt_cnt) {
             frame_buffer->surface_id.store(surface_id_pkt);
         }
-
         int32_t recv_idx = frame_buffer->recv_idx.load();
+
         if ((0 == pkt_cnt) && (0 != recv_idx)) {
             LogError("ERROR: algorithms timeout lead to recv loss pkt:{}", recv_idx);
-            FaultManager::getInstance().setFault(FaultBits::LidarPointCloudBufferOverflowFault);
+            FaultManager64::getInstance().overflow_position_ |=  0x4;
+            FaultManager64::getInstance().setFault(FaultBits::LidarPointCloudBufferOverflowFault);
             frame_buffer->frame_droped.store(true);
             cv_recv_.notify_all();
             return;
-        } else if (0 == pkt_cnt) {
-            if (FaultManager::getInstance().hasFault(FaultBits::LidarPointCloudBufferOverflowFault))
-                FaultManager::getInstance().clearFault(FaultBits::LidarPointCloudBufferOverflowFault);
+        } else if(0 == pkt_cnt) {
+            FaultManager64::getInstance().overflow_position_ &=  0x3;
+            if(FaultManager64::getInstance().hasFault(FaultBits::LidarPointCloudBufferOverflowFault) && ((FaultManager64::getInstance().overflow_position_ & 0x7) == 0))
+            {
+                FaultManager64::getInstance().clearFault(FaultBits::LidarPointCloudBufferOverflowFault);
+            }
         }
 
         old_val = proc_cloud_idx;
@@ -663,14 +723,14 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
             if (condition) {
                 uint16_t* dist0 = &frame_buffer->dist0[upsample_col][0];
                 uint16_t* dist1 = &frame_buffer->dist1[upsample_col][0];
-                uint8_t* ref0 = &frame_buffer->ref0[upsample_col][0];
-                uint8_t* ref1 = &frame_buffer->ref1[upsample_col][0];
-                uint8_t* att0 = &frame_buffer->att0[upsample_col][0];
-                uint8_t* att1 = &frame_buffer->att1[upsample_col][0];
-                uint8_t* gnd0 = &frame_buffer->gnd_mark0[upsample_col][0];
-                uint8_t* gnd1 = &frame_buffer->gnd_mark1[upsample_col][0];
-                int32_t* high0 = &frame_buffer->high0[upsample_col][0];
-                int32_t* high1 = &frame_buffer->high1[upsample_col][0];
+                uint16_t* ref0 = &frame_buffer->ref0[upsample_col][0];
+                uint16_t* ref1 = &frame_buffer->ref1[upsample_col][0];
+                uint16_t* att0 = &frame_buffer->att0[upsample_col][0];
+                uint16_t* att1 = &frame_buffer->att1[upsample_col][0];
+                uint16_t* gnd0 = &frame_buffer->gnd_mark0[upsample_col][0];
+                uint16_t* gnd1 = &frame_buffer->gnd_mark1[upsample_col][0];
+                int16_t* high0 = &frame_buffer->high0[upsample_col][0];
+                int16_t* high1 = &frame_buffer->high1[upsample_col][0];
 
                 for (int32_t i = 0; i < algo_func_.VIEW_H; ++i) {
                     const RSEMXMsopWave* kWaves0 = &kRawData.pixels[i].waves[0];
@@ -686,7 +746,7 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
                 algo_func_.highCalcFunc(dist0, dist1, high_calc_col, high0, high1, gnd0, gnd1);
             } else {
                 uint16_t* dist0_raw = &frame_buffer->dist0_raw[upsample_col][0];
-                uint8_t* ref0_raw = &frame_buffer->ref0_raw[upsample_col][0];
+                uint16_t* ref0_raw = &frame_buffer->ref0_raw[upsample_col][0];
                 for (int32_t i = 0; i < algo_func_.VIEW_H; ++i) {
                     const RSEMXMsopWave* kWaves0 = &kRawData.pixels[i].waves[0];
                     dist0_raw[i] = ntohs(kWaves0->radius);
@@ -804,6 +864,7 @@ void CloudManager::updateAlgoIdx(int32_t proc_col, uint32_t task_id)
 {
     if (task_id >= algo_proc_idx_.size()) {
         LogError("ERROR: task_id is invalid:{}, max:{}", task_id, algo_proc_idx_.size() - 1);
+        FaultManager8::getInstance().setFault(FaultBits8::LidarThreadNumError);
         return;
     }
     std::lock_guard<std::mutex> lock(mtx_send_);

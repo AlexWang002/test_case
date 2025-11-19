@@ -135,8 +135,7 @@ CrcErrorCode read_json_file_crc32(const std::string& file_path, uint32_t& result
             return CrcErrorCode::FILE_READ_ERROR;
         }
 
-        result = std::stoul(json_data["middle_lidar_crc"].get<std::string>(),
-                                nullptr, 16);
+        result = std::stoul(json_data["middle_lidar_crc"].get<std::string>(), nullptr, 16);
         LogTrace("expected crc32 in json file: 0x{:08x}", result);
     } catch (const json::parse_error& e) {
         LogError("Failed to parse JSON file: {}", file_path);
@@ -159,11 +158,10 @@ CrcErrorCode read_json_file_crc32(const std::string& file_path, uint32_t& result
  * \retval true The CRC32 is verified
  * \retval false The CRC32 is not verified
  */
-bool verify_crc32(const std::string& bin_file_path,
-                const std::string& json_file_path) {
-    uint32_t calculate_crc32{0U};
-    uint32_t expected_crc32{0U};
-    bool result{false};
+bool verify_crc32(const std::string& bin_file_path, const std::string& json_file_path) {
+    uint32_t calculate_crc32 {0U};
+    uint32_t expected_crc32 {0U};
+    bool result {false};
 
     if ((CrcErrorCode::SUCCESS != calculate_bin_file_crc32(bin_file_path, calculate_crc32)) ||
         (CrcErrorCode::SUCCESS != read_json_file_crc32(json_file_path, expected_crc32))) {
@@ -175,8 +173,7 @@ bool verify_crc32(const std::string& bin_file_path,
         result = true;
     } else {
         LogError("Bin file verify crc32 failed");
-        LogError("Calculate crc32: 0x{:08x}, Expected crc32: 0x{:08x}",
-                        calculate_crc32, expected_crc32);
+        LogError("Calculate crc32: 0x{:08x}, Expected crc32: 0x{:08x}", calculate_crc32, expected_crc32);
     }
 
     return result;

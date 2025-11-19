@@ -20,22 +20,22 @@
 /******************************************************************************/
 /*                     Include dependant library headers                      */
 /******************************************************************************/
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <cstring>
 #include <array>
-#include <vector>
-#include <unistd.h>
 #include <chrono>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <unistd.h>
+#include <vector>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
 /******************************************************************************/
 #include "crc32.h"
 #include "difop2.h"
-#include "yaml_manager.h"
 #include "rs_new_logger.h"
+#include "json_reader.h"
 
 /******************************************************************************/
 /*                          Definition of namespace                           */
@@ -45,9 +45,6 @@ namespace robosense::lidar::utils {
 /******************************************************************************/
 /*                 Declaration or Definition of local variables               */
 /******************************************************************************/
-// const std::string kBinPath {"/osdata/dimwcfg/sensor/lidar/middle_lidar_inner_para.bin"};
-// const std::string kJsonPath {"/osdata/dimwcfg/sensor/lidar/lidar_sn_inner_para_crc.json"};
-// TODO change the new file address in next customer version
 const std::string kBinPath {"/osdata/satelite/lidar/middle_lidar_inner_para.bin"};
 const std::string kJsonPath {"/osdata/satelite/lidar/lidar_sn_inner_para_crc.json"};
 
@@ -57,9 +54,6 @@ std::array<uint8_t, kDifopLen> difop2_mipi_data;
 /******************************************************************************/
 /*                     Definition of local constant data                      */
 /******************************************************************************/
-const uint8_t kVecselsPerColumn{24U};
-const uint8_t kSurfaceNum{2U};
-const uint8_t kPixelsPerColumn{192U};
 
 /******************************************************************************/
 /*                       Definition of local functions                        */
@@ -83,12 +77,10 @@ void printHex(const uint8_t* data, size_t size) {
  * \brief Compare difop2 data.
  */
 void compareDifop2() {
-    std::cout << "compareDifop2---------" << std::endl;
     while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(yaml::demo_test_param.print_difop2_cycle));
+        std::this_thread::sleep_for(std::chrono::milliseconds(json_reader::test_param.print_difop2_cycle));
 
-        if ((!yaml::demo_test_param.data_valid) ||
-            (!yaml::demo_test_param.enable_print_difop2)) {
+        if ((!json_reader::test_param.data_valid) || (!json_reader::test_param.enable_print_difop2)) {
             LogTrace("Difop2 data is not valid or not enable print difop2");
             continue;
         }
@@ -97,9 +89,9 @@ void compareDifop2() {
             printHex(difop2_mipi_data.data(), kDifopLen);
             continue;
         }
-        uint8_t* difop2_bin =  reinterpret_cast<uint8_t*>(difop2_bin_data.data());
-        uint32_t calculate_crc32{0U};
-        uint32_t expected_crc32{0U};
+        uint8_t* difop2_bin = reinterpret_cast<uint8_t*>(difop2_bin_data.data());
+        uint32_t calculate_crc32 {0U};
+        uint32_t expected_crc32 {0U};
 
         if (crc32::CrcErrorCode::SUCCESS == crc32::read_json_file_crc32(kJsonPath, expected_crc32)) {
             calculate_crc32 = crc32::calculate_crc32(difop2_bin, kDifopLen - 4);
@@ -108,7 +100,8 @@ void compareDifop2() {
             if (result)
                 LogInfo("verify difop2 crc32 result: {}", result);
             else {
-                LogError("verify difop2 crc32 result: {}, crc in json: {}, calculated crc: {}", result, expected_crc32, calculate_crc32);
+                LogError("verify difop2 crc32 result: {}, crc in json: {}, calculated crc: {}", result, expected_crc32,
+                         calculate_crc32);
             }
         }
         if (0 != memcmp(difop2_mipi_data.data(), difop2_bin, kDifopLen - 4)) {

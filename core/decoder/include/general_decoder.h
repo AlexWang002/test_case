@@ -35,6 +35,7 @@
 #include "lidar_sdk_api.h"
 #include "driver_param.h"
 #include "trigon.h"
+#include "common/fault_manager.h"
 
 /******************************************************************************/
 /*                          Definition of namespace                           */

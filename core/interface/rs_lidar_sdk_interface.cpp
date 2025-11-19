@@ -14,6 +14,7 @@
  * |-----|------------|--------------|
  * | 0.1 | 2025-08-07 | Init version |
  * | 0.2 | 2025-08-07 | Add Comments |
+ * | 1.0 | 2025-10-14 | Add function injectAlarmInfo and powerOff and setCalibrationEnable |
  *
  ******************************************************************************/
 
@@ -65,8 +66,7 @@ const char* RSLidarSdkInterface::getLidarSdkVersion() {
  * \retval LIDAR_SDK_SUCCESS: The initialization is successful.
  * \retval LIDAR_SDK_FAILD: The initialization fails.
  */
-LidarSdkErrorCode RSLidarSdkInterface::init(const LidarSdkCbks* fptrCbks,
-            const char* configPath) {
+LidarSdkErrorCode RSLidarSdkInterface::init(const LidarSdkCbks* fptrCbks, const char* configPath) {
     if (impl_) {
         return impl_->init(fptrCbks, configPath);
     }
@@ -110,18 +110,55 @@ LidarSdkErrorCode RSLidarSdkInterface::stop() {
 }
 
 /**
+ * \brief Powers off the LiDAR SDK.
+ * \retval LIDAR_SDK_SUCCESS: The power off is successful.
+ * \retval LIDAR_SDK_FAILD: The power off fails.
+ */
+LidarSdkErrorCode RSLidarSdkInterface::powerOff() {
+    if (impl_) {
+        return impl_->powerOff();
+    }
+    return LidarSdkErrorCode::LIDAR_SDK_FAILD;
+}
+
+/**
+ * \brief Sets the calibration enable status of the LiDAR SDK.
+ * \param[in] enabled The calibration enable status.
+ * \retval LIDAR_SDK_SUCCESS: The set is successful.
+ * \retval LIDAR_SDK_FAILD: The set fails.
+ */
+LidarSdkErrorCode RSLidarSdkInterface::setCalibrationEnable(const bool enabled) {
+    if (impl_) {
+        return impl_->setCalibrationEnable(enabled);
+    }
+    return LidarSdkErrorCode::LIDAR_SDK_FAILD;
+}
+
+/**
  * \brief Injects ADC data into the LiDAR SDK.
  * \param[in] sensor The sensor index.
  * \param[in] ptrAdc The pointer to the ADC data.
  * \retval LIDAR_SDK_SUCCESS: The injection is successful.
  * \retval LIDAR_SDK_FAILD: The injection fails.
  */
-LidarSdkErrorCode RSLidarSdkInterface::injectAdc(LidarSensorIndex sensor,
-            const void* ptrAdc) {
+LidarSdkErrorCode RSLidarSdkInterface::injectAdc(LidarSensorIndex sensor, const void* ptrAdc) {
     if (!impl_) {
         return LidarSdkErrorCode::LIDAR_SDK_FAILD;
     }
     return impl_->injectAdc(sensor, ptrAdc);
+}
+
+/**
+ * \brief Inject Alarm data to the Lidar SDK.
+ * \param[in] lidarAlarmInfo The Alarm info.
+ * \retval LIDAR_SDK_SUCCESS: The injection is successful.
+ * \retval LIDAR_SDK_FAILD: The injection fails.
+ */
+LidarSdkErrorCode RSLidarSdkInterface::injectAlarmInfo(const LidarAlarmInfo& lidarAlarmInfo) {
+    if (!impl_) {
+        return LidarSdkErrorCode::LIDAR_SDK_FAILD;
+    }
+    return impl_->injectAlarmInfo(lidarAlarmInfo);
 }
 
 /**
@@ -133,8 +170,7 @@ LidarSdkErrorCode RSLidarSdkInterface::injectAdc(LidarSensorIndex sensor,
  * \retval LIDAR_SDK_SUCCESS: The write is successful.
  * \retval LIDAR_SDK_FAILD: The write fails.
  */
-LidarSdkErrorCode RSLidarSdkInterface::writeDid(uint16_t did, uint8_t* data,
-            uint16_t dataLen, uint8_t* nrc) {
+LidarSdkErrorCode RSLidarSdkInterface::writeDid(uint16_t did, uint8_t* data, uint16_t dataLen, uint8_t* nrc) {
     if (!impl_) {
         return LidarSdkErrorCode::LIDAR_SDK_FAILD;
     }
@@ -150,8 +186,7 @@ LidarSdkErrorCode RSLidarSdkInterface::writeDid(uint16_t did, uint8_t* data,
  * \retval LIDAR_SDK_SUCCESS: The read is successful.
  * \retval LIDAR_SDK_FAILD: The read fails.
  */
-LidarSdkErrorCode RSLidarSdkInterface::readDid(uint16_t did, uint8_t* data,
-            uint16_t* dataLen, uint8_t* nrc) {
+LidarSdkErrorCode RSLidarSdkInterface::readDid(uint16_t did, uint8_t* data, uint16_t* dataLen, uint8_t* nrc) {
     if (!impl_) {
         return LidarSdkErrorCode::LIDAR_SDK_FAILD;
     }
@@ -170,14 +205,12 @@ LidarSdkErrorCode RSLidarSdkInterface::readDid(uint16_t did, uint8_t* data,
  * \retval LIDAR_SDK_SUCCESS: The control is successful.
  * \retval LIDAR_SDK_FAILD: The control fails.
  */
-LidarSdkErrorCode RSLidarSdkInterface::ridControl(uint8_t mode, uint16_t rid,
-            uint8_t* dataIn, uint16_t dataInLen, uint8_t* dataOut,
-            uint16_t* dataOutLen, uint8_t* nrc) {
+LidarSdkErrorCode RSLidarSdkInterface::ridControl(uint8_t mode, uint16_t rid, uint8_t* dataIn, uint16_t dataInLen,
+                                                  uint8_t* dataOut, uint16_t* dataOutLen, uint8_t* nrc) {
     if (!impl_) {
         return LidarSdkErrorCode::LIDAR_SDK_FAILD;
     }
-    return impl_->ridControl(mode, rid, dataIn, dataInLen, dataOut, dataOutLen,
-                             nrc);
+    return impl_->ridControl(mode, rid, dataIn, dataInLen, dataOut, dataOutLen, nrc);
 }
 
 /******************************************************************************/

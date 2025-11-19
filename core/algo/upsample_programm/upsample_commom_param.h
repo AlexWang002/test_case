@@ -16,16 +16,14 @@
 
 /** [params] */
 #define ALGO_ON
-
+#define VECW                 32
 #define TILE_WIDTH           192
-#define TILE_HEIGHT          76
-#define UP_TILE_HEIGHT       76
+#define TILE_HEIGHT          40
 #define VIEW_WIDTH           192
 #define VIEW_HEIGHT          760
-#define UP_VIEW_HEIGHT       1520
 #define KERNEL_RADIUS_WIDTH  0
 #define KERNEL_RADIUS_HEIGHT 1
-#define TILE_COUNT           10
+#define TILE_COUNT           19
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))

@@ -30,6 +30,7 @@
 #include "common/fault_manager.h"
 #include "decoder_emx.h"
 #include "rs_new_logger.h"
+#include "impl/rs_lidar_sdk_impl.h"
 
 /******************************************************************************/
 /*                          Definition of namespace                           */
@@ -50,8 +51,7 @@ inline uint64_t ntohll(uint64_t x) {
     uint32_t low = static_cast<uint32_t>(x & 0xFFFFFFFF);
 
     // 分别交换高32位和低32位，然后合并
-    return (static_cast<uint64_t>(ntohl(low)) << 32) |
-           static_cast<uint64_t>(ntohl(high));
+    return (static_cast<uint64_t>(ntohl(low)) << 32) | static_cast<uint64_t>(ntohl(high));
 }
 
 /**
@@ -70,15 +70,14 @@ inline int16_t RS_SWAP_INT16(int16_t value) {
  * \brief Constructor of the DecoderRSEMX class.
  * \param[in] param The decoder parameter
  */
-DecoderRSEMX::DecoderRSEMX(const RSDecoderParam& param) :
-                Decoder(getConstParam(), param) {
+DecoderRSEMX::DecoderRSEMX(const RSDecoderParam& param) : Decoder(getConstParam(), param) {
     packet_ranges_ = {{1, 281, 281},    {282, 562, 281},   {563, 843, 281},
                       {844, 1124, 281}, {1125, 1405, 281}, {1406, 1520, 115}};
     yaw_offset_.fill(0);
 
     std::array<int32_t, EMX_PIXELS_PER_COLUMN> defaultAngle;
-    constexpr int32_t START_ANGLE {-2416};
-    constexpr int32_t ANGLE_STEP {21};
+    constexpr int32_t START_ANGLE{-2416};
+    constexpr int32_t ANGLE_STEP{21};
 
     for (uint16_t i = 0; i < EMX_PIXELS_PER_COLUMN; ++i) {
         defaultAngle[i] = START_ANGLE + i * ANGLE_STEP;
@@ -108,8 +107,7 @@ bool DecoderRSEMX::decodeDifopPkt(const uint8_t* packet, size_t size) {
     if (size != difop2_len) {
         LogError("wrong difop2 packet size: {}", size);
         return false;
-    } else if (0 != memcmp(packet, const_param_.difop_id,
-                           const_param_.difop_id_len)) {
+    } else if (0 != memcmp(packet, const_param_.difop_id, const_param_.difop_id_len)) {
         LogError("wrong difop2 packet id");
         return false;
     }
@@ -125,13 +123,11 @@ bool DecoderRSEMX::decodeDifopPkt(const uint8_t* packet, size_t size) {
     }
 
     for (uint16_t i = 0; i < EMX_PIXELS_PER_COLUMN; i++) {
-        pitch_angle_[i] =
-            static_cast<int32_t>(RS_SWAP_INT16(pkt.pitch_angle[i]) >> 1);
+        pitch_angle_[i] = static_cast<int32_t>(RS_SWAP_INT16(pkt.pitch_angle[i]) >> 1);
     }
 
     for (uint16_t i = 0; i < EMX_SURFACE_NUM; i++) {
-        surface_pitch_offset_[i] = static_cast<int32_t>(
-            RS_SWAP_INT16(pkt.surface_pitch_offset[i]) >> 1);
+        surface_pitch_offset_[i] = static_cast<int32_t>(RS_SWAP_INT16(pkt.surface_pitch_offset[i]) >> 1);
     }
     angles_ready_ = true;
 
@@ -156,41 +152,78 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
     if (size != device_info_len) {
         LogError("wrong difop1 packet size: {}", size);
         return false;
-    } else if (0 != memcmp(packet, const_param_.device_info_id,
-                           const_param_.device_info_id_len)) {
+    } else if (0 != memcmp(packet, const_param_.device_info_id, const_param_.device_info_id_len)) {
         LogError("wrong device info id");
         return false;
     } else if (!device_info_) {
         LogError("device info is nullptr");
         return false;
     }
+
     const RSEMXDeviceInfoPkt& pkt = *(const RSEMXDeviceInfoPkt*)(packet);
-
     device_info_->firware_version = ntohs(pkt.device_version.sw_version);
+    constexpr int obstruct_report_time_{500};
+
     if (pkt.work_info.win_block_status != 0) {
-        LogWarn(" Lidar Obstruction Fault, win_block_status:{}",
-                pkt.work_info.win_block_status);
-        FaultManager::getInstance().setFault(FaultBits::LidarObstructionFault);
+        auto now = std::chrono::steady_clock::now();
+        if (!obstruct_detected_) {
+            // 第一次检测到遮挡，开始计时
+            obstruct_start_time_ = now;
+            obstruct_detected_ = true;
+            LogDebug("Obstruction detected, starting timer");
+        } else {
+            // 持续检测到遮挡，检查是否达到500ms
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - obstruct_start_time_);
+
+            if (duration.count() >= obstruct_report_time_) {
+                LogWarn("Lidar Obstruction Fault persisted for 500ms, win_block_status:{}",
+                        pkt.work_info.win_block_status);
+                FaultManager64::getInstance().setFault(FaultBits::LidarObstructionFault);
+            }
+        }
+    } else {
+        // 没有检测到遮挡
+        if (obstruct_detected_) {
+            LogDebug("Obstruction cleared");
+            obstruct_detected_ = false;
+
+            // 清除故障（如果之前已经报告过）
+            if (FaultManager64::getInstance().hasFault(FaultBits::LidarObstructionFault)) {
+                FaultManager64::getInstance().clearFault(FaultBits::LidarObstructionFault);
+                LogInfo("Lidar Obstruction Fault cleared");
+            }
+        }
     }
-
     device_info_->lidar_operation_state = (pkt.fault_level != 0);
-    device_info_->lidar_fault_state =
-        (pkt.fault_level > 1) ? (2) : pkt.fault_level;
-    device_info_->supplier_internal_fault_id = ntohs(pkt.fault_id);
-    (void)std::reverse_copy(std::begin(pkt.fault_value),
-                            std::end(pkt.fault_value),
-                            device_info_->supplier_internal_fault_indicate);
-    device_info_->time_sync_mode = pkt.time_info.time_sync_mode;
-    device_info_->time_sync_status =
-        pkt.time_info.time_sync_status == 0x1 ? 1 : 0;
+    device_info_->lidar_fault_state = (pkt.fault_level > 1) ? (2) : pkt.fault_level;
+    device_info_->sdk_total_fault_number = FaultManager64::getInstance().countFaults();
+    device_info_->sdk_fault_code_position = FaultManager64::getInstance().getFaults();
+    device_info_->supplier_internal_fault_id = (pkt.fault_id1);
 
+    (void)std::copy(std::begin(pkt.fault_value1), std::end(pkt.fault_value1),
+                            device_info_->supplier_internal_fault_indicate);
+
+    device_info_->time_sync_mode = pkt.time_info.time_sync_mode;
+    device_info_->time_sync_status = (pkt.time_info.time_sync_status == 0x1) ? 1 : 0;
     device_info_->timestamp = parseTimeUTCWithUs(pkt.time_info.timestamp);
     device_info_->time_offset = ntohll(pkt.time_info.time_offset);
 
-    (void)std::reverse_copy(std::begin(pkt.customer_sn),
-                            std::end(pkt.customer_sn),
-                            device_info_->lidar_product_sn);
+    (void)std::copy(std::begin(pkt.customer_sn), std::end(pkt.customer_sn), device_info_->lidar_product_sn);
     device_info_->model = 0x01;
+    std::memcpy(&device_info_->reserved[0], &pkt.fault_id2, 2);
+    std::memcpy(&device_info_->reserved[2], &pkt.fault_value2, 4);
+    device_info_->reserved[6] = 0;
+
+    for(size_t i = 0; i < 10; i++) {
+        if(1 == ((pkt.dtc >> i) & 0x01)) {
+            device_info_->reserved[6]++;
+        }
+    }
+    std::memcpy(&device_info_->reserved[7], &pkt.dtc, 3);
+
+    std::unique_lock<std::mutex> lock(mtx_point_cloud_);
+    point_cloud_->sync_status = device_info_->time_sync_status;
+
     return true;
 }
 
@@ -213,8 +246,7 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
     if (size != msop_pkt_size) {
         LogError("Wrong MSOP packet size: {}", size);
         return false;
-    } else if (0 != memcmp(packet, const_param_.msop_id,
-                            const_param_.msop_id_len)) {
+    } else if (0 != memcmp(packet, const_param_.msop_id, const_param_.msop_id_len)) {
         LogError("Wrong MSOP packet id");
         return false;
     } else if (point_cloud_ == nullptr) {
@@ -226,12 +258,11 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
     uint16_t raw_pkt_seq = ntohs(pkt.header.pkt_seq); // 1 ~ 1520
 
     if (raw_pkt_seq < EMX_PKT_SEQ_MIN || raw_pkt_seq > EMX_PKT_SEQ_MAX) {
-        LogError("MSOP pkt seq: {}, out of range {} - {}",
-                raw_pkt_seq, EMX_PKT_SEQ_MIN, EMX_COLUMNS_PER_FRAME);
+        LogError("MSOP pkt seq: {}, out of range {} - {}", raw_pkt_seq, EMX_PKT_SEQ_MIN, EMX_COLUMNS_PER_FRAME);
         return false;
     }
-    static uint16_t last_pkt_seq {0U};
-    static uint64_t first_pkt_ts {0UL};
+    static uint16_t last_pkt_seq{0U};
+    static uint64_t first_pkt_ts{0UL};
     uint32_t frame_cnt = ntohl(pkt.header.frame_cnt);
 
     // Determine whether packet loss has occurred
@@ -262,15 +293,13 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
     uint8_t surface_index = pkt.header.surface_id;
 
     if (surface_index >= EMX_SURFACE_NUM) {
-        LogError("surface_id out of range, surface_id is: {}, max is {}",
-                 surface_index, EMX_SURFACE_NUM);
+        LogError("surface_id out of range, surface_id is: {}, max is {}", surface_index, EMX_SURFACE_NUM);
         return false;
     }
 
     auto& current_block = point_cloud_->packets[pkt_seq];
     // Set the Block header
-    current_block.time_offset = static_cast<uint16_t>(
-            std::round(0.1 * (pkt_ts - first_pkt_ts))); // time offset, unit 10us
+    current_block.time_offset = static_cast<uint16_t>(std::round(0.1 * (pkt_ts - first_pkt_ts))); // time offset, unit 10us
     current_block.azimuth = pkt.header.yaw;
 
     for (uint16_t pixel_id = 0; pixel_id < pixel_per_pkt; ++pixel_id) {
@@ -305,11 +334,9 @@ void DecoderRSEMX::setPacketHeader(const RSEMXMsopPkt& pkt) {
         return;
     }
     std::unique_lock<std::mutex> lock(mtx_point_cloud_);
-
     point_cloud_->frame_timestamp = parseTimeUTCWithUs(pkt.header.timestamp);
     point_cloud_->point_num = 0U;
     point_cloud_->frame_seq = ntohl(pkt.header.frame_cnt);
-
     static bool lidar_parameter_malloc{false};
 
     if (difop2_received_) {
@@ -325,8 +352,9 @@ void DecoderRSEMX::setPacketHeader(const RSEMXMsopPkt& pkt) {
         point_cloud_->lidar_parameter = nullptr;
         point_cloud_->lidar_parameter_length = 0;
     }
-    point_cloud_->return_mode = 0x01;
-    point_cloud_->sync_status = pkt.header.time_mode;
+    point_cloud_->protocol_version = LIDAR_SDK_API_VER_MAJOR * 10000 + LIDAR_SDK_API_VER_MINOR * 100 + LIDAR_SDK_API_VER_PATCH;
+    point_cloud_->return_mode = 0x01; // SDK默认输出为0x01最强回波
+    //point_cloud_->sync_status = device_info_->time_sync_status; // packets同步状态取DIFOP1中的TimesyncStatus，与device_info中保持一致
     point_cloud_->frame_sync = pkt.header.synchronized;
     point_cloud_->mirror_id = pkt.header.surface_id;
     point_cloud_->packet_num = EMX_PKT_SEQ_MAX;

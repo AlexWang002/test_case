@@ -19,5 +19,5 @@ project(upsample_programm)
 # The first argument is the name of the target, subsequent arguments are the list of files to build.
 # [pva_device]
 pva_device(upsample_dev
-    upsample_top.c)
+    upsample_top_v.c)
 # [pva_device]
