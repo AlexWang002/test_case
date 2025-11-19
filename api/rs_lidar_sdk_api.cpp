@@ -15,6 +15,8 @@
  * | 0.1 | 2025-07-07 | Init version |
  * | 1.0 | 2025-07-07 | Refactor file format, fix static warning |
  * | 1.1 | 2025-08-04 | Refactor file format |
+ * | 1.2 | 2025-10-14 | Add function injectAlarmInfo and powerOff and setCalibrationEnable |
+ *
  ******************************************************************************/
 
 /******************************************************************************/
@@ -63,9 +65,18 @@ EXPORT LidarSdkInterface* getRSLidarSdkInterface(size_t sizeOfInterface) {
         .stop = [](void) -> LidarSdkErrorCode {
             return RSLidarSdkInterface::getInstance().stop();
         },
+        .powerOff = [](void) -> LidarSdkErrorCode {
+            return RSLidarSdkInterface::getInstance().powerOff();
+        },
+        .setCalibrationEnable = [](const bool enabled) -> LidarSdkErrorCode {
+            return RSLidarSdkInterface::getInstance().setCalibrationEnable(enabled);
+        },
         .injectAdc = [](LidarSensorIndex sensor,
                         const void* ptrAdc) -> LidarSdkErrorCode {
             return RSLidarSdkInterface::getInstance().injectAdc(sensor, ptrAdc);
+        },
+        .injectAlarmInfo = [](const LidarAlarmInfo& lidarAlarmInfo) -> LidarSdkErrorCode {
+            return RSLidarSdkInterface::getInstance().injectAlarmInfo(lidarAlarmInfo);
         },
         .writeDid = [](uint16_t did, uint8_t* data, uint16_t dataLen,
                         uint8_t* nrc) -> LidarSdkErrorCode {

@@ -40,21 +40,22 @@ using namespace cupva;
 
 PVA_DECLARE_EXECUTABLE(upsample_dev)
 
-uint16_t DistOutUp[VIEW_HEIGHT][VIEW_WIDTH] = {0};
-uint8_t RefOutUp[VIEW_HEIGHT][VIEW_WIDTH] = {0};
-
 uint16_t *DistDownIn_d = nullptr;
 uint16_t *DistDownIn_h = nullptr;
 uint16_t *DistRawIn_d = nullptr;
 uint16_t *DistRawIn_h = nullptr;
-uint8_t *RefDownIn_d = nullptr;
-uint8_t *RefDownIn_h = nullptr;
-uint8_t *RefRawIn_d = nullptr;
-uint8_t *RefRawIn_h = nullptr;
+uint16_t *RefDownIn_d = nullptr;
+uint16_t *RefDownIn_h = nullptr;
+uint16_t *RefRawIn_d = nullptr;
+uint16_t *RefRawIn_h = nullptr;
+uint16_t *AttrIn_d = nullptr;
+uint16_t *AttrIn_h = nullptr;
 uint16_t *DistOutUp_d = nullptr;
 uint16_t *DistOutUp_h = nullptr;
-uint8_t *RefOutUp_d = nullptr;
-uint8_t *RefOutUp_h = nullptr;
+uint16_t *RefOutUp_d = nullptr;
+uint16_t *RefOutUp_h = nullptr;
+uint16_t *AttrOutUp_d = nullptr;
+uint16_t *AttrOutUp_h = nullptr;
 
 Stream upsample_stream;
 namespace {
@@ -71,19 +72,24 @@ void upsampleDataAlloc()
     DistRawIn_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
     DistRawIn_h = (uint16_t *)mem::GetHostPointer(DistRawIn_d);
 
-    RefDownIn_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
-    RefDownIn_h = (uint8_t *)mem::GetHostPointer(RefDownIn_d);
+    RefDownIn_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
+    RefDownIn_h = (uint16_t *)mem::GetHostPointer(RefDownIn_d);
 
-    RefRawIn_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
-    RefRawIn_h = (uint8_t *)mem::GetHostPointer(RefRawIn_d);
+    RefRawIn_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
+    RefRawIn_h = (uint16_t *)mem::GetHostPointer(RefRawIn_d);
+
+    AttrIn_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
+    AttrIn_h = (uint16_t *)mem::GetHostPointer(AttrIn_d);
 
     DistOutUp_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
     DistOutUp_h = (uint16_t *)mem::GetHostPointer(DistOutUp_d);
 
-    RefOutUp_d = (uint8_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
-    RefOutUp_h = (uint8_t *)mem::GetHostPointer(RefOutUp_d);
+    RefOutUp_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
+    RefOutUp_h = (uint16_t *)mem::GetHostPointer(RefOutUp_d);
 
-    upsample_stream = Stream::Create(PVA0, VPU0);
+    AttrOutUp_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
+    AttrOutUp_h = (uint16_t *)mem::GetHostPointer(AttrOutUp_d);
+    upsample_stream = Stream::Create(PVA0, VPU1);
 }
 
 /**
@@ -95,8 +101,10 @@ void upsampleDataFree()
     mem::Free(DistRawIn_d);
     mem::Free(RefDownIn_d);
     mem::Free(RefRawIn_d);
+    mem::Free(AttrIn_d);
     mem::Free(DistOutUp_d);
     mem::Free(RefOutUp_d);
+    mem::Free(AttrOutUp_d);
 }
 
 /**
@@ -132,7 +140,7 @@ void upsample_main()
 
         RasterDataFlow &InputRefDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto InputRefDataFlowHandler     = prog["InputRefDataFlowHandler"];
-        uint8_t *inputRefBufferVMEM   = prog["inputRefBufferVMEM"].ptr<uint8_t>();
+        uint16_t *inputRefBufferVMEM   = prog["inputRefBufferVMEM"].ptr<uint16_t>();
         InputRefDataFlow.handler(InputRefDataFlowHandler)
             .src(RefDownIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputRefBufferVMEM)
@@ -141,11 +149,20 @@ void upsample_main()
 
         RasterDataFlow &InputRefRawDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto InputRefRawDataFlowHandler     = prog["InputRefRawDataFlowHandler"];
-        uint8_t *inputRefRawBufferVMEM   = prog["inputRefRawBufferVMEM"].ptr<uint8_t>();
+        uint16_t *inputRefRawBufferVMEM   = prog["inputRefRawBufferVMEM"].ptr<uint16_t>();
         InputRefRawDataFlow.handler(InputRefRawDataFlowHandler)
             .src(RefRawIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputRefRawBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
+
+        RasterDataFlow &InputAttrDataFlow = prog.addDataFlowHead<RasterDataFlow>();
+        auto InputAttrDataFlowHandler     = prog["InputAttrDataFlowHandler"];
+        uint16_t *inputAttrBufferVMEM   = prog["inputAttrBufferVMEM"].ptr<uint16_t>();
+        InputAttrDataFlow.handler(InputAttrDataFlowHandler)
+            .src(AttrIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(inputAttrBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT)
+            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
         RasterDataFlow &OutputDistUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto OutputDistUpDataFlowHandler     = prog["OutputDistUpDataFlowHandler"];
@@ -157,33 +174,31 @@ void upsample_main()
 
         RasterDataFlow &OutputRefUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto OutputRefUpDataFlowHandler     = prog["OutputRefUpDataFlowHandler"];
-        uint8_t *outputRefUpBufferVMEM       = prog["outputRefUpBufferVMEM"].ptr<uint8_t>();
+        uint16_t *outputRefUpBufferVMEM       = prog["outputRefUpBufferVMEM"].ptr<uint16_t>();
         OutputRefUpDataFlow.handler(OutputRefUpDataFlowHandler)
             .dst(RefOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(outputRefUpBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT);
+
+        RasterDataFlow &OutputAttrUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
+        auto OutputAttrDataFlowHandler     = prog["OutputAttrDataFlowHandler"];
+        uint16_t *outputAttrBufferVMEM       = prog["outputAttrBufferVMEM"].ptr<uint16_t>();
+        OutputAttrUpDataFlow.handler(OutputAttrDataFlowHandler)
+            .dst(AttrOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(outputAttrBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
         /** 编译程序数据流 */
         prog.compileDataFlows();
 
         SetVPUPrintBufferSize(64 * 1024);
-
-        /** 创建一个SyncObj对象，用于存储PVA与CPU同步所需的数据，是一个单调递增的整数，每次发出信号都会增加 */
         SyncObj sync = SyncObj::Create();
-        /** 创建一个栅栏对象，用于PVA程序之间的同步 */
         Fence fence{sync};
-        /** 将Fence封装在cmd中，与CmdProgram一起提交到PVA */
         CmdRequestFences rf{fence};
-        
         CmdStatus status[2];
         upsample_stream.submit({&prog, &rf}, status);
         /** 等待Fence失效 */
         fence.wait();
-        /** 将结果写入数组 */
-
-        memcpy(&DistOutUp[0][0], DistOutUp_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
-        memcpy(&RefOutUp[0][0], RefOutUp_h, VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint8_t));
-
         /** 检查cmd状态 */
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)

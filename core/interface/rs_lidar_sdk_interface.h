@@ -14,6 +14,7 @@
  * |-----|------------|--------------|
  * | 0.1 | 2025-08-07 | Init version |
  * | 0.2 | 2025-08-07 | Add Comments |
+ * | 1.0 | 2025-10-14 | Add function injectAlarmInfo and powerOff and setCalibrationEnable |
  *
  ******************************************************************************/
 #ifndef I_RS_LIDAR_SDK_INTERFACE_H
@@ -55,14 +56,14 @@ class RSLidarSdkInterface {
     LidarSdkErrorCode deInit();
     LidarSdkErrorCode start();
     LidarSdkErrorCode stop();
+    LidarSdkErrorCode powerOff(void);
+    LidarSdkErrorCode setCalibrationEnable(const bool enabled);
     LidarSdkErrorCode injectAdc(LidarSensorIndex sensor, const void* ptrAdc);
-    LidarSdkErrorCode writeDid(uint16_t did, uint8_t* data,
-                                uint16_t dataLen, uint8_t* nrc);
-    LidarSdkErrorCode readDid(uint16_t did, uint8_t* data,
-                                uint16_t* dataLen, uint8_t* nrc);
-    LidarSdkErrorCode ridControl(uint8_t mode, uint16_t rid, uint8_t* dataIn,
-                                uint16_t dataInLen, uint8_t* dataOut,
-                                uint16_t* dataOutLen, uint8_t* nrc);
+    LidarSdkErrorCode injectAlarmInfo(const LidarAlarmInfo& lidarAlarmInfo);
+    LidarSdkErrorCode writeDid(uint16_t did, uint8_t* data, uint16_t dataLen, uint8_t* nrc);
+    LidarSdkErrorCode readDid(uint16_t did, uint8_t* data, uint16_t* dataLen, uint8_t* nrc);
+    LidarSdkErrorCode ridControl(uint8_t mode, uint16_t rid, uint8_t* dataIn, uint16_t dataInLen, uint8_t* dataOut,
+                                 uint16_t* dataOutLen, uint8_t* nrc);
 
   private:
     RSLidarSdkInterface();

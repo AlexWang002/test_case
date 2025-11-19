@@ -111,12 +111,18 @@ bool Decoder::processDeviceInfoPkt(const uint8_t* pkt, size_t size) {
 bool Decoder::init() {
     if (!allocatePointCloud()) {
         LogError("Failed to allocate point cloud!");
+        FaultManager8::getInstance().setFault(FaultBits8::LidarPointCloudBufferNull);
         return false;
     }
 
     if (!allocateDeviceInfo()) {
         LogError("Failed to allocate device info!");
+        FaultManager8::getInstance().setFault(FaultBits8::LidarPointCloudBufferNull);
         return false;
+    }
+
+    if (FaultManager8::getInstance().hasFault(FaultBits8::LidarPointCloudBufferNull)){
+        FaultManager8::getInstance().clearFault(FaultBits8::LidarPointCloudBufferNull);
     }
     initPointCloud();
     initDeviceInfo();

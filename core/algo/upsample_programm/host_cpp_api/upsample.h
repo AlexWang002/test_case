@@ -32,22 +32,23 @@
 /******************************************************************************/
 /*                     Declaration of exported variables                      */
 /******************************************************************************/
-extern uint16_t DistOutUp[VIEW_HEIGHT][VIEW_WIDTH];
-extern uint8_t RefOutUp[VIEW_HEIGHT][VIEW_WIDTH];
-
 extern uint16_t *DistDownIn_d;
 extern uint16_t *DistDownIn_h;
 extern uint16_t *DistRawIn_d;
 extern uint16_t *DistRawIn_h;
-extern uint8_t *RefDownIn_d;
-extern uint8_t *RefDownIn_h;
-extern uint8_t *RefRawIn_d;
-extern uint8_t *RefRawIn_h;
+extern uint16_t *RefDownIn_d;
+extern uint16_t *RefDownIn_h;
+extern uint16_t *RefRawIn_d;
+extern uint16_t *RefRawIn_h;
+extern uint16_t *AttrIn_d;
+extern uint16_t *AttrIn_h;
+
 extern uint16_t *DistOutUp_d;
 extern uint16_t *DistOutUp_h;
-extern uint8_t *RefOutUp_d;
-extern uint8_t *RefOutUp_h;
-
+extern uint16_t *RefOutUp_d;
+extern uint16_t *RefOutUp_h;
+extern uint16_t *AttrOutUp_d;
+extern uint16_t *AttrOutUp_h;
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
 /******************************************************************************/

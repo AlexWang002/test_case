@@ -41,17 +41,17 @@ AllowAllConstructorInitializersOnNextLine: true
 # 允许函数声明中的参数都堆放在下一行
 AllowAllParametersOfDeclarationOnNextLine: true
 
-# 允许短的块放在同一行
-AllowShortBlocksOnASingleLine: Always
+# 仅允许空的块放在同一行
+AllowShortBlocksOnASingleLine: Empty
 
-# 允许短的case放在同一行
-AllowShortCaseLabelsOnASingleLine: true
+# 不允许短的case放在同一行
+AllowShortCaseLabelsOnASingleLine: false
 
-# 允许短的enum放在同一行
-AllowShortEnumsOnASingleLine: true
+# 不允许短的enum放在同一行
+AllowShortEnumsOnASingleLine: false
 
-# 允许所有短的函数放在同一行
-AllowShortFunctionsOnASingleLine: All
+# 不允许所有短的函数放在同一行
+AllowShortFunctionsOnASingleLine: None
 
 # 不允许短的if表达式放在同一行
 AllowShortIfStatementsOnASingleLine: Never
@@ -78,7 +78,7 @@ AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: true
 
 # 函数声明的形参是否都在同一行
-BinPackParameters: false
+BinPackParameters:      true
 
 # 大括号是否换行，只有当BreakBeforeBraces设置为Custom时才有效
 BreakBeforeBraces: Custom
@@ -136,7 +136,7 @@ BreakInheritanceList: AfterColon
 BreakStringLiterals: true
 
 # 一行的字符限制
-ColumnLimit:     80
+ColumnLimit:     120
 
 # 特殊的注释？
 CommentPragmas:  '^ IWYU pragma:'
@@ -150,8 +150,8 @@ ConstructorInitializerIndentWidth: 2
 # 连续行（语句一行写不下）的缩进
 ContinuationIndentWidth: 4
 
-# 大括号初始化，设置为括号中有空格
-Cpp11BracedListStyle: false
+# 大括号初始化，设置为括号中无空格
+Cpp11BracedListStyle: true
 
 # 自动分析用哪种换行，如果找不到，则使用UseCRLF的值。
 DeriveLineEnding: true
@@ -231,10 +231,10 @@ PenaltyExcessCharacter: 1000
 PenaltyReturnTypeOnItsOwnLine: 0
 
 # 不要重新整理注释
-ReflowComments:  false
+ReflowComments: false
 
 # 是否对include的头文件进行自动排序，有些是有依赖顺序的，不应该随意更改。
-SortIncludes:    true
+SortIncludes: true
 
 # 是否对using的声明进行排序
 SortUsingDeclarations: true
@@ -248,7 +248,7 @@ SpaceAfterLogicalNot: false
 # 在template后面是否加空格
 SpaceAfterTemplateKeyword: true
 
-# 在赋值符前面是否加空格
+# 在赋值符前面加空格
 SpaceBeforeAssignmentOperators: true
 
 # 在初始化列表前是否加空格

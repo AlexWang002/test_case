@@ -1,21 +1,22 @@
 
-#include <sched.h>
-#include <pthread.h>
-#include <string>
-#include <vector>
 #include <cstring>
-#include <iostream>
-#include <unistd.h>
 #include <errno.h>
+#include <iostream>
+#include <pthread.h>
+#include <sched.h>
+#include <string>
+#include <unistd.h>
+#include <vector>
 
+#include "common/fault_manager.h"
 #include "rs_new_logger.h"
 #include "thread_config.h"
 
-namespace robosense
-{
-namespace lidar
-{
-    std::thread createConfiguredStdThread(const yaml::ThreadConfig& config, std::function<void()> entry) {
+namespace robosense::lidar::thread {
+
+std::vector<ThreadConfig> thread_params;
+
+std::thread createConfiguredStdThread(const ThreadConfig& config, std::function<void()> entry) {
     return std::thread([config, entry]() {
         LogWarn("Thread id: {} policy: {} priority: {}", config.id, config.policy, config.priority);
         for (int i : config.cpu_affinity) {
@@ -24,14 +25,17 @@ namespace lidar
 
         // 设置调度策略和优先级
         int policy = SCHED_OTHER;
-        if (config.policy == "SCHED_FIFO") policy = SCHED_FIFO;
-        else if (config.policy == "SCHED_RR") policy = SCHED_RR;
+        if (config.policy == "SCHED_FIFO")
+            policy = SCHED_FIFO;
+        else if (config.policy == "SCHED_RR")
+            policy = SCHED_RR;
 
         sched_param param;
         param.sched_priority = config.priority;
         if (pthread_setschedparam(pthread_self(), policy, &param) != 0) {
             std::cerr << "Failed to set schedparam: " << std::strerror(errno) << std::endl;
             LogError("Failed to set schedparam: {}", std::strerror(errno));
+            FaultManager8::getInstance().setFault(FaultBits8::LidarThreadSetError);
         }
 
         // 设置 CPU 亲和性
@@ -44,6 +48,7 @@ namespace lidar
             if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0) {
                 std::cerr << "Failed to set CPU affinity: " << std::strerror(errno) << std::endl;
                 LogError("Failed to set CPU affinity: {}", std::strerror(errno));
+                FaultManager8::getInstance().setFault(FaultBits8::LidarThreadSetError);
             }
         }
 
@@ -51,5 +56,5 @@ namespace lidar
         entry();
     });
 }
-}
-}
+
+} // namespace robosense::lidar::thread

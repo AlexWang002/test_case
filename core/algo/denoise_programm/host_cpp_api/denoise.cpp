@@ -60,7 +60,7 @@ int denoiseDataAlloc()
         denoise_mask_buffer_d = (uint16_t *)mem::Alloc(TILE_WIDTH * VIEW_HEIGHT * sizeof(uint16_t));
         denoise_mask_buffer_h = (uint16_t *)mem::GetHostPointer(denoise_mask_buffer_d);
 
-        denoise_stream = Stream::Create(PVA0, VPU0);
+        denoise_stream = Stream::Create(PVA0, VPU1);
     }
     catch (cupva::Exception const &e)
     {

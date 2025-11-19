@@ -13,10 +13,14 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
- * 
+ *
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.2 | 2025-09-29 | Use vpu's Wide-SIMD vector processor to accelerate denoise algo|
+ * 
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.3 | 2025-11-18 | Add row id judgement|
  *
  ******************************************************************************/
 /******************************************************************************/
@@ -48,11 +52,13 @@ VMEM(C, RasterDataFlowHandler, src_dist_dataflow_handler);
 VMEM_RDF_UNIFIED(B, dst_mask_dataflow_handler);
 VMEM_RDF_UNIFIED(B, dst_last_mask_dataflow_handler);
 
-dvshortx dist[5][3];  // 5*3滑窗dist值
+dvshortx row_id[6];
 dvshortx vec0;        // 0向量
 
 /*二维去噪算法AGEN结构体*/
 typedef struct {
+    AgenCFG row_id;
+
     AgenCFG input_dist;       // 输入dist agen
     AgenCFG output_mask;      // 输出mask agen
     AgenCFG load_mask;        // 加载vpu_mask agen(包含halo)
@@ -204,10 +210,42 @@ void agenConfig(uint16_t *input_dist, uint16_t *vpu_mask, uint16_t *output_mask,
     config->niter = (TILE_WIDTH / vecw) * TILE_HEIGHT;
 }
 
+void initRowIds(uint16_t *row_ids)
+{
+    for (int i = 0; i < 192; i ++) {
+        row_ids[i] = i;
+    }
+}
+
+void agenConfigInit(DenoiseConfig_t *config, uint16_t *row_ids)
+{
+    config->vecw = pva_elementsof(dvshortx);
+    int32_t vecw = config->vecw;
+
+    AgenWrapper row_id_wrapper;
+    row_id_wrapper.size = sizeof(uint16_t);
+    row_id_wrapper.n1 = TILE_WIDTH / vecw;
+    row_id_wrapper.s1 = vecw;
+    agen row_id_agen = init((dvushort *)row_ids);
+    INIT_AGEN1(row_id_agen, row_id_wrapper);
+    config->row_id = extract_agen_cfg(row_id_agen);
+}
+
 CUPVA_VPU_MAIN()
 {
     NoiseParam_t *params = (NoiseParam_t *)algorithmParams;
     DenoiseConfig_t config;
+
+    dvshortx dist[5][3];  // 5*3滑窗dist值
+
+    uint16_t row_ids[192];
+    initRowIds(row_ids);
+    agenConfigInit(&config, row_ids);
+
+    agen row_id_agen = init_agen_from_cfg(config.row_id);
+    for (int i = 0; i < 6; i ++) {
+        row_id[i] = dvushort_load(row_id_agen);
+    }
 
     int32_t src_line_pitch       = cupvaRasterDataFlowGetLinePitch(src_dist_dataflow_handler); // src_line_pitch的值为192：每一列（192）上下各补0个点
     int32_t dst_line_pitch       = cupvaRasterDataFlowGetLinePitch(dst_mask_dataflow_handler);
@@ -228,9 +266,8 @@ CUPVA_VPU_MAIN()
     for (int tile_idx = 0; tile_idx < TILE_CNT; tile_idx ++) {
         cupvaRasterDataFlowSync(src_dist_dataflow_handler);
         cupvaRasterDataFlowTrig(src_dist_dataflow_handler);
-        
+
         uint16_t *output_mask  = (uint16_t *)cupvaRasterDataFlowAcquire(dst_mask_dataflow_handler);
-#if 1 
         agenConfig(input_dist_vmem + src_offset, vpu_mask_vmem, output_mask, src_line_pitch, &config);
 
         agen input_agen = init_agen_from_cfg(config.input_dist);
@@ -262,6 +299,8 @@ CUPVA_VPU_MAIN()
         for (int32_t i = 0; i < niter; i ++) chess_prepare_for_pipelining
         chess_unroll_loop(2)
         {
+            int seg_id = i % 6;
+
             for (int r = 0; r < 3; r ++) {
                 for (int c = 0; c < 5; c ++) {
                     dist[c][r] = dvushort_load(input_agen);
@@ -339,6 +378,7 @@ CUPVA_VPU_MAIN()
 
             /*去噪条件判断优化*/
             cond = ((neib_valid_num + valid_pre_2 >= threshold)
+                    | (row_id[seg_id] == (TILE_WIDTH - 1) && (valid_pre_2 >= threshold1))
                     | (neib_valid_num + valid_pre_2 >= threshold)
                     | (valid_pre_3 + valid_pre_2 >= threshold2));
 
@@ -348,7 +388,7 @@ CUPVA_VPU_MAIN()
                 for (int c = 0; c < 5; c ++) {
                     dvshortx output_valid = dvushort_load(load_mask_agen);
                     /*传播有效标记优化*/
-                    output_valid = (dist_valid & denoise_refer_mask == 1 & cond & valid_mask[c][r]) | output_valid;
+                    dvshortx valid_tmp = dist_valid & denoise_refer_mask == 1 & cond & valid_mask[c][r];
                     if (r == 1) {
                         if (c == 2) {
                             output_valid |= (dist_valid & (denoise_refer_mask == 2 | (denoise_refer_mask == 1 & cond)));
@@ -358,6 +398,13 @@ CUPVA_VPU_MAIN()
                             output_valid |= (denoise_refer_mask == 2 & valid_mask[c][r] & dist_valid);
                         }
                     }
+                    else {
+                        /*传播有效标记优化*/
+                        output_valid |= (valid_tmp & row_id[seg_id] > 0 & row_id[seg_id] < (TILE_WIDTH - 1));
+                    }
+
+                    output_valid |= (valid_tmp & (row_id[seg_id] == 0 | row_id[seg_id] == (TILE_WIDTH - 1)));
+
                     vstore(output_valid, store_mask_agen);
                 }
             }
@@ -384,8 +431,6 @@ CUPVA_VPU_MAIN()
                 vstore(lask_mask, next_agen);
             }
         }
-
-#endif
         src_offset = cupvaRasterDataFlowGetOffset(src_dist_dataflow_handler, src_offset);
         cupvaRasterDataFlowRelease(dst_mask_dataflow_handler);
 

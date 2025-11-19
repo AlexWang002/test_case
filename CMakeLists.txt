@@ -3,12 +3,13 @@ find_package(pva-sdk 2.5 REQUIRED)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-project(lidar_robosense_SDK LANGUAGES CXX VERSION 1.02.00)
+project(lidar_robosense_SDK LANGUAGES CXX VERSION 2.00.00)
 
 # Options
 option(COMPILE_EXAMPLES "Build Lidar SDK examples" ON)
 option(COMPILE_ARM_VERSION "Build arm version" OFF)
 option(COMPILE_TABLE_HIDE "Hide interface or not" ON)
+option(COMPILE_MIPI_10HZ "Hide interface or not" OFF)
 
 if(COMPILE_ARM_VERSION)
     message("Build arm version")
@@ -19,9 +20,13 @@ else()
     set(INSTALL_DIR ${CMAKE_CURRENT_LIST_DIR}/release/pc_release)
 endif()
 
+if(COMPILE_MIPI_10HZ)
+    message("COMPILE the MIPI 10HZ version")
+    add_compile_definitions(MIPI_10HZ=1)
+endif()
+
 # Add submodules
 add_subdirectory(${CMAKE_SOURCE_DIR}/3rdparty/rs_logger)
-add_subdirectory(${CMAKE_SOURCE_DIR}/3rdparty/yaml-cpp)
 
 # Include cmake files
 include(${CMAKE_SOURCE_DIR}/cmake/module.cmake)

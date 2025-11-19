@@ -60,8 +60,7 @@ inline LidarType strToLidarType(const std::string& type);
  */
 struct RSDecoderParam {
     LidarType lidar_type = LidarType::RSEMX; ///< Lidar type
-    bool wait_for_difop =
-        true; ///< true: start sending point cloud until receive difop packet
+    bool wait_for_difop = true; ///< true: start sending point cloud until receive difop packet
     float min_distance = 0.0f; ///< min distances of point cloud range.
     float max_distance = 0.0f; ///< max distances of point cloud range.
 

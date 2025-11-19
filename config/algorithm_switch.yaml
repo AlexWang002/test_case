@@ -1,5 +1,0 @@
-Algorithm_Switch:
-    enable_trail_remove: true
-    enable_denoise: true
-    enable_stray: true
-    enable_spray: true

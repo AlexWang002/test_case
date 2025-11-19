@@ -27,64 +27,71 @@
 /*                         Include dependant headers                          */
 /******************************************************************************/
 #include <atomic>
-#include <string>
-#include <sstream>
-#include <cstring>
 #include <bitset>
+#include <cstring>
 #include <mutex>
+#include <sstream>
+#include <string>
 #include <thread>
 
 /******************************************************************************/
 /*                  Using namespace, type or template alias                   */
 /******************************************************************************/
-namespace robosense
-{
-namespace lidar
-{
+namespace robosense {
+namespace lidar {
 /******************************************************************************/
 /*              Definition of local types (enum, struct, union)               */
 /******************************************************************************/
-enum class FaultBits : uint64_t
-{
-  LidarObstructionFault = 0,
-  DataAbnormalFault = 1,
-  LidarMIPIPacketLengthFault = 2,
-  LidarPointCloudBufferOverflowFault = 3,
-  LidarSDKLogicFault = 4,
-  LidarLaserAbnormal = 5,
-  LidarInternalParamReadFault = 6,
+enum class FaultBits : uint64_t {
+    LidarObstructionFault = 0,
+    DataAbnormalFault = 1,
+    LidarMIPIPacketLossFault = 2,
+    LidarPointCloudBufferOverflowFault = 3,
+    LidarSDKLogicFault = 4,
+    LidarLaserAbnormal = 5,
+    LidarInternalParamReadFault = 6,
+};
+
+enum class FaultBits8 : uint8_t {
+    LidarThreadNameFault = 0,
+    LidarThreadCrash = 1,
+    LidarThreadNumError = 2,
+    LidarThreadSetError = 3,
+    LidarPointCloudBufferNull = 4,
 };
 
 /******************************************************************************/
 /*                   Definition of classes or templates                       */
 /******************************************************************************/
-class FaultManager
-{
+template <typename T = uint64_t, typename FaultEnum = FaultBits>
+class FaultManager {
+    static_assert(std::is_unsigned<T>::value, "FaultManager only supports unsigned types");
+    static_assert(sizeof(T) >= sizeof(FaultEnum), "T must be large enough to hold FaultEnum values");
+
   private:
-    std::atomic<uint64_t> fault_status_;
-    mutable std::mutex fallback_mutex_;           // 降级时使用的互斥锁
-    static constexpr int32_t MAX_ATTEMPTS = 100;  // 最大重试次数
+    std::atomic<T> fault_status_;
+    mutable std::mutex fallback_mutex_;          // 降级时使用的互斥锁
+    static constexpr int32_t MAX_ATTEMPTS = 100; // 最大重试次数
 
     /**
      * \brief  Constructor function.
      */
-    FaultManager() : fault_status_(0)
-    {
+    FaultManager() : fault_status_(0) {
     }
 
     FaultManager(const FaultManager&) = delete;
     FaultManager& operator=(const FaultManager&) = delete;
 
   public:
+    uint8_t overflow_position_ {0};
     /**
      * \brief  Get an instance of FaultManager.
      *
      * \return an instance of FaultManager
      */
-    static FaultManager& getInstance()
-    {
-      static FaultManager instance;
-      return instance;
+    static FaultManager& getInstance() {
+        static FaultManager instance;
+        return instance;
     }
 
     /**
@@ -92,10 +99,9 @@ class FaultManager
      *
      * \param[in] fault : fault bits
      */
-    void setFault(FaultBits fault)
-    {
-      uint64_t mask = 1ULL << static_cast<uint64_t>(fault);
-      setFaultWithMask(mask);
+    void setFault(FaultEnum fault) {
+        T mask = static_cast<T>(1) << static_cast<T>(fault);
+        setFaultWithMask(mask);
     }
 
     /**
@@ -103,10 +109,9 @@ class FaultManager
      *
      * \param[in] fault : fault bits
      */
-    void clearFault(FaultBits fault)
-    {
-      uint64_t mask = 1ULL << static_cast<uint64_t>(fault);
-      clearFaultWithMask(mask);
+    void clearFault(FaultEnum fault) {
+        T mask = static_cast<T>(1) << static_cast<T>(fault);
+        clearFaultWithMask(mask);
     }
 
     /**
@@ -117,10 +122,9 @@ class FaultManager
      * \return true : given fault bits have been set; false : given fault bits
      *         haven't been set
      */
-    bool hasFault(FaultBits fault) const
-    {
-      uint64_t mask = 1ULL << static_cast<uint64_t>(fault);
-      return (fault_status_.load(std::memory_order_acquire) & mask) != 0;
+    bool hasFault(FaultEnum fault) const {
+        T mask = static_cast<T>(1) << static_cast<T>(fault);
+        return (fault_status_.load(std::memory_order_acquire) & mask) != 0;
     }
 
     /**
@@ -128,9 +132,8 @@ class FaultManager
      *
      * \return : the value of current fault bits
      */
-    uint64_t getFaults() const
-    {
-      return fault_status_.load(std::memory_order_acquire);
+    T getFaults() const {
+        return fault_status_.load(std::memory_order_acquire);
     }
 
     /**
@@ -138,10 +141,9 @@ class FaultManager
      *
      * \return the total count of the fault bits that are set
      */
-    int32_t countFaults() const
-    {
-      std::bitset<64> bits(fault_status_.load(std::memory_order_acquire));
-      return static_cast<int32_t>(bits.count());
+    int32_t countFaults() const {
+        std::bitset<sizeof(T) * 8> bits(fault_status_.load(std::memory_order_acquire));
+        return static_cast<int32_t>(bits.count());
     }
 
     /**
@@ -149,9 +151,8 @@ class FaultManager
      *
      * \param[in] faultMask : given fault mask
      */
-    void setFaults(uint64_t faultMask)
-    {
-      setFaultWithMask(faultMask);
+    void setFaults(T faultMask) {
+        setFaultWithMask(faultMask);
     }
 
     /**
@@ -159,9 +160,8 @@ class FaultManager
      *
      * \param[in] faultMask : given fault mask
      */
-    void clearFaults(uint64_t faultMask)
-    {
-      clearFaultWithMask(faultMask);
+    void clearFaults(T faultMask) {
+        clearFaultWithMask(faultMask);
     }
 
     /**
@@ -169,26 +169,45 @@ class FaultManager
      *
      * \return the description of the current fault bits
      */
-    std::string getFaultDescription() const
-    {
-      std::stringstream ss;
-      uint64_t currentFaults = fault_status_.load(std::memory_order_acquire);
+    std::string getFaultDescription() const {
+        std::stringstream ss;
+        T currentFaults = fault_status_.load(std::memory_order_acquire);
 
-      if (currentFaults == 0)
-      {
-        return "No faults";
-      }
-
-      ss << "Active faults: ";
-      for (size_t i = 0; i < 64; ++i)
-      {
-        if (currentFaults & (uint64_t(1) << i))
-        {
-          ss << "[" << static_cast<int32_t>(i) << "] ";
+        if (currentFaults == 0) {
+            return "No faults";
         }
-      }
 
-      return ss.str();
+        ss << "Active faults: ";
+        for (size_t i = 0; i < sizeof(T) * 8; ++i) {
+            if (currentFaults & (static_cast<T>(1) << i)) {
+                ss << "[" << static_cast<int32_t>(i) << "] ";
+            }
+        }
+
+        return ss.str();
+    }
+
+    /**
+     * @brief Get the fault Level object
+     * @return int32_t fault level
+     */
+    template <typename U = T, typename E = FaultEnum>
+    std::enable_if_t<std::is_same<U, uint64_t>::value && std::is_same<E, FaultBits>::value, int32_t> getFaultLevel() {
+        constexpr uint64_t kAllDefinedFaultsMask {0xFF}; // Covers bits 0 to 7
+        constexpr uint64_t kPrimaryFaultMask {1ULL << static_cast<uint64_t>(FaultBits::LidarObstructionFault)};
+        constexpr uint64_t kSecondaryFaultMask {kAllDefinedFaultsMask & ~kPrimaryFaultMask};
+
+        T current_status = fault_status_.load(std::memory_order_acquire);
+
+        // Check for any secondary faults (including only defined bits)
+        if (current_status & kSecondaryFaultMask) {
+            return 2;
+        }
+        // Check for primary fault
+        if (current_status & kPrimaryFaultMask) {
+            return 1;
+        }
+        return 0;
     }
 
   private:
@@ -197,32 +216,30 @@ class FaultManager
      *
      * \param[in] faultMask : given fault mask
      */
-    void setFaultWithMask(uint64_t mask)
-    {
-      uint64_t oldValue, newValue;
-      int32_t attempts = 0;
+    void setFaultWithMask(T mask) {
+        T oldValue, newValue;
+        int32_t attempts = 0;
 
-      // 尝试使用原子操作
-      while (attempts < MAX_ATTEMPTS)
-      {
-        oldValue = fault_status_.load(std::memory_order_relaxed);
-        newValue = oldValue | mask;
+        // 尝试使用原子操作
+        while (attempts < MAX_ATTEMPTS) {
+            oldValue = fault_status_.load(std::memory_order_relaxed);
+            newValue = oldValue | mask;
 
-        if (fault_status_.compare_exchange_weak(oldValue, newValue, std::memory_order_release, std::memory_order_relaxed))
-        {
-          return;  // 操作成功
+        if (fault_status_.compare_exchange_weak(oldValue, newValue,
+                                                    std::memory_order_release,
+                                                    std::memory_order_relaxed)) {
+                return; // 操作成功
+            }
+
+            attempts++;
+            if (attempts % 10 == 0) {
+                std::this_thread::yield(); // 让出CPU，减少竞争
+            }
         }
 
-        attempts++;
-        if (attempts % 10 == 0)
-        {
-          std::this_thread::yield();  // 让出CPU，减少竞争
-        }
-      }
-
-      // 原子操作失败，使用互斥锁降级
-      std::lock_guard<std::mutex> lock(fallback_mutex_);
-      (void)fault_status_.fetch_or(mask, std::memory_order_release);
+        // 原子操作失败，使用互斥锁降级
+        std::lock_guard<std::mutex> lock(fallback_mutex_);
+        (void)fault_status_.fetch_or(mask, std::memory_order_release);
     }
 
     /**
@@ -230,35 +247,36 @@ class FaultManager
      *
      * \param[in] faultMask : given fault mask
      */
-    void clearFaultWithMask(uint64_t mask)
-    {
-      uint64_t oldValue, newValue;
-      int32_t attempts = 0;
+    void clearFaultWithMask(T mask) {
+        T oldValue, newValue;
+        int32_t attempts = 0;
 
-      // 尝试使用原子操作
-      while (attempts < MAX_ATTEMPTS)
-      {
-        oldValue = fault_status_.load(std::memory_order_relaxed);
-        newValue = oldValue & ~mask;
+        // 尝试使用原子操作
+        while (attempts < MAX_ATTEMPTS) {
+            oldValue = fault_status_.load(std::memory_order_relaxed);
+            newValue = oldValue & ~mask;
 
-        if (fault_status_.compare_exchange_weak(oldValue, newValue, std::memory_order_release, std::memory_order_relaxed))
-        {
-          return;  // 操作成功
+        if (fault_status_.compare_exchange_weak(oldValue, newValue,
+                                                std::memory_order_release,
+                                                std::memory_order_relaxed)) {
+                return; // 操作成功
+            }
+
+            attempts++;
+            if (attempts % 10 == 0) {
+                std::this_thread::yield(); // 让出CPU，减少竞争
+            }
         }
 
-        attempts++;
-        if (attempts % 10 == 0)
-        {
-          std::this_thread::yield();  // 让出CPU，减少竞争
-        }
-      }
-
-      // 原子操作失败，使用互斥锁降级
-      std::lock_guard<std::mutex> lock(fallback_mutex_);
-      (void)fault_status_.fetch_and(~mask, std::memory_order_release);
+        // 原子操作失败，使用互斥锁降级
+        std::lock_guard<std::mutex> lock(fallback_mutex_);
+        (void)fault_status_.fetch_and(~mask, std::memory_order_release);
     }
 };
 
-}  // namespace lidar
-}  // namespace robosense
-#endif  // ROBOSENSE_FAULT_MANAGER_H
+using FaultManager64 = FaultManager<uint64_t, FaultBits>;
+using FaultManager8 = FaultManager<uint8_t, FaultBits8>;
+
+} // namespace lidar
+} // namespace robosense
+#endif // ROBOSENSE_FAULT_MANAGER_H

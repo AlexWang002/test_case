@@ -62,7 +62,7 @@ void TrailDataAlloc()
     ValidOut_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT* VIEW_WIDTH * sizeof(uint16_t));
     ValidOut_h = (uint16_t *)mem::GetHostPointer(ValidOut_d);
 
-    Trail_stream = Stream::Create(PVA0, VPU0);
+    Trail_stream = Stream::Create(PVA0, VPU1);
 }
 
 /**
@@ -98,13 +98,13 @@ void trail_main()
         sourceDistDataFlow.handler(sourceDistDataFlowHandler)
             .src(DistIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputDistBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT)
+            .tile(TILE_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
         destinationDataFlow.handler(destinationDataFlowHandler)
             .dst(ValidOut_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(outputValidBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT);
+            .tile(TILE_WIDTH, TILE_HEIGHT);
 
         prog.compileDataFlows();
 

@@ -21,12 +21,11 @@
 /******************************************************************************/
 /*                         Include dependant headers                          */
 /******************************************************************************/
-#include <vector>
 #include <atomic>
 #include <map>
+#include <vector>
 #include <string>
-#include <sys/types.h>
-#include <unistd.h>
+
 /******************************************************************************/
 /*                      Include headers of the component                      */
 /******************************************************************************/
@@ -41,21 +40,19 @@ namespace robosense::lidar::utils {
 /*        Definition of exported types (typedef, enum, struct, union)         */
 /******************************************************************************/
 
-
-
 /******************************************************************************/
 /*                   Definition of classes or templates                       */
 /******************************************************************************/
 class ThreadInfo {
-public:
-  ThreadInfo() = default;
+  public:
+    ThreadInfo() = default;
 
-  pid_t tid;
-  std::string name;
-  std::string file;
-  uint64_t last_thread_time{0UL};
-  uint64_t last_total_cpu_time{0UL};
-  double cpu_usage{0.0};
+    pid_t tid;
+    std::string name;
+    std::string file;
+    uint64_t last_thread_time {0UL};
+    uint64_t last_total_cpu_time {0UL};
+    double cpu_usage {0.0};
 };
 
 /******************************************************************************/
@@ -79,9 +76,8 @@ void monitThreads();
 void addThread(pid_t pid, const std::string& name);
 void saveBinFile(const void* mipi_data, uint32_t length);
 
-double calculateCPUUsage(std::string const& file_name,
-                        uint64_t prev_process_time, uint64_t prev_total_time,
-                        const std::string & thread_name);
+double calculateCPUUsage(std::string const& file_name, uint64_t prev_process_time, uint64_t prev_total_time,
+                         const std::string& thread_name);
 uint64_t getProcessCPUTime(std::string const& file_name);
 uint64_t getTotalCPUTime();
 } // namespace robosense::lidar::utils

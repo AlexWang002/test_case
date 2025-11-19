@@ -36,8 +36,44 @@
     "RobosenseLidar" : {
         "ENABLE_MIPI_CRC": true,
         "INNER_PARAM_PATH": "./",
-        "THREAD_CONFIG_FILE": "./thread_params.yaml",
         "LOG_CONFIG_FILE": "./rs_lidar_sdk.log",
-        "ALGO_SWITCH_FILE": "./algorithm_switch.yaml"
+        "THREADS": [
+            {
+                "id": 1,
+                "policy": "SCHED_FIFO",
+                "priority": 40,
+                "cpu_affinity": [2]
+            },
+            {
+                "id": 2,
+                "policy": "SCHED_FIFO",
+                "priority": 40,
+                "cpu_affinity": [3]
+            },
+            {
+                "id": 3,
+                "policy": "SCHED_OTHER",
+                "priority": 35,
+                "cpu_affinity": [5]
+            },
+            {
+                "id": 4,
+                "policy": "SCHED_RR",
+                "priority": 35,
+                "cpu_affinity": [5]
+            },
+            {
+                "id": 5,
+                "policy": "SCHED_RR",
+                "priority": 35,
+                "cpu_affinity": [6]
+            }
+        ],
+        "ALGORITHM": {
+            "ENABLE_TRAIL_REMOVE": false,
+            "ENABLE_DENOISE": false,
+            "ENABLE_STRAY": false,
+            "ENABLE_SPRAY": true
+        }
     }
 }

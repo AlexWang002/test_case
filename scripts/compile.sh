@@ -6,9 +6,10 @@ function show_help {
   echo "Build and install the project."
   echo ""
   echo "Options:"
-  echo "  -c , --clean         Perform a clean build (delete build directory contents)"
-  echo "  -i , --install       Install the project after build)"
-  echo "  -p, --platform       Specify platform [pc|arm] (default: pc)"
+  echo "  -c , --clean        Perform a clean build (delete build directory contents)"
+  echo "  -i , --install      Install the project after build)"
+  echo "  -p, --platform      Specify platform [pc|arm] (default: pc)"
+  echo "  -f, --frequency     Specify the frequency of mipi 10Hz"
   echo "  --build-dir DIR     Specify the build directory (default: build)"
   echo "  --cmake-arg ARG     Pass additional arguments to CMake"
   echo "  -h, --help          Show this help message"
@@ -22,6 +23,7 @@ BUILD_DIR="build"
 PLATFORM="pc"
 CMAKE_ARGS=""
 INSTALL=false
+FREQUENCY=""
 
 # 解析命令行参数
 while [ "$#" -gt 0 ]; do
@@ -51,6 +53,10 @@ while [ "$#" -gt 0 ]; do
       fi
       PLATFORM="$2"
       shift 2
+      ;;
+    -f|--frequency)
+      FREQUENCY="-DCOMPILE_MIPI_10HZ=ON"
+      shift
       ;;
     --cmake-arg)
       CMAKE_ARGS="$CMAKE_ARGS $2"
@@ -100,7 +106,7 @@ echo "Running cmake..."
 if [ "$PLATFORM" = "pc" ]; then
     cmake .. -DPVA_BUILD_MODE=NATIVE $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
 elif [ "$PLATFORM" = "arm" ]; then
-    cmake .. -DPVA_BUILD_MODE=L4T $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
+    cmake .. -DPVA_BUILD_MODE=L4T $CMAKE_ARGS $CMAKE_PLATFORM_ARGS  $FREQUENCY || { echo "CMake failed"; exit 1; }
 else
     echo "Unsupported platform: $PLATFORM"
     exit 1
