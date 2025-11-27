@@ -1867,7 +1867,7 @@ void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
 
         std::string exception_msg;
         int32_t status_code;
-        int ret = 0, retry_cnt;
+        int ret = 0, retry_cnt = 0;
 
         for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
             auto time_start = std::chrono::steady_clock::now();
@@ -2502,7 +2502,7 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
             LogWarn("[sprayremove] PVA task resubmitted {} times.", retry_cnt);
         }
         
-        for (int retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
+        for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
             auto time_start2 = std::chrono::steady_clock::now();
             ret = rainEnhancePva(exception_msg, status_code);
             auto time_end2 = std::chrono::steady_clock::now();
@@ -2548,7 +2548,7 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
 
     for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
         auto time_start = std::chrono::steady_clock::now();
-        upsample_main(exception_msg, status_code);
+        ret = upsample_main(exception_msg, status_code);
         auto time_end = std::chrono::steady_clock::now();
         auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
         if (ret == 1) {
