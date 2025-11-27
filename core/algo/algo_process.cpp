@@ -507,21 +507,13 @@ void CloudManager::algoProcess(int32_t task_id)
                         /*PVA以整帧为单位执行denoise算法*/
                         if(task_id == 0){
                             if(col == algo_func_.VIEW_W + algo_func_.max_data_size - 1){
-                                if (algo_func_.algo_Param.DenoiseOn) {
-                                    /*拷贝整帧数据到denoise算法的PVA buffer中*/
-                                    //auto denoise_start = std::chrono::steady_clock::now();
-                                    algo_func_.denoiseExec(frame_buffer);
-                                    //auto denoise_end = std::chrono::steady_clock::now();
-                                    //auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
-                                    //std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
-                                }
-                                else {
-                                    for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
-                                        for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
-                                            algo_func_.denoise_mask_out_frm[cc][rr] = 1;
-                                        }
-                                    }
-                                }
+                                /*拷贝整帧数据到denoise算法的PVA buffer中*/
+                                //auto denoise_start = std::chrono::steady_clock::now();
+                                algo_func_.denoiseExec(frame_buffer);
+                                //auto denoise_end = std::chrono::steady_clock::now();
+                                //auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
+                                //std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
+
 
                                 if (algo_func_.algo_Param.TrailRemoveOn) {
                                     /** Process */
@@ -539,21 +531,11 @@ void CloudManager::algoProcess(int32_t task_id)
                                     }
                                 }
 
-                                if (algo_func_.algo_Param.StrayRemoveOn) {
-                                    //auto stray_start = std::chrono::steady_clock::now();
-                                    algo_func_.strayDeleteCombine(frame_buffer);
-                                    //auto stray_end = std::chrono::steady_clock::now();
-                                    //auto stray_duration = std::chrono::duration_cast<std::chrono::microseconds>(stray_end - stray_start);
-                                    //std::cout << "stray duration: " << stray_duration.count() << "us" << std::endl;
-                                }
-                                else {
-                                    for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
-                                        for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
-                                            algo_func_.stray_mask_out_frm0[cc][rr] = 0;
-                                            algo_func_.stray_mask_out_frm1[cc][rr] = 0;
-                                        }
-                                    }
-                                }
+                                //auto stray_start = std::chrono::steady_clock::now();
+                                algo_func_.strayDeleteCombine(frame_buffer);
+                                //auto stray_end = std::chrono::steady_clock::now();
+                                //auto stray_duration = std::chrono::duration_cast<std::chrono::microseconds>(stray_end - stray_start);
+                                //std::cout << "stray duration: " << stray_duration.count() << "us" << std::endl;
 
                                 //auto spray_start = std::chrono::steady_clock::now();
                                 algo_func_.sprayRemoveExec(frame_buffer);

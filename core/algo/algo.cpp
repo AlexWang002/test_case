@@ -886,169 +886,6 @@ inline int AlgoFunction::matlabMod(int a, int b){
 }
 
 /**
- * \brief  Denoise main process function
- *
- * \param[in] denoise_col_buffer: buffer index of sample point
- *                 Range: 0 - 10. Accuracy: 1.
- * \param[in] denoise_col_valid: valid index of sample point
- *                 Range: 0 - 10. Accuracy: 1.
- * \param[in] denoise_col_neib_buf: neighbor buffer index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] denoise_col_neib_vld: neighbor buffer index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] col_idx: neighbor valid index of sample point
- *                 Range: 0 - 2^32-1. Accuracy: 1.
- */
-void AlgoFunction::denoiseProcessing(int denoise_col_buffer,
-    int denoise_col_valid, int* denoise_col_neib_buf,
-    int* denoise_col_neib_vld, int col_idx)
-{
-    const int current_col = col_idx;
-    const int win_len_h = noise_params.WinLenH;
-    const int win_len_v = noise_params.WinLenV;
-    const int HL = 2* noise_params.WinLenH + 1;
-    const int HV = 2* noise_params.WinLenV + 1;
-
-    // 边界检查
-    if (current_col < 0 || current_col >= algo_Param.ViewField_Wide) {
-        return;
-    }
-
-    // 非去噪模式处理
-    if (!algo_Param.DenoiseOn) {
-        for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
-            if (denoise_valid_buffer[denoise_col_valid][row_idx] == 0) {
-                denoise_valid_buffer[denoise_col_valid][row_idx] = 1;
-            }
-        }
-        return;
-    }
-
-    // 预加载常用参数
-    const auto& params = noise_params;
-    const int block_size = BlockSize;
-    const int dist_seg_div = 12000; // 合并除法运算
-
-    // 主处理循环
-     for (int row_idx = 0; row_idx < VIEW_H; ++row_idx)
-    {
-        const int dist_cur = dist_wave0_buffer1[denoise_col_buffer][row_idx];
-        const int valid_cur = denoise_valid_buffer[denoise_col_buffer][row_idx];
-        const int block_id = (row_idx + BlockSize) / BlockSize - 1;
-        const int dist_seg = (dist_cur / dist_seg_div);
-        const int region = params.region_list[block_id] - 1;
-        const int threshold = noise_params.denoise_point[dist_seg][region][0];
-        const int threshold1 = noise_params.denoise_point[dist_seg][region][1];
-        const int threshold2 = noise_params.denoise_point[dist_seg][region][2];
-        // 跳过无效距离值
-        if(dist_cur > 8000 || (valid_cur != 1 && dist_cur > 0))
-        {
-            int denoise_refer_mask = 0;
-            // 区块和距离段计算优化
-            const int block_id = (row_idx + block_size) / block_size - 1;
-            const int diff_th = params.denoise_offset[dist_seg]; // 数组访问优化
-
-            // 邻域距离值预取
-            const int HL = 2 * params.WinLenH + 1;
-            const int HV = 2 * params.WinLenV + 1;
-
-            int dist_neib[HL][HV] ={0};
-            int ValidMask[HL][HV] ={0};
-            for(int i = -params.WinLenH; i <= params.WinLenH; i++)
-            {
-                dist_neib[i + params.WinLenH][params.WinLenV] = dist_wave0_buffer1[denoise_col_neib_buf[2 + i]][row_idx];
-            }
-
-            // 邻域有效性统计优化
-            int valid_cnt = 0;
-            for (int i = 0; i < HL; ++i)
-            {
-                bool is_valid = (std::abs(dist_neib[i][params.WinLenV] - dist_cur) <= diff_th);
-                ValidMask[i][params.WinLenV] = is_valid;
-                valid_cnt += is_valid;
-            }
-
-            // 两侧有效性统计
-            int valid_pre_2 = ValidMask[params.WinLenH - 1][params.WinLenV]
-                                + ValidMask[params.WinLenH + 1][params.WinLenV];
-
-            denoise_refer_mask = (valid_pre_2 >= threshold1)
-                                        ? ((valid_cnt > 2) ? 2 : 1)
-                                        : 3;
-            if (denoise_refer_mask == 1) {
-                // 邻域窗口构建优化
-                int valid_pre_3 = ValidMask[0][win_len_v] + ValidMask[HL - 1][win_len_v];
-                int valid_neib[HL][HV]= {0};
-                int NeibValidNum[3] = {0};
-                for(int i = 0; i < HL; i++)
-                {
-                    valid_neib[i][win_len_v] = denoise_valid_buffer[denoise_col_neib_buf[i]][row_idx];
-                }
-                for (int dv = -win_len_v; dv <= win_len_v; dv++) {
-                    if ((dv == 0) && (row_idx != (VIEW_H - 1))) continue;
-                    const int row_neib = row_idx + dv;
-                    if (row_neib < 0 || row_neib >= VIEW_H || dv == row_idx) continue;
-
-                    const int v_idx = dv + win_len_v;
-                    for (int dh = -win_len_h; dh <= win_len_h; dh++) {
-                        const int h_idx = dh + win_len_h;
-                        const int col_buf_idx = denoise_col_neib_buf[h_idx];
-
-                        dist_neib[h_idx][v_idx] = dist_wave0_buffer1[col_buf_idx][row_neib];
-                        valid_neib[h_idx][v_idx] = denoise_valid_buffer[col_buf_idx][row_neib];
-
-                        // 有效性判断
-                        const int nei_val = dist_neib[h_idx][v_idx];
-                        if (std::abs(nei_val - dist_cur) <= diff_th && (valid_neib[h_idx][v_idx] != 6)) {
-                            const int zone = noise_params.zone_matrix[v_idx][h_idx];
-                            if (zone > 0) {
-                                NeibValidNum[zone - 1]++;
-                                ValidMask[h_idx][v_idx] = 1;
-                            }
-                        }
-                    }
-                }
-
-                // 去噪条件判断优化
-                if (((NeibValidNum[0] + valid_pre_2) >= threshold)
-                    || (row_idx == (VIEW_H - 1) && (valid_pre_2 >= threshold1))
-                    || (NeibValidNum[0] + valid_pre_2 >= threshold)
-                    || (valid_pre_3 + valid_pre_2 >= threshold2)) {
-                    denoise_valid_buffer[denoise_col_valid][row_idx] = 1;
-
-                    // 传播有效标记优化
-                    for (int dv = -win_len_v; dv <= win_len_v; dv++) {
-                        if ((dv == 0) && (row_idx != (VIEW_H - 1))) continue;
-                        const int v_idx = dv + win_len_v;
-                        const int target_row = row_idx + dv;
-                        if (target_row < 0 || target_row >= VIEW_H) continue;
-
-                        for (int dh = -win_len_h; dh <= win_len_h; dh++) {
-                            const int h_idx = dh + win_len_h;
-                            if (ValidMask[h_idx][v_idx] == 1) {
-                                int idx = denoise_col_neib_vld[h_idx];
-                                denoise_valid_buffer[idx][target_row] = 1;
-                            }
-                        }
-                    }
-                }
-            }
-            else if (denoise_refer_mask == 2) {
-                // 直接对左右补点优化
-                denoise_valid_buffer[denoise_col_valid][row_idx] = 1;
-
-                for (int j = -noise_params.WinLenH; j <= noise_params.WinLenH; j++) {
-                    if (ValidMask[noise_params.WinLenH + j][noise_params.WinLenV] == 1) {
-                        int idx = denoise_col_neib_vld[3 + j - 1];
-                        denoise_valid_buffer[idx][row_idx] = 1;
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
  * \brief  Matrix calculate inverse function
  *
  * \param[in] mat: input matrix
@@ -1878,33 +1715,45 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
         denoiseDataAlloc();
     }
 
-    /*拷贝整帧数据到denoise算法的PVA buffer中*/
-    memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)pstFrameBuffer->dist0[0],  VIEW_H * VIEW_W * sizeof(uint16_t));
-    
-    std::string exception_msg;
-    int32_t status_code;
-    int ret = 0;
+    if (algo_Param.DenoiseOn) {
+        /*拷贝整帧数据到denoise算法的PVA buffer中*/
+        memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)pstFrameBuffer->dist0[0],  VIEW_H * VIEW_W * sizeof(uint16_t));
+        
+        std::string exception_msg;
+        int32_t status_code;
+        int ret = 0, retry_cnt = 0;
 
-    for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
-        auto time_start = std::chrono::steady_clock::now();
-        ret = denoiseProcPva(exception_msg, status_code);
-        auto time_end = std::chrono::steady_clock::now();
-        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+        for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
+            auto time_start = std::chrono::steady_clock::now();
+            ret = denoiseProcPva(exception_msg, status_code);
+            auto time_end = std::chrono::steady_clock::now();
+            auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
-        if (ret == 0) break;
-        if (ret == 1) {
-            LogWarn("[denoise] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+            if (ret == 0) break;
+            if (ret == 1) {
+                LogWarn("[denoise] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+            }
+            else if (ret == 2) {
+                LogWarn("[denoise] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+            }
         }
-        else if (ret == 2) {
-            LogWarn("[denoise] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+        if (ret != 0) {
+            LogError("[denoise] Fail to submit pva task three times!");
+        }
+        else if (retry_cnt > 0) {
+            LogWarn("[denoise] PVA task resubmitted {} times.", retry_cnt);
+        }
+    
+        memcpy(denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[2 * VIEW_H], (VIEW_W - 2) * VIEW_H * sizeof(uint16_t));
+        memcpy(denoise_mask_out_frm[VIEW_W - 2], (uint8_t *)denoise_mask_buffer_h, 2 * VIEW_H * sizeof(uint16_t)); // 拷贝最后4列
+    }
+    else {
+        for (int cc = 0; cc < VIEW_W; cc ++) {
+            for (int rr = 0; rr < VIEW_H; rr ++) {
+                denoise_mask_out_frm[cc][rr] = 1;
+            }
         }
     }
-    if (ret != 0) {
-        LogError("[denoise] Fail to submit pva task three times!");
-    }
-    
-    memcpy(denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[2 * VIEW_H], (VIEW_W - 2) * VIEW_H * sizeof(uint16_t));
-    memcpy(denoise_mask_out_frm[VIEW_W - 2], (uint8_t *)denoise_mask_buffer_h, 2 * VIEW_H * sizeof(uint16_t)); // 拷贝最后4列
 }
 
 void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
@@ -1919,9 +1768,9 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
 
     std::string exception_msg;
     int32_t status_code;
-    int ret = 0;
+    int ret = 0, retry_cnt = 0;
 
-    for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+    for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
         auto time_start = std::chrono::steady_clock::now();
         ret = trail_main(exception_msg, status_code);
         auto time_end = std::chrono::steady_clock::now();
@@ -1937,6 +1786,8 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
     }
     if (ret != 0) {
         LogError("[trail] Fail to submit pva task three times!");
+    }else if (retry_cnt > 0) {
+        LogWarn("[trail] PVA task resubmitted {} times.", retry_cnt);
     }
 
     memcpy(trail_mask_out_frm[0], &ValidOut_h[0], sizeof(uint16_t) * VIEW_W * VIEW_H);
@@ -1950,93 +1801,106 @@ void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
         strayBufferAlloc();
     }
 
-    for (int col_idx = 0; col_idx < VIEW_W + max_data_size; col_idx ++) {
-        circularCalcIdx(rear3, buffer_size_stray);
+    if (algo_Param.StrayRemoveOn) {
+        for (int col_idx = 0; col_idx < VIEW_W + max_data_size; col_idx ++) {
+            circularCalcIdx(rear3, buffer_size_stray);
 
-        int stray_col_in = col_idx - StrayInDelayCol;
-        if (stray_col_in >= 0 && stray_col_in < VIEW_W){
-            memcpy(dist_wave0_buffer3[rear3], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(dist_wave1_buffer3[rear3], pstFrameBuffer->dist1[stray_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(grnd_wave0_buffer3[rear3], pstFrameBuffer->gnd_mark0[stray_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(grnd_wave1_buffer3[rear3], pstFrameBuffer->gnd_mark1[stray_col_in], sizeof(uint16_t) * VIEW_H);
-            memcpy(high_wave0_buffer3[rear3], pstFrameBuffer->high0[stray_col_in], sizeof(int16_t) * VIEW_H);
-            memcpy(high_wave1_buffer3[rear3], pstFrameBuffer->high1[stray_col_in], sizeof(int16_t) * VIEW_H);
-            for(int i = 0; i < VIEW_H; ++i){
-                uint16_t att0 = pstFrameBuffer->att0[stray_col_in][i];
-                uint16_t att1 = pstFrameBuffer->att1[stray_col_in][i];
-                crtk_wave0_buffer3[rear3][i] = att0 & 0x01;
-                crtk_wave1_buffer3[rear3][i] = att1 & 0x01;
+            int stray_col_in = col_idx - StrayInDelayCol;
+            if (stray_col_in >= 0 && stray_col_in < VIEW_W){
+                memcpy(dist_wave0_buffer3[rear3], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(dist_wave1_buffer3[rear3], pstFrameBuffer->dist1[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(grnd_wave0_buffer3[rear3], pstFrameBuffer->gnd_mark0[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(grnd_wave1_buffer3[rear3], pstFrameBuffer->gnd_mark1[stray_col_in], sizeof(uint16_t) * VIEW_H);
+                memcpy(high_wave0_buffer3[rear3], pstFrameBuffer->high0[stray_col_in], sizeof(int16_t) * VIEW_H);
+                memcpy(high_wave1_buffer3[rear3], pstFrameBuffer->high1[stray_col_in], sizeof(int16_t) * VIEW_H);
+                for(int i = 0; i < VIEW_H; ++i){
+                    uint16_t att0 = pstFrameBuffer->att0[stray_col_in][i];
+                    uint16_t att1 = pstFrameBuffer->att1[stray_col_in][i];
+                    crtk_wave0_buffer3[rear3][i] = att0 & 0x01;
+                    crtk_wave1_buffer3[rear3][i] = att1 & 0x01;
+                }
+            }
+            else {
+                //超过最大列，帧间buffer补0
+                memset(dist_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                memset(dist_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                memset(grnd_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                memset(grnd_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
+                memset(high_wave0_buffer3[rear3], 0, sizeof(int16_t) * VIEW_H);
+                memset(high_wave1_buffer3[rear3], 0, sizeof(int16_t) * VIEW_H);
+                memset(crtk_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+                memset(crtk_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+            }
+            int stray_col = stray_col_in - StrayDelayCol;
+            int stray_col_buffer = matlabMod(rear3 + 1 - StrayDelayCol - 1, buffer_size_stray);
+            int stray_col_neib_buf[3];
+            for (int i = 0; i < 3; i++) {
+                stray_col_neib_buf[i] = matlabMod((stray_col_buffer + 1 - 1 + i) - 1, buffer_size_stray);
+            }
+            int stray_mark_out0[VIEW_H] = { 0 };
+            int stray_mark_out1[VIEW_H] = { 0 };
+
+            //杂散删除 初始化输出
+            if(0 == col_idx){
+                memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
+                RainWall_out = {0, 0, 0};
+            }
+            strayDelete(stray_col, stray_col_buffer, stray_col_neib_buf);
+        }
+
+        for (int i = 0; i < 76; i ++) {
+            memcpy((uint16_t *)&stray_pva_buff.dist_wave_h[i * 10 * 192 * 2], pstFrameBuffer->dist0[i * 10], 10 * 192 * sizeof(uint16_t));
+            memcpy((uint16_t *)&stray_pva_buff.dist_wave_h[i * 10 * 192 * 2 + 10 * 192], pstFrameBuffer->dist1[i * 10], 10 * 192 * sizeof(uint16_t));
+
+            memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6], pstFrameBuffer->ref0[i * 10], 10 * 192 * sizeof(uint16_t));
+            memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 10 * 192], pstFrameBuffer->ref1[i * 10], 10 * 192 * sizeof(uint16_t));
+
+            memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 20 * 192], pstFrameBuffer->gnd_mark0[i * 10], 10 * 192 * sizeof(uint16_t));
+            memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 30 * 192], pstFrameBuffer->gnd_mark1[i * 10], 10 * 192 * sizeof(uint16_t));
+
+            memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 40 * 192], pstFrameBuffer->high0[i * 10], 10 * 192 * sizeof(uint16_t));
+            memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 50 * 192], pstFrameBuffer->high1[i * 10], 10 * 192 * sizeof(uint16_t));
+        }
+
+        memcpy(stray_pva_buff.att0_h, pstFrameBuffer->att0[0], 760 * 192 * sizeof(uint16_t));
+        memcpy(stray_pva_buff.att1_h, pstFrameBuffer->att1[0], 760 * 192 * sizeof(uint16_t));
+
+        std::string exception_msg;
+        int32_t status_code;
+        int ret = 0, retry_cnt;
+
+        for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
+            auto time_start = std::chrono::steady_clock::now();
+            ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code);
+            auto time_end = std::chrono::steady_clock::now();
+            auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+
+            if (ret == 0) continue;
+            if (ret == 1) {
+                LogWarn("[stray] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+            }
+            else if (ret == 2) {
+                LogWarn("[stray] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
             }
         }
-        else {
-            //超过最大列，帧间buffer补0
-            memset(dist_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-            memset(dist_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-            memset(grnd_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-            memset(grnd_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-            memset(high_wave0_buffer3[rear3], 0, sizeof(int16_t) * VIEW_H);
-            memset(high_wave1_buffer3[rear3], 0, sizeof(int16_t) * VIEW_H);
-            memset(crtk_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-            memset(crtk_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
+        if (ret != 0) {
+            LogError("[stray] Fail to submit pva task three times!");
         }
-        int stray_col = stray_col_in - StrayDelayCol;
-        int stray_col_buffer = matlabMod(rear3 + 1 - StrayDelayCol - 1, buffer_size_stray);
-        int stray_col_neib_buf[3];
-        for (int i = 0; i < 3; i++) {
-            stray_col_neib_buf[i] = matlabMod((stray_col_buffer + 1 - 1 + i) - 1, buffer_size_stray);
+        else if (retry_cnt > 0) {
+            LogWarn("[stray] PVA task resubmitted {} times.", retry_cnt);
         }
-        int stray_mark_out0[VIEW_H] = { 0 };
-        int stray_mark_out1[VIEW_H] = { 0 };
 
-        //杂散删除 初始化输出
-        if(0 == col_idx){
-            memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
-            RainWall_out = {0, 0, 0};
-        }
-        strayDelete(stray_col, stray_col_buffer, stray_col_neib_buf);
+        memcpy(stray_mask_out_frm0[0], (uint8_t *)stray_pva_buff.stray_mask0_h, VIEW_W * VIEW_H * sizeof(uint16_t));
+        memcpy(stray_mask_out_frm1[0], (uint8_t *)stray_pva_buff.stray_mask1_h, VIEW_W * VIEW_H * sizeof(uint16_t));
     }
-
-    for (int i = 0; i < 76; i ++) {
-        memcpy((uint16_t *)&stray_pva_buff.dist_wave_h[i * 10 * 192 * 2], pstFrameBuffer->dist0[i * 10], 10 * 192 * sizeof(uint16_t));
-        memcpy((uint16_t *)&stray_pva_buff.dist_wave_h[i * 10 * 192 * 2 + 10 * 192], pstFrameBuffer->dist1[i * 10], 10 * 192 * sizeof(uint16_t));
-
-        memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6], pstFrameBuffer->ref0[i * 10], 10 * 192 * sizeof(uint16_t));
-        memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 10 * 192], pstFrameBuffer->ref1[i * 10], 10 * 192 * sizeof(uint16_t));
-
-        memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 20 * 192], pstFrameBuffer->gnd_mark0[i * 10], 10 * 192 * sizeof(uint16_t));
-        memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 30 * 192], pstFrameBuffer->gnd_mark1[i * 10], 10 * 192 * sizeof(uint16_t));
-
-        memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 40 * 192], pstFrameBuffer->high0[i * 10], 10 * 192 * sizeof(uint16_t));
-        memcpy((uint16_t *)&stray_pva_buff.raw_data_h[i * 10 * 192 * 6 + 50 * 192], pstFrameBuffer->high1[i * 10], 10 * 192 * sizeof(uint16_t));
-    }
-
-    memcpy(stray_pva_buff.att0_h, pstFrameBuffer->att0[0], 760 * 192 * sizeof(uint16_t));
-    memcpy(stray_pva_buff.att1_h, pstFrameBuffer->att1[0], 760 * 192 * sizeof(uint16_t));
-
-    std::string exception_msg;
-    int32_t status_code;
-    int ret = 0;
-
-    for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
-        auto time_start = std::chrono::steady_clock::now();
-        ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code);
-        auto time_end = std::chrono::steady_clock::now();
-        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
-
-        if (ret == 0) continue;
-        if (ret == 1) {
-            LogWarn("[stray] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
-        }
-        else if (ret == 2) {
-            LogWarn("[stray] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+    else {
+        for (int cc = 0; cc < VIEW_W; cc ++) {
+            for (int rr = 0; rr < VIEW_H; rr ++) {
+                stray_mask_out_frm0[cc][rr] = 0;
+                stray_mask_out_frm1[cc][rr] = 0;
+            }
         }
     }
-    if (ret != 0) {
-        LogError("[stray] Fail to submit pva task three times!");
-    }
-
-    memcpy(stray_mask_out_frm0[0], (uint8_t *)stray_pva_buff.stray_mask0_h, VIEW_W * VIEW_H * sizeof(uint16_t));
-    memcpy(stray_mask_out_frm1[0], (uint8_t *)stray_pva_buff.stray_mask1_h, VIEW_W * VIEW_H * sizeof(uint16_t));
 }
 
 /**
@@ -2615,9 +2479,9 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
 
         std::string exception_msg;
         int32_t status_code;
-        int ret = 0;
+        int ret = 0, retry_cnt = 0;
 
-        for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+        for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
             auto time_start = std::chrono::steady_clock::now();
             ret = sprayRemovePva(exception_msg, status_code);
             auto time_end = std::chrono::steady_clock::now();
@@ -2634,8 +2498,11 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
         if (ret != 0) {
             LogError("[sprayremove] Fail to submit pva task three times!");
         }
+        else if (retry_cnt > 0) {
+            LogWarn("[sprayremove] PVA task resubmitted {} times.", retry_cnt);
+        }
         
-        for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+        for (int retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
             auto time_start2 = std::chrono::steady_clock::now();
             ret = rainEnhancePva(exception_msg, status_code);
             auto time_end2 = std::chrono::steady_clock::now();
@@ -2653,6 +2520,9 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
         }
         if (ret != 0) {
             LogError("[rainenhance] Fail to submit pva task three times!");
+        }
+        else if (retry_cnt > 0) {
+            LogWarn("[rainenhance] PVA task resubmitted {} times.", retry_cnt);
         }
     }
     else {
@@ -2674,9 +2544,9 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
 {
     std::string exception_msg;
     int32_t status_code;
-    int ret = 0;
+    int ret = 0, retry_cnt = 0;
 
-    for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+    for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
         auto time_start = std::chrono::steady_clock::now();
         upsample_main(exception_msg, status_code);
         auto time_end = std::chrono::steady_clock::now();
@@ -2690,6 +2560,9 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
     }
     if (ret != 0) {
         LogError("[upsample] Fail to submit pva task three times!");
+    }
+    else if (retry_cnt > 0) {
+        LogWarn("[upsample] PVA task resubmitted {} times.", retry_cnt);
     }
 }
 
