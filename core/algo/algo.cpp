@@ -1884,15 +1884,23 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
     std::string exception_msg;
     int32_t status_code;
     int ret = 0;
-    auto time_start = std::chrono::steady_clock::now();
-    ret = denoiseProcPva(exception_msg, status_code);
-    auto time_end = std::chrono::steady_clock::now();
-    auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
-    if (ret == 1) {
-        LogWarn("[denoise] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+
+    for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+        auto time_start = std::chrono::steady_clock::now();
+        ret = denoiseProcPva(exception_msg, status_code);
+        auto time_end = std::chrono::steady_clock::now();
+        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+
+        if (ret == 0) break;
+        if (ret == 1) {
+            LogWarn("[denoise] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+        }
+        else if (ret == 2) {
+            LogWarn("[denoise] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+        }
     }
-    else if (ret == 2) {
-        LogWarn("[denoise] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+    if (ret != 0) {
+        LogError("[denoise] Fail to submit pva task three times!");
     }
     
     memcpy(denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[2 * VIEW_H], (VIEW_W - 2) * VIEW_H * sizeof(uint16_t));
@@ -1912,15 +1920,23 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
     std::string exception_msg;
     int32_t status_code;
     int ret = 0;
-    auto time_start = std::chrono::steady_clock::now();
-    ret = trail_main(exception_msg, status_code);
-    auto time_end = std::chrono::steady_clock::now();
-    auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
-    if (ret == 1) {
-        LogWarn("[trail] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+
+    for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+        auto time_start = std::chrono::steady_clock::now();
+        ret = trail_main(exception_msg, status_code);
+        auto time_end = std::chrono::steady_clock::now();
+        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+
+        if (ret == 0) break;
+        if (ret == 1) {
+            LogWarn("[trail] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+        }
+        else if (ret == 2) {
+            LogWarn("[trail] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+        }
     }
-    else if (ret == 2) {
-        LogWarn("[trail] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+    if (ret != 0) {
+        LogError("[trail] Fail to submit pva task three times!");
     }
 
     memcpy(trail_mask_out_frm[0], &ValidOut_h[0], sizeof(uint16_t) * VIEW_W * VIEW_H);
@@ -2000,15 +2016,23 @@ void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
     std::string exception_msg;
     int32_t status_code;
     int ret = 0;
-    auto time_start = std::chrono::steady_clock::now();
-    ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code);
-    auto time_end = std::chrono::steady_clock::now();
-    auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
-    if (ret == 1) {
-        LogWarn("[stray] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+
+    for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+        auto time_start = std::chrono::steady_clock::now();
+        ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code);
+        auto time_end = std::chrono::steady_clock::now();
+        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+
+        if (ret == 0) continue;
+        if (ret == 1) {
+            LogWarn("[stray] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+        }
+        else if (ret == 2) {
+            LogWarn("[stray] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+        }
     }
-    else if (ret == 2) {
-        LogWarn("[stray] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+    if (ret != 0) {
+        LogError("[stray] Fail to submit pva task three times!");
     }
 
     memcpy(stray_mask_out_frm0[0], (uint8_t *)stray_pva_buff.stray_mask0_h, VIEW_W * VIEW_H * sizeof(uint16_t));
@@ -2593,29 +2617,43 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
         int32_t status_code;
         int ret = 0;
 
-        auto time_start = std::chrono::steady_clock::now();
-        ret = sprayRemovePva(exception_msg, status_code);
-        auto time_end = std::chrono::steady_clock::now();
-        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
-        if (ret == 1) {
-            LogWarn("[sprayremove] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+        for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+            auto time_start = std::chrono::steady_clock::now();
+            ret = sprayRemovePva(exception_msg, status_code);
+            auto time_end = std::chrono::steady_clock::now();
+            auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+
+            if (ret == 0) break;
+            if (ret == 1) {
+                LogWarn("[sprayremove] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+            }
+            else if (ret == 2) {
+                LogWarn("[sprayremove] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+            }
         }
-        else if (ret == 2) {
-            LogWarn("[sprayremove] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+        if (ret != 0) {
+            LogError("[sprayremove] Fail to submit pva task three times!");
         }
         
-        auto time_start2 = std::chrono::steady_clock::now();
-        ret = rainEnhancePva(exception_msg, status_code);
-        auto time_end2 = std::chrono::steady_clock::now();
-        auto time_duration2 = std::chrono::duration_cast<std::chrono::microseconds>(time_end2 - time_start2);
-        if (ret == 1) {
-            LogWarn("[rainenhance] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration2.count());
+        for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+            auto time_start2 = std::chrono::steady_clock::now();
+            ret = rainEnhancePva(exception_msg, status_code);
+            auto time_end2 = std::chrono::steady_clock::now();
+            auto time_duration2 = std::chrono::duration_cast<std::chrono::microseconds>(time_end2 - time_start2);
+
+            if (ret == 0) break;
+            if (ret == 1) {
+                LogWarn("[rainenhance] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration2.count());
+            }
+            else if (ret == 2) {
+                LogWarn("[rainenhance] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration2.count());
+            }
+            memcpy(spray_mark_out_frm0[0], (uint8_t *)&FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+            memcpy(spray_mark_out_frm1[0], (uint8_t *)&FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
         }
-        else if (ret == 2) {
-            LogWarn("[rainenhance] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration2.count());
+        if (ret != 0) {
+            LogError("[rainenhance] Fail to submit pva task three times!");
         }
-        memcpy(spray_mark_out_frm0[0], (uint8_t *)&FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
-        memcpy(spray_mark_out_frm1[0], (uint8_t *)&FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
     }
     else {
         for (int cc = 0; cc < VIEW_W; cc ++) {
@@ -2637,15 +2675,21 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
     std::string exception_msg;
     int32_t status_code;
     int ret = 0;
-    auto time_start = std::chrono::steady_clock::now();
-    upsample_main(exception_msg, status_code);
-    auto time_end = std::chrono::steady_clock::now();
-    auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
-    if (ret == 1) {
-        LogWarn("[upsample] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+
+    for (int try_cnt = 0; try_cnt < 3; try_cnt ++) {
+        auto time_start = std::chrono::steady_clock::now();
+        upsample_main(exception_msg, status_code);
+        auto time_end = std::chrono::steady_clock::now();
+        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+        if (ret == 1) {
+            LogWarn("[upsample] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+        }
+        else if (ret == 2) {
+            LogWarn("[upsample] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+        }
     }
-    else if (ret == 2) {
-        LogWarn("[upsample] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+    if (ret != 0) {
+        LogError("[upsample] Fail to submit pva task three times!");
     }
 }
 
