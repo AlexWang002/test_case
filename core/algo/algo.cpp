@@ -1875,7 +1875,7 @@ void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
             auto time_end = std::chrono::steady_clock::now();
             auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
-            if (ret == 0) continue;
+            if (ret == 0) break;
             if (ret == 1) {
                 LogWarn("[stray] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
             }
@@ -2551,6 +2551,8 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
         ret = upsample_main(exception_msg, status_code);
         auto time_end = std::chrono::steady_clock::now();
         auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+
+        if (ret == 0) break;
         if (ret == 1) {
             LogWarn("[upsample] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
         }
