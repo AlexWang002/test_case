@@ -24,6 +24,7 @@
 #include <cupva_host_nonsafety.hpp>
 #include <cupva_host.hpp>
 #include <cupva_platform.h>
+#include <string>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -52,8 +53,8 @@ extern uint16_t *FinalOut1_h;
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
 /******************************************************************************/
-extern void sprayRemovePva();
-extern void rainEnhancePva();
+extern int sprayRemovePva(std::string& exception_msg, int32_t& status_code);
+extern int rainEnhancePva(std::string& exception_msg, int32_t& status_code);
 extern void sprayDataAlloc();
 extern void sprayDataFree();
 

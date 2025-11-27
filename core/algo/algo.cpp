@@ -39,8 +39,11 @@
 /******************************************************************************/
 #include "cpu_load.h"
 #include "common/fault_manager.h"
+#include "denoise.h"
+#include "trail.h"
 #include "stray.h"
 #include "spray.h"
+#include "upsample.h"
 #include "json_reader.h"
 
 /******************************************************************************/
@@ -1867,6 +1870,62 @@ void AlgoFunction::algoFrameChange(void)
     empty_rear = -1;
 }
 
+void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
+{
+    static bool first{true};
+    if (first) {
+        first = false;
+        denoiseDataAlloc();
+    }
+
+    /*拷贝整帧数据到denoise算法的PVA buffer中*/
+    memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)pstFrameBuffer->dist0[0],  VIEW_H * VIEW_W * sizeof(uint16_t));
+    
+    std::string exception_msg;
+    int32_t status_code;
+    int ret = 0;
+    auto time_start = std::chrono::steady_clock::now();
+    ret = denoiseProcPva(exception_msg, status_code);
+    auto time_end = std::chrono::steady_clock::now();
+    auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+    if (ret == 1) {
+        LogWarn("[denoise] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+    }
+    else if (ret == 2) {
+        LogWarn("[denoise] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+    }
+    
+    memcpy(denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[2 * VIEW_H], (VIEW_W - 2) * VIEW_H * sizeof(uint16_t));
+    memcpy(denoise_mask_out_frm[VIEW_W - 2], (uint8_t *)denoise_mask_buffer_h, 2 * VIEW_H * sizeof(uint16_t)); // 拷贝最后4列
+}
+
+void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
+{
+    static bool first{true};
+    if (first) {
+        first = false;
+        TrailDataAlloc();
+    }
+
+    memcpy(DistIn_h, pstFrameBuffer->dist0, sizeof(uint16_t) * VIEW_W * VIEW_H);
+
+    std::string exception_msg;
+    int32_t status_code;
+    int ret = 0;
+    auto time_start = std::chrono::steady_clock::now();
+    ret = trail_main(exception_msg, status_code);
+    auto time_end = std::chrono::steady_clock::now();
+    auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+    if (ret == 1) {
+        LogWarn("[trail] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+    }
+    else if (ret == 2) {
+        LogWarn("[trail] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+    }
+
+    memcpy(trail_mask_out_frm[0], &ValidOut_h[0], sizeof(uint16_t) * VIEW_W * VIEW_H);
+}
+
 void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
 {
     static bool first{true};
@@ -1938,7 +1997,19 @@ void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
     memcpy(stray_pva_buff.att0_h, pstFrameBuffer->att0[0], 760 * 192 * sizeof(uint16_t));
     memcpy(stray_pva_buff.att1_h, pstFrameBuffer->att1[0], 760 * 192 * sizeof(uint16_t));
 
-    strayProcPva(RainWall_in.cnt, RainWall_in.dist);
+    std::string exception_msg;
+    int32_t status_code;
+    int ret = 0;
+    auto time_start = std::chrono::steady_clock::now();
+    ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code);
+    auto time_end = std::chrono::steady_clock::now();
+    auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+    if (ret == 1) {
+        LogWarn("[stray] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+    }
+    else if (ret == 2) {
+        LogWarn("[stray] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+    }
 
     memcpy(stray_mask_out_frm0[0], (uint8_t *)stray_pva_buff.stray_mask0_h, VIEW_W * VIEW_H * sizeof(uint16_t));
     memcpy(stray_mask_out_frm1[0], (uint8_t *)stray_pva_buff.stray_mask1_h, VIEW_W * VIEW_H * sizeof(uint16_t));
@@ -2518,9 +2589,31 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
             memcpy((uint8_t *)&Glink_h[offset1], (uint8_t *)pstFrameBuffer->gnd_mark1[i * 20], VIEW_H * 20 * sizeof(uint16_t));
         }
 
-        sprayRemovePva();
-        rainEnhancePva();
+        std::string exception_msg;
+        int32_t status_code;
+        int ret = 0;
 
+        auto time_start = std::chrono::steady_clock::now();
+        ret = sprayRemovePva(exception_msg, status_code);
+        auto time_end = std::chrono::steady_clock::now();
+        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+        if (ret == 1) {
+            LogWarn("[sprayremove] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+        }
+        else if (ret == 2) {
+            LogWarn("[sprayremove] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+        }
+        
+        auto time_start2 = std::chrono::steady_clock::now();
+        ret = rainEnhancePva(exception_msg, status_code);
+        auto time_end2 = std::chrono::steady_clock::now();
+        auto time_duration2 = std::chrono::duration_cast<std::chrono::microseconds>(time_end2 - time_start2);
+        if (ret == 1) {
+            LogWarn("[rainenhance] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration2.count());
+        }
+        else if (ret == 2) {
+            LogWarn("[rainenhance] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration2.count());
+        }
         memcpy(spray_mark_out_frm0[0], (uint8_t *)&FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
         memcpy(spray_mark_out_frm1[0], (uint8_t *)&FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
     }
@@ -2537,24 +2630,23 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
             }
         }
     }
+}
 
-    // for (int i = 0; i < VIEW_W; i ++) {
-    //     for (int j = 0; j < VIEW_H; j ++) {
-    //         if (spray_mark_out_frm0[i][j]) {
-    //             mark0_cnt += 1;
-    //         }
-
-    //         if (spray_mark_out_frm1[i][j]) {
-    //             mark1_cnt += 1;
-    //         }
-    //     }
-    // }
-
-    // std::cout << "[mark0_cnt] " << mark0_cnt << std::endl;
-    // std::cout << "[mark1_cnt] " << mark1_cnt << std::endl;
-
-    mark0_cnt = 0;
-    mark1_cnt = 0;
+void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
+{
+    std::string exception_msg;
+    int32_t status_code;
+    int ret = 0;
+    auto time_start = std::chrono::steady_clock::now();
+    upsample_main(exception_msg, status_code);
+    auto time_end = std::chrono::steady_clock::now();
+    auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+    if (ret == 1) {
+        LogWarn("[upsample] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+    }
+    else if (ret == 2) {
+        LogWarn("[upsample] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+    }
 }
 
 

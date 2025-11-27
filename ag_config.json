@@ -70,9 +70,9 @@
             }
         ],
         "ALGORITHM": {
-            "ENABLE_TRAIL_REMOVE": false,
-            "ENABLE_DENOISE": false,
-            "ENABLE_STRAY": false,
+            "ENABLE_TRAIL_REMOVE": true,
+            "ENABLE_DENOISE": true,
+            "ENABLE_STRAY": true,
             "ENABLE_SPRAY": true
         }
     }

@@ -1252,7 +1252,11 @@ void RSLidarSdkImpl::handleLidarMipiData() {
 bool RSLidarSdkImpl::loadConfiguration(const std::string& configPath) {
     LogTrace("Begin of load the inner parameter configuration example ...");
     // NOTE Set true cause the inner parameter save function NOT yet fully supported.
+#if defined(__arm__) || defined(__aarch64__)
     bool result{false};
+#else
+    bool result{true};
+#endif
     std::string bin_file_path = configPath + "middle_lidar_inner_para.bin";
     std::string json_file_path = configPath + "lidar_sn_inner_para_crc.json";
 

@@ -26,6 +26,7 @@
 #include <cupva_platform.h> // Header that includes macros for specifying PVA executables
 #include <iostream>
 #include <fstream>
+#include <string>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -69,7 +70,7 @@ extern StrayPvaBuffer stray_pva_buff;
 
 extern int strayBufferAlloc();
 extern int strayBufferRelease();
-extern int strayProcPva(int rainwall_cnt, int rainwall_dist);
+extern int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg, int32_t& status_code);
 
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */

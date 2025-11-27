@@ -54,6 +54,6 @@ extern uint16_t *AttrOutUp_h;
 /******************************************************************************/
 extern void upsampleDataAlloc();
 extern void upsampleDataFree();
-extern void upsample_main();
+extern int upsample_main(std::string& exception_msg, int32_t& status_code);
 
 #endif/* UPSAMPLE_H */

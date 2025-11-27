@@ -44,7 +44,7 @@ extern uint16_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH];
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
 /******************************************************************************/
-extern void trail_main();
+extern int trail_main(std::string& exception_msg, int32_t& status_code);
 extern void TrailDataAlloc();
 extern void TrailDataFree();
 

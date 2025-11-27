@@ -103,7 +103,7 @@ int strayBufferRelease()
 /**
  * \brief Create and submit pva task for stray algo
 */
-int strayProcPva(int rainwall_cnt, int rainwall_dist)
+int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg, int32_t& status_code)
 {
     try
     {
@@ -211,10 +211,16 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist)
         CmdStatus status[2];
         stray_stream.submit({&prog, &rf}, status);
         fence.wait();
+        cupva::Error statusCode = CheckCommandStatus(status[0]);
+        if (statusCode != Error::None)
+        {
+            status_code = (int32_t)statusCode;
+            return 2;
+        }
     }
     catch (cupva::Exception const &e)
     {
-        std::cout << "Caught a cuPVA exception with message: " << e.what() << std::endl;
+        exception_msg = std::string(e.what());
         return 1;
     }
     return 0;

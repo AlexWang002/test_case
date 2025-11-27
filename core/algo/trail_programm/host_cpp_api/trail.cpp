@@ -77,7 +77,7 @@ void TrailDataFree()
 /**
  * \brief Trail processing main function in host-side C++ API
 */
-void trail_main()
+int trail_main(std::string& exception_msg, int32_t& status_code)
 {
     try
     {
@@ -118,11 +118,14 @@ void trail_main()
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {
-            std::cout << "VPU Program returned an Error Code: " << (int32_t)statusCode << std::endl;
+            status_code = (int32_t)statusCode;
+            return 2;
         }
     }
     catch (cupva::Exception const &e)
     {
-        std::cout << "Caught a cuPVA exception with message: " << e.what() << std::endl;
+        exception_msg = std::string(e.what());
+        return 1;
     }
+    return 0;
 }

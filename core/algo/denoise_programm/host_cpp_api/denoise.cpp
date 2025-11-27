@@ -91,7 +91,7 @@ int denoiseDataFree()
 /**
  * \brief Create and submit pva task for denoise algo
 */
-int denoiseProcPva()
+int denoiseProcPva(std::string& exception_msg, int32_t& status_code)
 {
     try
     {
@@ -147,10 +147,16 @@ int denoiseProcPva()
         CmdStatus status[2];
         denoise_stream.submit({&prog, &rf}, status);
         fence.wait();
+        cupva::Error statusCode = CheckCommandStatus(status[0]);
+        if (statusCode != Error::None)
+        {
+            status_code = (int32_t)statusCode;
+            return 2;
+        }
     }
     catch (cupva::Exception const &e)
     {
-        std::cout << "Caught a cuPVA exception with message: " << e.what() << std::endl;
+        exception_msg = std::string(e.what());
         return 1;
     }
     return 0;

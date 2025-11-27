@@ -13,7 +13,7 @@
 #define KERNEL_RADIUS_HEIGHT    2
 
 #define TILE_CNT 8
-#define BlockSize              24    // 数据分块大小
+//#define BlockSize              24    // 数据分块大小
 
 #define ALGO_ENABLE 1 // 算法开关
 

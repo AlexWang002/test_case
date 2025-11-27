@@ -30,6 +30,7 @@
 #include <cupva_platform.h> // Header that includes macros for specifying PVA executables
 #include <iostream>
 #include <fstream>
+#include <string>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -48,7 +49,7 @@ extern uint16_t *denoise_mask_buffer_h;
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
 /******************************************************************************/
-int denoiseProcPva();
+int denoiseProcPva(std::string& exception_msg, int32_t& status_code);
 int denoiseDataAlloc();
 int denoiseDataFree();
 
