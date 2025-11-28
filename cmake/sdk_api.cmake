@@ -41,7 +41,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_SOURCE_DIR}/3rdparty/dimw/include
     ${CMAKE_SOURCE_DIR}/3rdparty/rs_logger/lib/spdlog/include
     ${CMAKE_SOURCE_DIR}/core/utils
-    ${CMAKE_SOURCE_DIR}/core/decoder/include
+    ${CMAKE_SOURCE_DIR}/core/decoder
 )
 
 target_link_libraries(${PROJECT_NAME}

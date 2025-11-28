@@ -46,14 +46,18 @@ namespace robosense::lidar {
 #define EMX_GMSL_HEIGHT        (562U)
 #define EMX_PKT_SEQ_MIN        (1U)
 #define EMX_PKT_SEQ_MAX        (1520U)
+#define EMX_MIPI_PART_LEN      (EMX_GMSL_WIDTH * EMX_GMSL_HEIGHT)
 
 #ifdef MIPI_10HZ
-#define EMX_MIPI_PART_LEN        (EMX_GMSL_WIDTH * EMX_GMSL_HEIGHT)
-#define EMX_MIPI_DATA_LEN        (EMX_MIPI_PART_LEN * 6)
-#else
-#define EMX_MIPI_DATA_LEN        (EMX_GMSL_WIDTH * EMX_GMSL_HEIGHT)
+#   define EMX_MIPI_PART_NUM    (6)
+#elif defined(MIPI_30HZ)
+#   define EMX_MIPI_PART_NUM    (2)
+#else   // default 60Hz
+#   define EMX_MIPI_PART_NUM    (1)
 #endif
-#define EMX_EMBED_MIPI_DATA_LEN  (EMX_MIPI_DATA_LEN + EMX_GMSL_WIDTH)
+
+#define EMX_MIPI_DATA_LEN       (EMX_MIPI_PART_LEN * EMX_MIPI_PART_NUM)
+#define EMX_EMBED_MIPI_DATA_LEN (EMX_MIPI_DATA_LEN + EMX_GMSL_WIDTH)
 
 /******************************************************************************/
 /*        Definition of exported types (typedef, enum, struct, union)         */

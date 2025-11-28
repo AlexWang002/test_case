@@ -22,8 +22,6 @@
 /*                     Include dependant library headers                      */
 /******************************************************************************/
 #include <cstring>
-#include <fstream>
-#include <iostream>
 #include <sys/syscall.h>
 
 /******************************************************************************/
@@ -36,13 +34,15 @@
 #include "nvBufObjToCpuBuf.h"
 #include "rs_lidar_sdk_impl.h"
 #include "rs_new_logger.h"
-#include "spdlog/fmt/bin_to_hex.h"
 #include "thread_config.h"
+#include "time_utils.h"
+#include "version/version.hpp"
 
 /******************************************************************************/
 /*                          Definition of namespace                           */
 /******************************************************************************/
-namespace robosense::lidar {
+namespace robosense {
+namespace lidar {
 
 /******************************************************************************/
 /*                       Definition of local variables                        */
@@ -52,6 +52,10 @@ static constexpr uint16_t POWEROFF_ACK_ADDR     {0x0072U};
 static constexpr uint16_t CALIB_REQUEST_ADDR    {0x0073U};
 static constexpr uint16_t CALIB_ACK_ADDR        {0x0074U};
 static constexpr uint8_t POWEROFF_SIGNAL        {0x01U};
+
+using TimePoint = std::chrono::steady_clock::time_point;
+SyncQueue<TimePoint> inputTimeQueue(20, [](TimePoint data) {});
+SyncQueue<TimePoint> inputTimeQueue1(20, [](TimePoint data) {});
 
 enum class PowerOffStatus : uint8_t {
     NOT_READY = 0x00U,
@@ -208,12 +212,14 @@ RSLidarSdkImpl::~RSLidarSdkImpl() {
  * \return The version of the Lidar SDK.
  */
 const char* RSLidarSdkImpl::getLidarSdkVersion() {
-    static char version[16];
-
-    std::snprintf(version, sizeof(version), "%d.%02d.%02d", RSLIDARSDK_VERSION_MAJOR, RSLIDARSDK_VERSION_MINOR,
-                  RSLIDARSDK_VERSION_PATCH);
-
-    return version;
+    LogInfo("*********************************");
+    LogInfo("Description of this version:");
+    // LogInfo("1.delete MIPI sync queue");
+    // LogInfo("2.delete msop packet loss detect");
+    // LogInfo("3.change the MSOP[] to MSOP*[]");
+    // LogInfo("4.delete cpu cache flush");
+    LogInfo("*********************************");
+    return kRSLidarSdkVersionStr.c_str();
 }
 
 /**
@@ -450,10 +456,8 @@ LidarSdkErrorCode RSLidarSdkImpl::stop() {
         LogWarn("Cloud manager pointer is null");
     }
 
-    auto end_time = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
     is_started_.store(false, std::memory_order_seq_cst);
-    LogInfo("Completed stopping LidarSdk (total time: {} ms, result: {})", duration.count(),
+    LogInfo("Completed stopping LidarSdk (total time: {} ms, result: {})", utils::timeInterval(start_time),
                 ((ret == LIDAR_SDK_SUCCESS) ? "SUCCESS" : "FAILURE"));
 
     return ret;
@@ -470,34 +474,23 @@ LidarSdkErrorCode RSLidarSdkImpl::powerOff() {
     PowerOffStatus status{PowerOffStatus::NOT_READY};
     LidarSdkErrorCode result{LIDAR_SDK_FAILD};
     auto start_time{std::chrono::steady_clock::now()};
-    int64_t duration{0};
+    int64_t duration{0L};
 
-    if (callbacks_.writeSensorI2C) {
-        callbacks_.writeSensorI2C(sensor_index_, POWEROFF_REQUEST_ADDR, &POWEROFF_SIGNAL, data_length);
-    } else {
-        LogError("callbacks_.writeSensorI2C is INVALID.");
-        return result;
-    }
+    callbacks_.writeSensorI2C(sensor_index_, POWEROFF_REQUEST_ADDR, &POWEROFF_SIGNAL, data_length);
+    callbacks_.readSensorI2C(sensor_index_, POWEROFF_ACK_ADDR, reinterpret_cast<uint8_t*>(&status), &data_length);
 
-    if (callbacks_.readSensorI2C) {
-        callbacks_.readSensorI2C(sensor_index_, POWEROFF_ACK_ADDR, reinterpret_cast<uint8_t*>(&status), &data_length);
+    while (PowerOffStatus::READY != status) {
+        (void)usleep(50e3); // sleep 50ms
+        duration = utils::timeInterval(start_time);
 
-        while (PowerOffStatus::READY != status) {
-            (void)usleep(50e3); // sleep 50ms
-            auto end_time{std::chrono::steady_clock::now()};
-            duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-
-            if (duration > 1800) { // wait 1.8s
-                LogError("Time out, register: 0x{:x} is 0x{:x}, It's NOT ready for safely power off.", POWEROFF_ACK_ADDR, static_cast<uint32_t>(status));
-                return result;
-            }
-            callbacks_.readSensorI2C(sensor_index_, POWEROFF_ACK_ADDR, reinterpret_cast<uint8_t *>(&status), &data_length);
+        if (duration > 1800) { // wait 1.8s
+            LogError("Time out, register: 0x{:x} is 0x{:x}, It's NOT ready for safely power off.", POWEROFF_ACK_ADDR, static_cast<uint32_t>(status));
+            return result;
         }
-        result = LIDAR_SDK_SUCCESS;
-        LogInfo("PowerOff register: 0x{:x} is 0x{:x}, took {} ms", POWEROFF_ACK_ADDR, static_cast<uint32_t>(status), duration);
-    } else {
-        LogError("callbacks_.readSensorI2C is INVALID.");
+        callbacks_.readSensorI2C(sensor_index_, POWEROFF_ACK_ADDR, reinterpret_cast<uint8_t *>(&status), &data_length);
     }
+    result = LIDAR_SDK_SUCCESS;
+    LogInfo("PowerOff register: 0x{:x} is 0x{:x}, took {} ms", POWEROFF_ACK_ADDR, static_cast<uint32_t>(status), duration);
 
     return result;
 }
@@ -517,24 +510,13 @@ LidarSdkErrorCode RSLidarSdkImpl::setCalibrationEnable(const bool enabled) {
     CalibSignal signal{CalibSignal::DEFAULT};
     LidarSdkErrorCode result{LIDAR_SDK_FAILD};
     auto start_time{std::chrono::steady_clock::now()};
-    int64_t duration{0};
+    int64_t duration{0L};
 
-    if (!callbacks_.writeSensorI2C) {
-        LogError("callbacks_.writeSensorI2C is INVALID, set calibration failed.");
-        return result;
-    }
     signal = enabled ? CalibSignal::ENTER : CalibSignal::EXIT;
     callbacks_.writeSensorI2C(sensor_index_, CALIB_REQUEST_ADDR, reinterpret_cast<const uint8_t*>(&signal), data_length);
-
-    if (!callbacks_.readSensorI2C) {
-        LogError("callbacks_.readSensorI2C is INVALID. set calibration failed.");
-        return result;
-    }
     (void)usleep(600e3); // sleep 600ms
-
     callbacks_.readSensorI2C(sensor_index_, CALIB_ACK_ADDR, reinterpret_cast<uint8_t*>(&status), &data_length);
-    auto end_time{std::chrono::steady_clock::now()};
-    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    duration = utils::timeInterval(start_time);
     LogInfo("Calibration register: {:x} is {:x}. Took {} ms", CALIB_ACK_ADDR, static_cast<uint32_t>(status), duration);
     result = (CalibSwitchStatus::SUCCESS == status) ? LIDAR_SDK_SUCCESS : LIDAR_SDK_FAILD;
 
@@ -550,6 +532,7 @@ LidarSdkErrorCode RSLidarSdkImpl::setCalibrationEnable(const bool enabled) {
  * \retval LidarSdkErrorCode::LIDAR_SDK_FAILD: Injection failed.
  */
 LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void* ptrAdc) {
+    auto start_time = std::chrono::steady_clock::now();
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!is_initialized_.load(std::memory_order_seq_cst)) {
@@ -600,12 +583,28 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
         runDeviceInfoCallback();
         return LIDAR_SDK_FAILD;
     }
+    uint32_t seq = static_cast<uint32_t>(mipi_frame->data[27] << 24) |
+                   static_cast<uint32_t>(mipi_frame->data[28] << 16) |
+                   static_cast<uint32_t>(mipi_frame->data[29] <<  8) |
+                   static_cast<uint32_t>(mipi_frame->data[30]);
+    LogInfo("[gpu] {}: time {:.2f}ms",
+            seq, utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001);
 
     checkMipiIndexContinuity(mipi_frame->index);
     checkMipiTimeConsumption(mipi_frame->index, adc_buffer->tsof, adc_buffer->teof);
     checkMipiCounterContinuity(mipi_frame->index, mipi_frame->data, mipi_frame->len);
+    auto crc_start = std::chrono::steady_clock::now();
     funcCheckMipiCrc_(mipi_frame->data, mipi_frame->len);
+
+    LogInfo("[crc] {}: time {:.2f}ms",
+            seq, utils::timeInterval<std::chrono::microseconds>(crc_start) * 0.001);
     sensor_index_ = sensor;
+
+    LogInfo("[injectAdc] {}: time {:.2f}ms",
+            seq, utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001);
+    bool ret{false};
+    (void)inputTimeQueue.push(start_time, ret);
+    (void)inputTimeQueue1.push(start_time, ret);
 
     bool overflow = false;
     size_t sz = mipi_data_queue_.push(mipi_frame, overflow);
@@ -868,23 +867,22 @@ void RSLidarSdkImpl::handleMsopData() {
         LidarPointCloudPtr cloud_ptr {nullptr, {}};
 
         if (point_cloud_queue_.popWait(cloud_ptr, 300e3)) { // 300ms超时
-            if (callbacks_.pointCloud) {
-                auto current_time = callbacks_.getTimeNowPhc();
-                static auto last_time = callbacks_.getTimeNowPhc(); // unit: ns, 1e-9 sec
-                pointcloud_fps_counter_ptr_->updateFrame(current_time);
+            auto current_time = callbacks_.getTimeNowPhc();
+            static auto last_time = callbacks_.getTimeNowPhc(); // unit: ns, 1e-9 sec
+            pointcloud_fps_counter_ptr_->updateFrame(current_time);
+            TimePoint input_time;
+            (void)inputTimeQueue.pop(input_time);
+            auto seq = cloud_ptr->frame_seq;
 
-                if (current_time - last_time > 1.1e9) { // 1.1秒，用于打印FPS
-                    LogDebug("(handleMsopData) current_time: {} ns, last_time: {}", current_time, last_time);
-                    last_time = current_time;
-                    LogDebug(pointcloud_fps_counter_ptr_->getStatus().c_str());
-                }
-                auto callback_start = std::chrono::steady_clock::now();
-                size_t bufferSize = cloud_ptr->data_length;
-                callbacks_.pointCloud(sensor_index_, cloud_ptr.get(), static_cast<uint32_t>(bufferSize));
-                auto callback_end = std::chrono::steady_clock::now();
-                LogTrace("[pointCloud callback time: {} us",
-                         std::chrono::duration_cast<std::chrono::microseconds>(callback_end - callback_start).count());
+            if (current_time - last_time > 1.1e9) { // 1.1秒，用于打印FPS
+                LogDebug("(handleMsopData) current_time: {} ns, last_time: {}", current_time, last_time);
+                last_time = current_time;
+                LogDebug(pointcloud_fps_counter_ptr_->getStatus().c_str());
             }
+            size_t bufferSize = cloud_ptr->data_length;
+            LogInfo("[HandleMSOP] {}: time {:.2f}ms",
+                    seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
+            callbacks_.pointCloud(sensor_index_, cloud_ptr.get(), static_cast<uint32_t>(bufferSize));
         }
     }
 }
@@ -941,7 +939,7 @@ void RSLidarSdkImpl::splitFrame(uint32_t point_num) {
     const uint32_t expected_points = decoder_ptr_->getTheoreticalPointsPerFrame();
     auto* cloud = decoder_ptr_->point_cloud_.get();
 
-    if (point_num == expected_points && cloud && callbacks_.pointCloud) {
+    if (point_num == expected_points && cloud) {
         auto current_time = callbacks_.getTimeNowPhc(); ///< unit: ns, 1e-9 sec
         static auto last_time = callbacks_.getTimeNowPhc();
 
@@ -974,8 +972,6 @@ void RSLidarSdkImpl::splitFrame(uint32_t point_num) {
         }
     } else if (point_num != expected_points) {
         LogError("[RSLidarSdkImpl::splitFrame] point_num {}!= expected_points {}", point_num, expected_points);
-    } else if (!callbacks_.pointCloud) {
-        LogError("[RSLidarSdkImpl::splitFrame] Point cloud callback is null!");
     } else {
         LogError("Cloud data is null!");
     }
@@ -991,36 +987,32 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
         LogError("Decoder pointer is null!");
         return;
     }
+    static bool first_call = true;
     auto* device_info = decoder_ptr_->device_info_.get();
+    uint8_t sdk_fault_state{FaultManager64::getInstance().getFaultLevel()};
+    uint8_t fault_state{device_info->lidar_fault_state};
 
-    int32_t sdk_fault_state = FaultManager64::getInstance().getFaultLevel();
-    int32_t fault_state = static_cast<int32_t>(device_info->lidar_fault_state);
-    fault_state = (getAlarmInfo() == true) ? 2 : fault_state;
-    device_info->lidar_fault_state = std::max(fault_state, sdk_fault_state); // TODO determine return u32 or u8 ?
+    fault_state = (getAlarmInfo() == true) ? 2U : fault_state;
+    device_info->lidar_fault_state = std::max(fault_state, sdk_fault_state);
     device_info->sdk_total_fault_number = FaultManager64::getInstance().countFaults();
     device_info->sdk_fault_code_position = FaultManager64::getInstance().getFaults();
     device_info->reserved[10] = FaultManager8::getInstance().getFaults();
 
-    static bool first_call = true;
-
-    if (device_info && callbacks_.deviceInfo) {
-        device_info->sdk_version = kSdkVersionEncoded;
-
-        if (first_call) {
-            first_call = false;
-            LogInfo("FIRWARE VERSION: {}", device_info->firware_version);
-            LogInfo("SDK VERSION: {}", device_info->sdk_version);
-        }
-
-        if (callbacks_.getTimeNowPhc()) {
-            device_info_fps_counter_ptr_->updateFrame(callbacks_.getTimeNowPhc());
-        }
-        callbacks_.deviceInfo(sensor_index_, device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
-        FaultManager64::getInstance().clearFaults(~0ULL); // clear all fault code
-        FaultManager8::getInstance().clearFaults(0xFF);   // clear all fault code
-    } else {
-        LogError(device_info == nullptr ? "Device info callback is null!" : "callbacks_.deviceInfo is null!");
+    if (!device_info) {
+        LogError("Device info callback is null!");
+        return;
     }
+    device_info->sdk_version = kSdkVersionEncoded;
+
+    if (first_call) {
+        first_call = false;
+        LogInfo("FIRWARE VERSION: {}", device_info->firware_version);
+        LogInfo("SDK VERSION: {}", device_info->sdk_version);
+    }
+    // device_info_fps_counter_ptr_->updateFrame(callbacks_.getTimeNowPhc());
+    callbacks_.deviceInfo(sensor_index_, device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
+    FaultManager64::getInstance().clearFaults(~0ULL); // clear all fault code
+    FaultManager8::getInstance().clearFaults(0xFF);   // clear all fault code
     decoder_ptr_->resetDeviceInfo();
 }
 
@@ -1044,11 +1036,7 @@ void RSLidarSdkImpl::releaseBuffer(LidarAdcBuffer* buffer) {
         LogError("releaseBuffer failed, buffer is INVALID.");
         return;
     }
-    if (callbacks_.releaseAdc) {
-        callbacks_.releaseAdc(sensor_index_, buffer);
-    } else {
-        LogError("callbacks_.releaseAdc is INVALID.");
-    }
+    callbacks_.releaseAdc(sensor_index_, buffer);
 }
 
 /**
@@ -1088,7 +1076,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
     static const size_t kPacketPairSize = kMsopSize + kDifopSize + kDeviceInfoSize;
     static const auto& kPacketsRanges = decoder_ptr_->getPacketRanges();
     static const uint32_t kMaxWaitTimeUs{300000U};
-#ifdef MIPI_10HZ
+#if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
     static const uint32_t kMaxProcessTimeMs{30U};
 #else
     static const uint32_t kMaxProcessTimeMs{20U};
@@ -1097,7 +1085,6 @@ void RSLidarSdkImpl::handleLidarMipiData() {
     static const uint32_t kMsopProcessTimeMs{kMaxProcessTimeMs - kDeviceInfoProcessTimeMs};
     int32_t pre_packet_part{-1};
     uint16_t last_pkt_seq{0U};
-    auto time_now = std::chrono::steady_clock::now();
     pid_t tid = gettid();
     utils::addThread(tid, "handleLidarMipiData");
 
@@ -1124,9 +1111,9 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             frm_normal_start_time_ = start_time;
             frm_normal_detected_ = true;
         } else if (frm_normal_reported_) {
-            auto time_cost = std::chrono::duration_cast<std::chrono::milliseconds>(start_time - frm_normal_start_time_);
+            auto time_cost = utils::timeInterval(start_time, frm_normal_start_time_);
 
-            if (time_cost.count() > lostfrm_report_time_) {
+            if (time_cost > lostfrm_report_time_) {
                 if (FaultManager64::getInstance().hasFault(FaultBits::LidarMIPIPacketLossFault)) {
                     FaultManager64::getInstance().clearFault(FaultBits::LidarMIPIPacketLossFault);
                     frm_normal_reported_ = false;
@@ -1135,8 +1122,12 @@ void RSLidarSdkImpl::handleLidarMipiData() {
         }
         uint8_t* mipi_data = mipi_frame->data;
         size_t frame_size = mipi_frame->len;
-#ifdef MIPI_10HZ
-        for (uint8_t part_index{0U}; part_index < kPacketsRanges.size(); ++part_index) {
+#if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
+    uint32_t seq = static_cast<uint32_t>(mipi_data[27] << 24) |
+                   static_cast<uint32_t>(mipi_data[28] << 16) |
+                   static_cast<uint32_t>(mipi_data[29] <<  8) |
+                   static_cast<uint32_t>(mipi_data[30]);
+        for (uint8_t part_index{0U}; part_index < EMX_MIPI_PART_NUM; ++part_index) {
             uint8_t* part_data = mipi_data + part_index * EMX_MIPI_PART_LEN;
 #else
         uint8_t* part_data = mipi_data;
@@ -1199,11 +1190,10 @@ void RSLidarSdkImpl::handleLidarMipiData() {
         if (!ret) {
             LogError("processDeviceInfoPkt failed, first_seq: {}", first_seq);
         }
-        time_now = std::chrono::steady_clock::now();
-        auto time_cost = std::chrono::duration_cast<std::chrono::milliseconds>(time_now - start_time);
+        auto time_cost = utils::timeInterval(start_time);
 
-        if (time_cost.count() > kDeviceInfoProcessTimeMs) {
-            LogDebug("Process difop and device info data cost time: {}", time_cost.count());
+        if (time_cost > kDeviceInfoProcessTimeMs) {
+            LogDebug("Process difop and device info data cost time: {}", time_cost);
         }
 
         // Send the cloud data in MIPI data to cloud manager
@@ -1221,23 +1211,26 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             last_pkt_seq = pkt_seq;
         }
         auto data_check_end = std::chrono::steady_clock::now();
-        auto data_check_cost_time = std::chrono::duration_cast<std::chrono::milliseconds>(data_check_end - start_time);
+        auto data_check_cost_time = utils::timeInterval(start_time, data_check_end);
 
-        if (data_check_cost_time.count() > kMsopProcessTimeMs) {
+        if (data_check_cost_time > kMsopProcessTimeMs) {
             LogWarn("handleLidarMipiData frame index {} , Data check time: {} ms, exceeds the limit: {} ms",
-                    mipi_frame->index, data_check_cost_time.count(), kMsopProcessTimeMs);
+                    mipi_frame->index, data_check_cost_time, kMsopProcessTimeMs);
         }
         runDeviceInfoCallback();
 
-        auto duration =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - data_check_end);
+        auto duration = utils::timeInterval(data_check_end);
 
-        if (duration.count() > kDeviceInfoProcessTimeMs) {
-            LogError("runDeviceInfoCallback time out, frame index {}, cost time: {} ms", mipi_frame->index,
-                     duration.count());
+        if (duration > kDeviceInfoProcessTimeMs) {
+            LogError("runDeviceInfoCallback time out, frame index {}, cost time: {} ms", mipi_frame->index, duration);
         }
     }
-#ifdef MIPI_10HZ
+#if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
+    TimePoint input_time;
+    (void)inputTimeQueue1.pop(input_time);
+
+    LogInfo("[handleMIPI] {}: time {:.2f}ms",
+            seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
     }
 #endif
 }
@@ -1252,11 +1245,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
 bool RSLidarSdkImpl::loadConfiguration(const std::string& configPath) {
     LogTrace("Begin of load the inner parameter configuration example ...");
     // NOTE Set true cause the inner parameter save function NOT yet fully supported.
-#if defined(__arm__) || defined(__aarch64__)
     bool result{false};
-#else
-    bool result{true};
-#endif
     std::string bin_file_path = configPath + "middle_lidar_inner_para.bin";
     std::string json_file_path = configPath + "lidar_sn_inner_para_crc.json";
 
@@ -1278,6 +1267,7 @@ bool RSLidarSdkImpl::loadConfiguration(const std::string& configPath) {
     return result;
 }
 
-} // namespace robosense::lidar
+} // namespace lidar
+} // namespace robosense
 
 /* \}  impl */

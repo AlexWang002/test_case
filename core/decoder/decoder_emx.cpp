@@ -30,12 +30,13 @@
 #include "common/fault_manager.h"
 #include "decoder_emx.h"
 #include "rs_new_logger.h"
-#include "impl/rs_lidar_sdk_impl.h"
+#include "time_utils.h"
 
 /******************************************************************************/
 /*                          Definition of namespace                           */
 /******************************************************************************/
-namespace robosense::lidar {
+namespace robosense {
+namespace lidar {
 
 /******************************************************************************/
 /*                       Definition of local functions                        */
@@ -173,9 +174,9 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
             LogDebug("Obstruction detected, starting timer");
         } else {
             // 持续检测到遮挡，检查是否达到500ms
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - obstruct_start_time_);
+            auto duration = utils::timeInterval(now, obstruct_start_time_);
 
-            if (duration.count() >= obstruct_report_time_) {
+            if (duration >= obstruct_report_time_) {
                 LogWarn("Lidar Obstruction Fault persisted for 500ms, win_block_status:{}",
                         pkt.work_info.win_block_status);
                 FaultManager64::getInstance().setFault(FaultBits::LidarObstructionFault);
@@ -363,6 +364,7 @@ void DecoderRSEMX::setPacketHeader(const RSEMXMsopPkt& pkt) {
     memcpy(data_id, const_param_.msop_id, 4);
 }
 
-} // namespace robosense::lidar
+} // namespace lidar
+} // namespace robosense
 
 /* \}  decoder */

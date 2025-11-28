@@ -1718,7 +1718,7 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
     if (algo_Param.DenoiseOn) {
         /*拷贝整帧数据到denoise算法的PVA buffer中*/
         memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)pstFrameBuffer->dist0[0],  VIEW_H * VIEW_W * sizeof(uint16_t));
-        
+
         std::string exception_msg;
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
@@ -1743,7 +1743,7 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
         else if (retry_cnt > 0) {
             LogWarn("[denoise] PVA task resubmitted {} times.", retry_cnt);
         }
-    
+
         memcpy(denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[2 * VIEW_H], (VIEW_W - 2) * VIEW_H * sizeof(uint16_t));
         memcpy(denoise_mask_out_frm[VIEW_W - 2], (uint8_t *)denoise_mask_buffer_h, 2 * VIEW_H * sizeof(uint16_t)); // 拷贝最后4列
     }
@@ -2501,7 +2501,7 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
         else if (retry_cnt > 0) {
             LogWarn("[sprayremove] PVA task resubmitted {} times.", retry_cnt);
         }
-        
+
         for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
             auto time_start2 = std::chrono::steady_clock::now();
             ret = rainEnhancePva(exception_msg, status_code);

@@ -35,12 +35,15 @@
 #include "cpu_load.h"
 #include "rs_new_logger.h"
 #include "json_reader.h"
+#include "time_utils.h"
 
 /******************************************************************************/
 /*                  Using namespace, type or template alias                   */
 /******************************************************************************/
 
-namespace robosense::lidar::utils {
+namespace robosense {
+namespace lidar {
+namespace utils {
 
 /******************************************************************************/
 /*              Definition of local types (enum, struct, union)               */
@@ -175,8 +178,7 @@ void monitThreads() {
     LogDebug("monitThreads interval_time: {}", json_reader::test_param.cpu_monitor_cycle);
     std::this_thread::sleep_for(std::chrono::seconds(2));
     // Sleep 2 seconds to wait for all threads to start.
-    auto now = std::chrono::system_clock::now();
-    uint64_t timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    long timestamp_ms{utils::unixTimestamp()};
     double algo_time{0.0};
     double main_cpu_usage{0.0};
     ThreadInfo main_thread;
@@ -205,8 +207,7 @@ void monitThreads() {
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(json_reader::test_param.cpu_monitor_cycle));
         g_save_bin = false;
-        now = std::chrono::system_clock::now();
-        timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        timestamp_ms = utils::unixTimestamp();
         algo_time = 0.0;
         main_cpu_usage = calculateCPUUsage(main_thread);
 
@@ -249,6 +250,8 @@ void monitThreads() {
 /*         Definition of private functions of classes or templates            */
 /******************************************************************************/
 
-} // namespace robosense::lidar::utils
+} // namespace utils
+} // namespace lidar
+} // namespace robosense
 
 /* \}  utils */

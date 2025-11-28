@@ -9,7 +9,8 @@ project(lidar_robosense_SDK LANGUAGES CXX VERSION 2.00.00)
 option(COMPILE_EXAMPLES "Build Lidar SDK examples" ON)
 option(COMPILE_ARM_VERSION "Build arm version" OFF)
 option(COMPILE_TABLE_HIDE "Hide interface or not" ON)
-option(COMPILE_MIPI_10HZ "Hide interface or not" OFF)
+option(COMPILE_MIPI_10HZ "Compile the MIPI 10Hz version" OFF)
+option(COMPILE_MIPI_30HZ "Compile the MIPI 30Hz version" OFF)
 
 if(COMPILE_ARM_VERSION)
     message("Build arm version")
@@ -21,8 +22,11 @@ else()
 endif()
 
 if(COMPILE_MIPI_10HZ)
-    message("COMPILE the MIPI 10HZ version")
+    message("COMPILE the MIPI 10Hz version")
     add_compile_definitions(MIPI_10HZ=1)
+elseif(COMPILE_MIPI_30HZ)
+    message("COMPILE the MIPI 30Hz version")
+    add_compile_definitions(MIPI_30HZ=1)
 endif()
 
 # Add submodules

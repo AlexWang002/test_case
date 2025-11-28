@@ -9,7 +9,7 @@ function show_help {
   echo "  -c , --clean        Perform a clean build (delete build directory contents)"
   echo "  -i , --install      Install the project after build)"
   echo "  -p, --platform      Specify platform [pc|arm] (default: pc)"
-  echo "  -f, --frequency     Specify the frequency of mipi 10Hz"
+  echo "  -f, --frequency     Specify the frequency of mipi [10|30|60] (default: 60)"
   echo "  --build-dir DIR     Specify the build directory (default: build)"
   echo "  --cmake-arg ARG     Pass additional arguments to CMake"
   echo "  -h, --help          Show this help message"
@@ -55,8 +55,22 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     -f|--frequency)
-      FREQUENCY="-DCOMPILE_MIPI_10HZ=ON"
-      shift
+      if [ -z "$2" ]; then
+        echo "Error: --frequency requires a argument [10|30|60]"
+        show_help
+        exit 1
+      fi
+      if [ "$2" != 10 ] && [ "$2" != 30 ] && [ "$2" != 60 ]; then
+        echo "Error: Unknown frequency $freq_val. Supported frequency: 10, 30, 60"
+        show_help
+        exit 1
+      fi
+      case "$2" in
+        10) FREQUENCY="-DCOMPILE_MIPI_10HZ=ON" ;;
+        30) FREQUENCY="-DCOMPILE_MIPI_30HZ=ON" ;;
+        60) FREQUENCY="" ;;
+      esac
+      shift 2
       ;;
     --cmake-arg)
       CMAKE_ARGS="$CMAKE_ARGS $2"
@@ -103,14 +117,7 @@ fi
 echo "Building and installing the project for platform '$PLATFORM'..."
 # 运行 cmake 配置
 echo "Running cmake..."
-if [ "$PLATFORM" = "pc" ]; then
-    cmake .. -DPVA_BUILD_MODE=NATIVE $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
-elif [ "$PLATFORM" = "arm" ]; then
-    cmake .. -DPVA_BUILD_MODE=L4T $CMAKE_ARGS $CMAKE_PLATFORM_ARGS  $FREQUENCY || { echo "CMake failed"; exit 1; }
-else
-    echo "Unsupported platform: $PLATFORM"
-    exit 1
-fi
+cmake .. $CMAKE_ARGS $CMAKE_PLATFORM_ARGS $FREQUENCY || { echo "CMake failed"; exit 1; }
 
 # 使用 make 编译
 echo "Compiling the project..."

@@ -36,22 +36,18 @@
 #include "json.hpp"
 #include "lidar_sdk_api.h"
 #include "sync_queue.h"
-#include "version/version.hpp"
 
 /******************************************************************************/
 /*                          Definition of namespace                           */
 /******************************************************************************/
-namespace robosense::lidar {
+namespace robosense {
+namespace lidar {
 
 /******************************************************************************/
 /*                   Declaration of exported constant data                    */
 /******************************************************************************/
 #define MIPI_DATA_QUEUE_SIZE   (6)
 #define POINT_CLOUD_QUEUE_SIZE (3)
-
-constexpr uint16_t kSdkVersionEncoded{((RSLIDARSDK_VERSION_MAJOR % 10) * 10000) +
-                                      ((RSLIDARSDK_VERSION_MINOR % 100) * 100) +
-                                        RSLIDARSDK_VERSION_PATCH};
 
 /******************************************************************************/
 /*        Definition of exported types (typedef, enum, struct, union)         */
@@ -158,7 +154,8 @@ class RSLidarSdkImpl {
     LidarPointCloudPtr deepCopyLidarCloud(const LidarPointCloudPackets* src);
 };
 
-} // namespace robosense::lidar
+} // namespace lidar
+} // namespace robosense
 
 /** \} impl */
 #endif /* I_RS_LIDAR_SDK_IMPL_H */
