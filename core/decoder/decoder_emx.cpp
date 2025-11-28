@@ -301,6 +301,7 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
     auto& current_block = point_cloud_->packets[pkt_seq];
     // Set the Block header
     current_block.time_offset = static_cast<uint16_t>(std::round(0.1 * (pkt_ts - first_pkt_ts))); // time offset, unit 10us
+    current_block.motor_speed = pkt.header.pitch_offset;
     current_block.azimuth = pkt.header.yaw;
 
     for (uint16_t pixel_id = 0; pixel_id < pixel_per_pkt; ++pixel_id) {

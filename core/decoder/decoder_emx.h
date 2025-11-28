@@ -139,7 +139,8 @@ typedef struct {
     uint16_t column;       //  2 bytes
     int16_t yaw;           //  2 bytes
     uint8_t surface_id;    //  1 byte
-    uint32_t reserved;     //  4 bytes
+    uint16_t pitch_offset; //  2 bytes
+    uint16_t reserved;     //  2 bytes
     uint32_t frame_cnt;    //  4 bytes
     uint8_t lidar_type;    //  1 byte
 } RSEMXMsopHeader;         // 32 bytes
