@@ -7,13 +7,9 @@
 #define TILE_WIDTH      192
 #define TILE_HEIGHT     95
 #define VIEW_HEIGHT     760
-#define TOTAL_HEIGHT    760
-
 #define KERNEL_RADIUS_WIDTH     1
 #define KERNEL_RADIUS_HEIGHT    2
-
 #define TILE_CNT 8
-//#define BlockSize              24    // 数据分块大小
 
 #define ALGO_ENABLE 1 // 算法开关
 

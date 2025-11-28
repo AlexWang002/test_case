@@ -2462,19 +2462,19 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
     if (algo_Param.SprayRemoveOn) {
         sprayRemoveCpu(pstFrameBuffer);
 
-        memcpy((uint8_t *)DistIn0_h, (uint8_t *)pstFrameBuffer->dist0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
-        memcpy((uint8_t *)DistIn1_h, (uint8_t *)pstFrameBuffer->dist1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
-        memcpy((uint8_t *)RefIn0_h, (uint8_t *)pstFrameBuffer->ref0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
-        memcpy((uint8_t *)RefIn1_h, (uint8_t *)pstFrameBuffer->ref1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
-        memcpy((uint8_t *)AttIn0_h, (uint8_t *)pstFrameBuffer->att0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
-        memcpy((uint8_t *)AttIn1_h, (uint8_t *)pstFrameBuffer->att1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
+        memcpy(DistIn0_h, pstFrameBuffer->dist0, VIEW_H * VIEW_W * sizeof(uint16_t));
+        memcpy(DistIn1_h, pstFrameBuffer->dist1, VIEW_H * VIEW_W * sizeof(uint16_t));
+        memcpy(RefIn0_h, pstFrameBuffer->ref0, VIEW_H * VIEW_W * sizeof(uint16_t));
+        memcpy(RefIn1_h, pstFrameBuffer->ref1, VIEW_H * VIEW_W * sizeof(uint16_t));
+        memcpy(AttIn0_h, pstFrameBuffer->att0, VIEW_H * VIEW_W * sizeof(uint16_t));
+        memcpy(AttIn1_h, pstFrameBuffer->att1, VIEW_H * VIEW_W * sizeof(uint16_t));
 
         for (int i = 0; i < 38; i ++) {
             int offset0 = (i * 80 + 40) * 192;
             int offset1 = (i * 80 + 60) * 192;
             /*地面标签，给spray-remove algo使用*/
-            memcpy((uint8_t *)&Glink_h[offset0], (uint8_t *)pstFrameBuffer->gnd_mark0[i * 20], VIEW_H * 20 * sizeof(uint16_t));
-            memcpy((uint8_t *)&Glink_h[offset1], (uint8_t *)pstFrameBuffer->gnd_mark1[i * 20], VIEW_H * 20 * sizeof(uint16_t));
+            memcpy(&Glink_h[offset0], pstFrameBuffer->gnd_mark0[i * 20], VIEW_H * 20 * sizeof(uint16_t));
+            memcpy(&Glink_h[offset1], pstFrameBuffer->gnd_mark1[i * 20], VIEW_H * 20 * sizeof(uint16_t));
         }
 
         std::string exception_msg;
@@ -2515,8 +2515,8 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
             else if (ret == 2) {
                 LogWarn("[rainenhance] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration2.count());
             }
-            memcpy(spray_mark_out_frm0[0], (uint8_t *)&FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
-            memcpy(spray_mark_out_frm1[0], (uint8_t *)&FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+        memcpy(spray_mark_out_frm0[0], &FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+        memcpy(spray_mark_out_frm1[0], &FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
         }
         if (ret != 0) {
             LogError("[rainenhance] Fail to submit pva task three times!");

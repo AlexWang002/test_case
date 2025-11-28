@@ -5,12 +5,8 @@ project(spray_programm)
 
 pva_device(spray_dev
         spray_top.c
-    BCF
-        vpu_stack_size.bcf
 )
 
 pva_device(enhance_dev
         enhance_top.c
-    BCF
-        vpu_stack_size.bcf
 )
