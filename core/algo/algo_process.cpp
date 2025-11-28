@@ -44,6 +44,8 @@
 #include "groundfit.h"
 #include "upsample.h"
 #include "highcalc.h"
+#include "spray.h"
+#include "stray.h"
 #include <iostream>
 #include <fstream>
 /******************************************************************************/
