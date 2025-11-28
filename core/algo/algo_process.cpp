@@ -353,19 +353,23 @@ void CloudManager::algoFinalProcess(void)
                         const bool wave0_del_flag = stray0 || spray0 || trail || !denoise;
                         const bool wave1_sel_flag = !stray1 && !spray1 && !trail && denoise;
 
-                        // 情况1: 两回波均无效点
-                        if (wave0_del_flag && !wave1_sel_flag) {
-                            Distwave0[row_idx] = 0;
-                            Refwave0[row_idx] = 0;
-                            Attrwave0[row_idx] = 0;
+                        if (algo_func_.algo_Param.DeleteOn) {
+                            // 情况1: 两回波均无效点
+                            if (wave0_del_flag && !wave1_sel_flag) {
+                                Distwave0[row_idx] = 0;
+                                Refwave0[row_idx] = 0;
+                                Attrwave0[row_idx] = 0;
+                            }
+                            // 情况2: 第一回波无效点，第二回波有效点
+                            else if (wave0_del_flag && wave1_sel_flag) {
+                                Distwave0[row_idx] = Distwave1[row_idx];
+                                Refwave0[row_idx] = Refwave1[row_idx];
+                                Attrwave0[row_idx] = Attrwave1[row_idx];
+                            }
+                            Attrwave0[row_idx] &= 0xF7;
+                        } else {
+                            // do nothing
                         }
-                        // 情况2: 第一回波无效点，第二回波有效点
-                        else if (wave0_del_flag && wave1_sel_flag) {
-                            Distwave0[row_idx] = Distwave1[row_idx];
-                            Refwave0[row_idx] = Refwave1[row_idx];
-                            Attrwave0[row_idx] = Attrwave1[row_idx];
-                        }
-                        Attrwave0[row_idx] &= 0xF7;
                     }
                 }
                 /** Data initialization */

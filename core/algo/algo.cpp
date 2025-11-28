@@ -1662,6 +1662,7 @@ void AlgoFunction::algoInit()
         algo_Param.DenoiseOn = json_reader::algo_switch.enable_denoise;
         algo_Param.StrayRemoveOn = json_reader::algo_switch.enable_stray;
         algo_Param.SprayRemoveOn = json_reader::algo_switch.enable_spray;
+        algo_Param.DeleteOn = json_reader::algo_switch.enable_delete;
     } else {
         LogWarn(__FILE__, __LINE__, __func__, "Algorithm switch read from json file FAILED, Using default switch.");
     }
@@ -2472,7 +2473,7 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
             /*地面标签，给spray-remove algo使用*/
             memcpy((uint8_t *)&Glink_h[offset2], (uint8_t *)gnd_link_cpu0[i * 20], VIEW_H * 20 * sizeof(uint16_t));
             memcpy((uint8_t *)&Glink_h[offset3], (uint8_t *)gnd_link_cpu1[i * 20], VIEW_H * 20 * sizeof(uint16_t));
-            
+
             memcpy(&Glink_h[offset0], pstFrameBuffer->gnd_mark0[i * 20], VIEW_H * 20 * sizeof(uint16_t));
             memcpy(&Glink_h[offset1], pstFrameBuffer->gnd_mark1[i * 20], VIEW_H * 20 * sizeof(uint16_t));
         }

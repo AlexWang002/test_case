@@ -47,6 +47,7 @@ struct AlgoSwitch {
     bool enable_denoise      {false};
     bool enable_stray        {false};
     bool enable_spray        {false};
+    bool enable_delete       {false};
     bool data_valid          {false};
 };
 

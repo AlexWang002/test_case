@@ -191,6 +191,7 @@ AlgoSwitch getJsonData<AlgoSwitch>(const json& json_obj, const std::string& key)
         config.enable_denoise = getJsonData<bool>(target, "ENABLE_DENOISE");
         config.enable_stray = getJsonData<bool>(target, "ENABLE_STRAY");
         config.enable_spray = getJsonData<bool>(target, "ENABLE_SPRAY");
+        config.enable_delete = getJsonData<bool>(target, "ENABLE_DELETE");
         config.data_valid = true;
     } catch (const json::exception& e) {
         throw std::runtime_error("JSON parsing error for key '" + key + "': " + e.what());
@@ -261,7 +262,8 @@ std::string DataVariantVisitor::operator()(const AlgoSwitch& value) const {
     result += "Enable trail remove : " + boolToString(value.enable_trail_remove) + "\n" +
               "Enable de-noise     : " + boolToString(value.enable_denoise) + "\n" +
               "Enable stray        : " + boolToString(value.enable_stray) + "\n" +
-              "Enable spray        : " + boolToString(value.enable_spray) + "\n";
+              "Enable spray        : " + boolToString(value.enable_spray) + "\n" +
+              "Enable delete       : " + boolToString(value.enable_delete) + "\n";
 
     return result;
 }
