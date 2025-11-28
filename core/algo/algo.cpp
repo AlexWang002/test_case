@@ -44,6 +44,7 @@
 #include "stray.h"
 #include "spray.h"
 #include "upsample.h"
+#include "highcalc.h"
 #include "json_reader.h"
 
 /******************************************************************************/
@@ -2367,86 +2368,79 @@ void AlgoFunction::strayDelete(int col_idx,
     }
 }
 
-void AlgoFunction::sprayRemoveCpu(tstFrameBuffer* pstFrameBuffer)
+void AlgoFunction::sprayRemoveCpu(tstFrameBuffer* pstFrameBuffer, int32_t col_idx)
 {
-    static int cnt0{0}, cnt1{0};
-    for (int32_t col_idx = 0; col_idx < VIEW_W; ++col_idx){
-        for (int row_idx = 0; row_idx < VIEW_H; row_idx++){
-            // 第一回波数据
-            int cur_dist_1 = pstFrameBuffer->dist0[col_idx][row_idx];
-            int cur_dist_2 = pstFrameBuffer->dist1[col_idx][row_idx];
+    for (int row_idx = 0; row_idx < VIEW_H; row_idx++){
+        // 第一回波数据
+        int cur_dist_1 = pstFrameBuffer->dist0[col_idx][row_idx];
+        int cur_dist_2 = pstFrameBuffer->dist1[col_idx][row_idx];
 
-            // if (pstFrameBuffer->gnd_mark0[col_idx][row_idx]) {
-            //     cnt0 += 1;
-            // }
+        // if (pstFrameBuffer->gnd_mark0[col_idx][row_idx]) {
+        //     cnt0 += 1;
+        // }
 
-            /******************接地保护*******************/
-            int zone_idx = row_idx / 12;
-            if (row_idx % 12 == 0) //12个通道一个采样
+        /******************接地保护*******************/
+        int zone_idx = row_idx / 12;
+        if (row_idx % 12 == 0) //12个通道一个采样
+        {
+            spray_Param.dist_cap_zone[zone_idx][0] = cur_dist_1;
+            spray_Param.dist_cap_zone[zone_idx][1] = cur_dist_2;
+
+            //接地判别(第一回波)
+            if (zone_idx > 0 && spray_Param.ground_cap_zone[zone_idx - 1][0] &&
+                ((std::abs(spray_Param.dist_cap_zone[zone_idx][0] - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix &&
+                spray_Param.dist_cap_zone[zone_idx - 1][0]) ||
+                (std::abs(spray_Param.dist_cap_zone[zone_idx][0] - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix &&
+                spray_Param.dist_cap_zone[zone_idx - 1][1])))
             {
-                spray_Param.dist_cap_zone[zone_idx][0] = cur_dist_1;
-                spray_Param.dist_cap_zone[zone_idx][1] = cur_dist_2;
-
-                //接地判别(第一回波)
-                if (zone_idx > 0 && spray_Param.ground_cap_zone[zone_idx - 1][0] &&
-                    ((std::abs(spray_Param.dist_cap_zone[zone_idx][0] - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix &&
-                    spray_Param.dist_cap_zone[zone_idx - 1][0]) ||
-                    (std::abs(spray_Param.dist_cap_zone[zone_idx][0] - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix &&
-                    spray_Param.dist_cap_zone[zone_idx - 1][1])))
-                {
-                    spray_Param.ground_cap_zone[zone_idx][0] = 1;
-                }
-                else
-                {
-                    spray_Param.ground_cap_zone[zone_idx][0] = 0;
-                }
-
-                //接地判别(第二回波)
-                if (zone_idx > 0 && spray_Param.ground_cap_zone[zone_idx - 1][1] &&
-                    ((std::abs(spray_Param.dist_cap_zone[zone_idx][1] - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.dist_cap_zone[zone_idx - 1][0]) ||
-                    (std::abs(spray_Param.dist_cap_zone[zone_idx][1] - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.dist_cap_zone[zone_idx - 1][1])))
-                {
-                    spray_Param.ground_cap_zone[zone_idx][1] = 1;
-                }
-                else
-                {
-                    spray_Param.ground_cap_zone[zone_idx][1] = 0;
-                }
+                spray_Param.ground_cap_zone[zone_idx][0] = 1;
+            }
+            else
+            {
+                spray_Param.ground_cap_zone[zone_idx][0] = 0;
             }
 
-            //悬空判断的link2和link3预处理
-            int col_id1 = col_idx / 20;
-            int col_id2 = col_idx % 20;
-            //第一回波
-            int glk0 = 0;
-            if ((zone_idx > 0) && ((std::abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx-1][0]) > spray_Param.dist_diff_thr_fix
-            && std::abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx-1][1]) > spray_Param.dist_diff_thr_fix) || !spray_Param.ground_cap_zone[zone_idx][0])){
-                glk0 = 1;
+            //接地判别(第二回波)
+            if (zone_idx > 0 && spray_Param.ground_cap_zone[zone_idx - 1][1] &&
+                ((std::abs(spray_Param.dist_cap_zone[zone_idx][1] - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.dist_cap_zone[zone_idx - 1][0]) ||
+                (std::abs(spray_Param.dist_cap_zone[zone_idx][1] - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.dist_cap_zone[zone_idx - 1][1])))
+            {
+                spray_Param.ground_cap_zone[zone_idx][1] = 1;
             }
-            if ((zone_idx > 0) && ((std::abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx-1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[zone_idx][0]) ||
-                    (std::abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx-1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[zone_idx][1]))){
-                glk0 = 0;
+            else
+            {
+                spray_Param.ground_cap_zone[zone_idx][1] = 0;
             }
-
-            Glink_h[(col_id1 * 80 + col_id2) * 192 + row_idx] = glk0;
-
-            //第二回波
-            int glk1 = 0;
-            if ((zone_idx > 0) &&((std::abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx-1][0]) > spray_Param.dist_diff_thr_fix
-                && std::abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx-1][1]) > spray_Param.dist_diff_thr_fix))){
-                glk1 = 1;
-            }
-            if ((zone_idx > 0) && ((std::abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx-1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[zone_idx][0]) ||
-                (std::abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx-1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[zone_idx][1]))){
-                glk1 = 0;
-            }
-            Glink_h[(col_id1 * 80 + 20 + col_id2) * 192 + row_idx] = glk1;
         }
-    }
 
-    // std::cout << "[cnt0] " << cnt0 << ", [cnt1] " << cnt1 << std::endl;
-    cnt0 = 0;
-    cnt1 = 0;
+        //悬空判断的link2和link3预处理
+        int col_id1 = col_idx / 20;
+        int col_id2 = col_idx % 20;
+        //第一回波
+        int glk0 = 0;
+        if ((zone_idx > 0) && ((std::abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx-1][0]) > spray_Param.dist_diff_thr_fix
+        && std::abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx-1][1]) > spray_Param.dist_diff_thr_fix) || !spray_Param.ground_cap_zone[zone_idx][0])){
+            glk0 = 1;
+        }
+        if ((zone_idx > 0) && ((std::abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx-1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[zone_idx][0]) ||
+                (std::abs(cur_dist_1 - spray_Param.dist_cap_zone[zone_idx-1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[zone_idx][1]))){
+            glk0 = 0;
+        }
+
+        gnd_link_cpu0[col_idx][row_idx] = glk0;
+
+        //第二回波
+        int glk1 = 0;
+        if ((zone_idx > 0) &&((std::abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx-1][0]) > spray_Param.dist_diff_thr_fix
+            && std::abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx-1][1]) > spray_Param.dist_diff_thr_fix))){
+            glk1 = 1;
+        }
+        if ((zone_idx > 0) && ((std::abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx-1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[zone_idx][0]) ||
+            (std::abs(cur_dist_2 - spray_Param.dist_cap_zone[zone_idx-1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.ground_cap_zone[zone_idx][1]))){
+            glk1 = 0;
+        }
+        gnd_link_cpu1[col_idx][row_idx] = glk1;
+    }
 }
 
 void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
@@ -2460,7 +2454,7 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
     static int mark0_cnt{0}, mark1_cnt{0};
 
     if (algo_Param.SprayRemoveOn) {
-        sprayRemoveCpu(pstFrameBuffer);
+        // sprayRemoveCpu(pstFrameBuffer);
 
         memcpy(DistIn0_h, pstFrameBuffer->dist0, VIEW_H * VIEW_W * sizeof(uint16_t));
         memcpy(DistIn1_h, pstFrameBuffer->dist1, VIEW_H * VIEW_W * sizeof(uint16_t));
@@ -2470,9 +2464,15 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
         memcpy(AttIn1_h, pstFrameBuffer->att1, VIEW_H * VIEW_W * sizeof(uint16_t));
 
         for (int i = 0; i < 38; i ++) {
+            int offset2 = (i * 80) * 192;
+            int offset3 = (i * 80 + 20) * 192;
+
             int offset0 = (i * 80 + 40) * 192;
             int offset1 = (i * 80 + 60) * 192;
             /*地面标签，给spray-remove algo使用*/
+            memcpy((uint8_t *)&Glink_h[offset2], (uint8_t *)gnd_link_cpu0[i * 20], VIEW_H * 20 * sizeof(uint16_t));
+            memcpy((uint8_t *)&Glink_h[offset3], (uint8_t *)gnd_link_cpu1[i * 20], VIEW_H * 20 * sizeof(uint16_t));
+            
             memcpy(&Glink_h[offset0], pstFrameBuffer->gnd_mark0[i * 20], VIEW_H * 20 * sizeof(uint16_t));
             memcpy(&Glink_h[offset1], pstFrameBuffer->gnd_mark1[i * 20], VIEW_H * 20 * sizeof(uint16_t));
         }
@@ -2540,6 +2540,27 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
     }
 }
 
+void AlgoFunction::highcalcExec(tstFrameBuffer* pstFrameBuffer)
+{
+    static bool first{true};
+    if (first) {
+        first = false;
+        highcalcDataAlloc();
+    }
+
+    memcpy((uint8_t *)h_dist_in0_h, (uint8_t *)pstFrameBuffer->dist0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
+    memcpy((uint8_t *)h_dist_in1_h, (uint8_t *)pstFrameBuffer->dist1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
+    memcpy((uint8_t *)h_high_in0_h, (uint8_t *)pstFrameBuffer->high0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
+    memcpy((uint8_t *)h_high_in1_h, (uint8_t *)pstFrameBuffer->high1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
+    memcpy((uint8_t *)h_proj_dist0_h, (uint8_t *)pstFrameBuffer->proj_dist0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
+    memcpy((uint8_t *)h_proj_dist1_h, (uint8_t *)pstFrameBuffer->proj_dist1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
+
+    highcalcPva();
+
+    memcpy((uint8_t *)pstFrameBuffer->gnd_mark0[0], (uint8_t *)&h_gnd_out0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+    memcpy((uint8_t *)pstFrameBuffer->gnd_mark1[0], (uint8_t *)&h_gnd_out1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+}
+
 void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
 {
     std::string exception_msg;
@@ -2596,35 +2617,71 @@ int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, in
                 first = false;
             }
 
+            if(col_idx < 0 || col_idx >= VIEW_W) {
+                return proc_col;
+            }
+
+            int surface_id = pstFrameBuffer->surface_id.load();
+            int real_col;
+            int org_high0;
+            int org_high1;
+            int fit_ground_high0;
+            int fit_ground_high1;
+            const float a = fit_Params.a;
+            const float b = fit_Params.b;
+            const float c = fit_Params.c;
+            uint16_t* dist0 = &pstFrameBuffer->dist0[col_idx][0];
+            uint16_t* dist1 = &pstFrameBuffer->dist1[col_idx][0];
+            int16_t* high0 = &pstFrameBuffer->high0[col_idx][0];
+            int16_t* high1 = &pstFrameBuffer->high1[col_idx][0];
+            uint16_t* proj_dist0 = &pstFrameBuffer->proj_dist0[col_idx][0];
+            uint16_t* proj_dist1 = &pstFrameBuffer->proj_dist1[col_idx][0];
+
+            if(0 == surface_id) {
+                real_col = (col_idx << 1);
+            } else {
+                real_col = UP_VIEW_W - (col_idx << 1) - 1;
+            }
+
+            for (int i = 0; i < VIEW_H; ++i) {
+                int dist_val0 = dist0[i];
+                int dist_val1 = dist1[i];
+                int Ix_val = Ix_in[i][real_col];
+                int Iy_val = Iy_in[i][real_col];
+                int Iz_val = Iz_in[i][real_col];
+
+                org_high0 = (dist_val0 * Iz_val) >> 15;
+                org_high1 = (dist_val1 * Iz_val) >> 15;
+                fit_ground_high0 = std::floor((float)dist_val0 *
+                    (a * Ix_val / 32768.0 + b * Iy_val / 32768.0) + c);
+                fit_ground_high1 = std::floor((float)dist_val1 *
+                    (a * Ix_val / 32768.0 + b * Iy_val / 32768.0) + c);
+                high0[i] = org_high0 - fit_ground_high0;
+                high1[i] = org_high1 - fit_ground_high1;
+                proj_dist0[i] = (dist_val0 * cosd_pitch_lut[i]) >> 15;
+                proj_dist1[i] = (dist_val1 * cosd_pitch_lut[i]) >> 15;
+            }
+
+            if (algo_Param.SprayRemoveOn) {
+                sprayRemoveCpu(pstFrameBuffer, col_idx);
+            }
+
             // 地面拟合
-            if(col_idx >= 0 && col_idx < VIEW_W){
-                if((col_idx % gnd_step) == 0){
-                    uint16_t dist_line[VIEW_H];
-                    uint16_t col_pos = col_idx / gnd_step;
-                    memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
+            if((col_idx % gnd_step) == 0){
+                uint16_t dist_line[VIEW_H];
+                uint16_t col_pos = col_idx / gnd_step;
+                memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
 
-                    int surface_id = pstFrameBuffer->surface_id.load();
-                    int real_col;
-                    if(0 == surface_id)
-                    {
-                        real_col = (col_idx << 1);
-                    }
-                    else
-                    {
-                        real_col = UP_VIEW_W - (col_idx << 1) - 1;
-                    }
-
-                    for(int row = 0; row < VIEW_H; ++row){
-                        int idx = row * GND_VIEW_W + col_pos;
-                        dist_wave0_buffer6[idx] = dist_line[row];
-                        int dist = dist_line[row];
-                        X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
-                        Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
-                        Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
-                    }
-                    if(col_idx == (VIEW_W - gnd_step)){
-                        selectGroundFitFunc(best_model_fit);
-                    }
+                for(int row = 0; row < VIEW_H; ++row){
+                    int idx = row * GND_VIEW_W + col_pos;
+                    dist_wave0_buffer6[idx] = dist_line[row];
+                    int dist = dist_line[row];
+                    X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
+                    Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
+                    Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
+                }
+                if(col_idx == (VIEW_W - gnd_step)){
+                    selectGroundFitFunc(best_model_fit);
                 }
             }
         }break;

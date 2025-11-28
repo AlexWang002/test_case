@@ -39,8 +39,11 @@
 #include "thread_config.h"
 #include "cpu_load.h"
 #include "rs_new_logger.h"
+#include "trail.h"
+#include "denoise.h"
 #include "groundfit.h"
 #include "upsample.h"
+#include "highcalc.h"
 #include <iostream>
 #include <fstream>
 /******************************************************************************/
@@ -293,6 +296,24 @@ void CloudManager::algoFinalProcess(void)
                 cv_calc_.notify_all();
             };
             if (sendEnoughData(algo_func_.VIEW_W - 1)) {
+                // auto highcalc_start = std::chrono::steady_clock::now();
+                algo_func_.highcalcExec(frame_buffer);
+                // auto highcalc_end = std::chrono::steady_clock::now();
+                // auto highcalc_duration = std::chrono::duration_cast<std::chrono::microseconds>(highcalc_end - highcalc_start);
+                // std::cout << "highcalc duration: " << highcalc_duration.count() << "us" << std::endl;
+
+                //auto stray_start = std::chrono::steady_clock::now();
+                algo_func_.strayDeleteCombine(frame_buffer);
+                //auto stray_end = std::chrono::steady_clock::now();
+                //auto stray_duration = std::chrono::duration_cast<std::chrono::microseconds>(stray_end - stray_start);
+                //std::cout << "stray duration: " << stray_duration.count() << "us" << std::endl;
+
+                //auto spray_start = std::chrono::steady_clock::now();
+                algo_func_.sprayRemoveExec(frame_buffer);
+                //auto spray_end = std::chrono::steady_clock::now();
+                //auto spray_duration = std::chrono::duration_cast<std::chrono::microseconds>(spray_end - spray_start);
+                //std::cout << "spray duration: " << spray_duration.count() << "us" << std::endl;
+
                 memcpy(dist_wave0, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(dist_wave1, frame_buffer->dist1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);//加入双回波数据
                 memcpy(refl_wave0, frame_buffer->ref0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
@@ -471,6 +492,9 @@ void CloudManager::algoFinalProcess(void)
             }
         }
         upsampleDataFree();
+        highcalcDataFree();
+        strayBufferRelease();
+        sprayDataFree();
     }
     catch (const std::exception& kE) {
         LogError("ERROR: algoProcess thread:{}, crashed:{}", ALGO_THREAD_NUM, kE.what());
@@ -494,6 +518,9 @@ void CloudManager::algoProcess(int32_t task_id)
         if (task_id == 0) {
             pid_t tid = gettid();
             utils::addThread(tid, "algorithm");
+            /*线程启动时在DRAM中为pva申请算法所需内存*/
+            // denoiseDataAlloc();
+            // TrailDataAlloc();
         }
 
         while (false == to_exit_handle_.load()) {
@@ -530,18 +557,6 @@ void CloudManager::algoProcess(int32_t task_id)
                                         }
                                     }
                                 }
-
-                                //auto stray_start = std::chrono::steady_clock::now();
-                                algo_func_.strayDeleteCombine(frame_buffer);
-                                //auto stray_end = std::chrono::steady_clock::now();
-                                //auto stray_duration = std::chrono::duration_cast<std::chrono::microseconds>(stray_end - stray_start);
-                                //std::cout << "stray duration: " << stray_duration.count() << "us" << std::endl;
-
-                                //auto spray_start = std::chrono::steady_clock::now();
-                                algo_func_.sprayRemoveExec(frame_buffer);
-                                //auto spray_end = std::chrono::steady_clock::now();
-                                //auto spray_duration = std::chrono::duration_cast<std::chrono::microseconds>(spray_end - spray_start);
-                                //std::cout << "spray duration: " << spray_duration.count() << "us" << std::endl;
                             }
                         }
                         else{
@@ -578,6 +593,8 @@ void CloudManager::algoProcess(int32_t task_id)
         }
         if (task_id == 0) {
             /** memory release */
+            denoiseDataFree();
+            TrailDataFree();
         }
     }
     catch (const std::exception& kE) {
@@ -695,10 +712,10 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
                 uint16_t* ref1 = &frame_buffer->ref1[upsample_col][0];
                 uint16_t* att0 = &frame_buffer->att0[upsample_col][0];
                 uint16_t* att1 = &frame_buffer->att1[upsample_col][0];
-                uint16_t* gnd0 = &frame_buffer->gnd_mark0[upsample_col][0];
-                uint16_t* gnd1 = &frame_buffer->gnd_mark1[upsample_col][0];
-                int16_t* high0 = &frame_buffer->high0[upsample_col][0];
-                int16_t* high1 = &frame_buffer->high1[upsample_col][0];
+                // uint16_t* gnd0 = &frame_buffer->gnd_mark0[upsample_col][0];
+                // uint16_t* gnd1 = &frame_buffer->gnd_mark1[upsample_col][0];
+                // int16_t* high0 = &frame_buffer->high0[upsample_col][0];
+                // int16_t* high1 = &frame_buffer->high1[upsample_col][0];
 
                 for (int32_t i = 0; i < algo_func_.VIEW_H; ++i) {
                     const RSEMXMsopWave* kWaves0 = &kRawData.pixels[i].waves[0];
@@ -711,7 +728,7 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
                     att1[i] = kWaves1->attribute;
                 }
 
-                algo_func_.highCalcFunc(dist0, dist1, high_calc_col, high0, high1, gnd0, gnd1);
+                // algo_func_.highCalcFunc(dist0, dist1, high_calc_col, high0, high1, gnd0, gnd1);
             } else {
                 uint16_t* dist0_raw = &frame_buffer->dist0_raw[upsample_col][0];
                 uint16_t* ref0_raw = &frame_buffer->ref0_raw[upsample_col][0];
