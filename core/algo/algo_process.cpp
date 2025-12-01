@@ -547,22 +547,12 @@ void CloudManager::algoProcess(int32_t task_id)
                                 //auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
                                 //std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
 
-
-                                if (algo_func_.algo_Param.TrailRemoveOn) {
-                                    /** Process */
-                                    //auto trail_start = std::chrono::steady_clock::now();
-                                    algo_func_.trailExec(frame_buffer);
-                                    //auto trail_end = std::chrono::steady_clock::now();
-                                    //auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
-                                    //std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
-                                }
-                                else{
-                                    for (int cc = 0; cc < algo_func_.VIEW_W; cc ++) {
-                                        for (int rr = 0; rr < algo_func_.VIEW_H; rr ++) {
-                                            algo_func_.trail_mask_out_frm[cc][rr] = 0;
-                                        }
-                                    }
-                                }
+                                /** Process */
+                                //auto trail_start = std::chrono::steady_clock::now();
+                                algo_func_.trailExec(frame_buffer);
+                                //auto trail_end = std::chrono::steady_clock::now();
+                                //auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
+                                //std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
                             }
                         }
                         else{

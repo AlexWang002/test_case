@@ -191,7 +191,6 @@ int upsample_main(std::string& exception_msg, int32_t& status_code)
         /** 编译程序数据流 */
         prog.compileDataFlows();
 
-        SetVPUPrintBufferSize(64 * 1024);
         SyncObj sync = SyncObj::Create();
         Fence fence{sync};
         CmdRequestFences rf{fence};

@@ -1719,7 +1719,7 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
 
     if (algo_Param.DenoiseOn) {
         /*拷贝整帧数据到denoise算法的PVA buffer中*/
-        memcpy((uint8_t *)denoise_dist_buffer_h, (uint8_t *)pstFrameBuffer->dist0[0],  VIEW_H * VIEW_W * sizeof(uint16_t));
+        memcpy(denoise_dist_buffer_h, pstFrameBuffer->dist0,  VIEW_H * VIEW_W * sizeof(uint16_t));
 
         std::string exception_msg;
         int32_t status_code;
@@ -1746,8 +1746,7 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
             LogWarn("[denoise] PVA task resubmitted {} times.", retry_cnt);
         }
 
-        memcpy(denoise_mask_out_frm[0], (uint8_t *)&denoise_mask_buffer_h[2 * VIEW_H], (VIEW_W - 2) * VIEW_H * sizeof(uint16_t));
-        memcpy(denoise_mask_out_frm[VIEW_W - 2], (uint8_t *)denoise_mask_buffer_h, 2 * VIEW_H * sizeof(uint16_t)); // 拷贝最后4列
+        memcpy(denoise_mask_out_frm[0], &denoise_mask_buffer_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
     }
     else {
         for (int cc = 0; cc < VIEW_W; cc ++) {
@@ -1765,34 +1764,42 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
         first = false;
         TrailDataAlloc();
     }
+    if (algo_Param.TrailRemoveOn) {
+        memcpy(DistIn_h, pstFrameBuffer->dist0, sizeof(uint16_t) * VIEW_W * VIEW_H);
 
-    memcpy(DistIn_h, pstFrameBuffer->dist0, sizeof(uint16_t) * VIEW_W * VIEW_H);
+        std::string exception_msg;
+        int32_t status_code;
+        int ret = 0, retry_cnt = 0;
 
-    std::string exception_msg;
-    int32_t status_code;
-    int ret = 0, retry_cnt = 0;
+        for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
+            auto time_start = std::chrono::steady_clock::now();
+            ret = trail_main(exception_msg, status_code);
+            auto time_end = std::chrono::steady_clock::now();
+            auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
-    for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
-        auto time_start = std::chrono::steady_clock::now();
-        ret = trail_main(exception_msg, status_code);
-        auto time_end = std::chrono::steady_clock::now();
-        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
-
-        if (ret == 0) break;
-        if (ret == 1) {
-            LogWarn("[trail] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+            if (ret == 0) break;
+            if (ret == 1) {
+                LogWarn("[trail] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+            }
+            else if (ret == 2) {
+                LogWarn("[trail] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+            }
         }
-        else if (ret == 2) {
-            LogWarn("[trail] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+        if (ret != 0) {
+            LogError("[trail] Fail to submit pva task three times!");
+        }else if (retry_cnt > 0) {
+            LogWarn("[trail] PVA task resubmitted {} times.", retry_cnt);
+        }
+
+        memcpy(trail_mask_out_frm[0], &ValidOut_h[0], sizeof(uint16_t) * VIEW_W * VIEW_H);
+    }
+    else {
+        for (int cc = 0; cc < VIEW_W; cc ++) {
+            for (int rr = 0; rr < VIEW_H; rr ++) {
+                trail_mask_out_frm[cc][rr] = 0;
+            }
         }
     }
-    if (ret != 0) {
-        LogError("[trail] Fail to submit pva task three times!");
-    }else if (retry_cnt > 0) {
-        LogWarn("[trail] PVA task resubmitted {} times.", retry_cnt);
-    }
-
-    memcpy(trail_mask_out_frm[0], &ValidOut_h[0], sizeof(uint16_t) * VIEW_W * VIEW_H);
 }
 
 void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
@@ -2516,8 +2523,8 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
             else if (ret == 2) {
                 LogWarn("[rainenhance] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration2.count());
             }
-        memcpy(spray_mark_out_frm0[0], &FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
-        memcpy(spray_mark_out_frm1[0], &FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+            memcpy(spray_mark_out_frm0[0], &FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+            memcpy(spray_mark_out_frm1[0], &FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
         }
         if (ret != 0) {
             LogError("[rainenhance] Fail to submit pva task three times!");
@@ -2556,7 +2563,30 @@ void AlgoFunction::highcalcExec(tstFrameBuffer* pstFrameBuffer)
     memcpy((uint8_t *)h_proj_dist0_h, (uint8_t *)pstFrameBuffer->proj_dist0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
     memcpy((uint8_t *)h_proj_dist1_h, (uint8_t *)pstFrameBuffer->proj_dist1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
 
-    highcalcPva();
+    std::string exception_msg;
+    int32_t status_code;
+    int ret = 0, retry_cnt = 0;
+
+    for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
+        auto time_start = std::chrono::steady_clock::now();
+        ret = highcalcPva(exception_msg, status_code);
+        auto time_end = std::chrono::steady_clock::now();
+        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
+
+        if (ret == 0) break;
+        if (ret == 1) {
+            LogWarn("[highcalc] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
+        }
+        else if (ret == 2) {
+            LogWarn("[highcalc] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
+        }
+    }
+    if (ret != 0) {
+        LogError("[highcalc] Fail to submit pva task three times!");
+    }
+    else if (retry_cnt > 0) {
+        LogWarn("[highcalc] PVA task resubmitted {} times.", retry_cnt);
+    }
 
     memcpy((uint8_t *)pstFrameBuffer->gnd_mark0[0], (uint8_t *)&h_gnd_out0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
     memcpy((uint8_t *)pstFrameBuffer->gnd_mark1[0], (uint8_t *)&h_gnd_out1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));

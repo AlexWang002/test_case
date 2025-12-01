@@ -198,7 +198,7 @@ CUPVA_VPU_MAIN()
 {
     NoiseParam_t *params = (NoiseParam_t *)algorithmParams;
     for(int i = 1; i <= TILE_WIDTH; i++){
-        ColBuffer[i] = i;
+        ColBuffer[i - 1] = i;
     }
     int32_t LinePitch = cupvaRasterDataFlowGetLinePitch(DistHandler);
     int32_t DistOffset = 0;

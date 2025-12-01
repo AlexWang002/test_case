@@ -235,7 +235,6 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
 
         prog.compileDataFlows();
 
-        SetVPUPrintBufferSize(64 * 1024);
         SyncObj sync = SyncObj::Create();
         Fence fence{sync};
         CmdRequestFences rf{fence};
@@ -291,7 +290,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .tileBuffer(inputDistBufferVMEM1)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
-        
+
         /*Ref wave0*/
         RasterDataFlow &sourceRefDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceRefDataFlowHandler0 = prog["sourceRefDataFlowHandler0"];
@@ -311,7 +310,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .src(RefIn1_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputRefBufferVMEM1)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
-        
+
         /*Gnd wave0 & wave1*/
         RasterDataFlow &sourceGlkDataFlow = prog.addDataFlowHead<RasterDataFlow>();//输入单回波距离
         auto sourceGlkDataFlowHandler = prog["sourceGlkDataFlowHandler"];
@@ -321,7 +320,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .src(Glink_d, VIEW_WIDTH, VIEW_HEIGHT * 4, VIEW_WIDTH)
             .tileBuffer(inputGlkBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT * 4);
-        
+
         /*Rain wave0*/
         RasterDataFlow &sourceRainDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();//输入单回波反射率
         auto sourceRainDataFlowHandler0 = prog["sourceRainDataFlowHandler0"];
@@ -365,7 +364,6 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
 
         prog.compileDataFlows();
 
-        SetVPUPrintBufferSize(64 * 1024);
         SyncObj sync = SyncObj::Create();
         Fence fence{sync};
         CmdRequestFences rf{fence};

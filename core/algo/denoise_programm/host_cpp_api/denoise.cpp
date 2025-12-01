@@ -13,7 +13,7 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
- * 
+ *
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.2 | 2025-09-29 | Use vpu's Wide-SIMD vector processor to accelerate denoise algo|
@@ -121,7 +121,6 @@ int denoiseProcPva(std::string& exception_msg, int32_t& status_code)
                             .tileBuffer(MaskBuffer)
                             .tile(TILE_WIDTH, TILE_HEIGHT);
 
-        SetVPUPrintBufferSize(64 * 1024);
         prog.compileDataFlows();
 
         SyncObj sync = SyncObj::Create();
