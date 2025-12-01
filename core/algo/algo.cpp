@@ -2523,8 +2523,6 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
             else if (ret == 2) {
                 LogWarn("[rainenhance] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration2.count());
             }
-            memcpy(spray_mark_out_frm0[0], &FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
-            memcpy(spray_mark_out_frm1[0], &FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
         }
         if (ret != 0) {
             LogError("[rainenhance] Fail to submit pva task three times!");
@@ -2532,6 +2530,8 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
         else if (retry_cnt > 0) {
             LogWarn("[rainenhance] PVA task resubmitted {} times.", retry_cnt);
         }
+        memcpy(spray_mark_out_frm0[0], &FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+        memcpy(spray_mark_out_frm1[0], &FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
     }
     else {
         for (int cc = 0; cc < VIEW_W; cc ++) {
