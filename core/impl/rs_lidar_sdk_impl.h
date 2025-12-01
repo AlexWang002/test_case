@@ -130,6 +130,9 @@ class RSLidarSdkImpl {
     std::thread handle_process_msop_data_thread_;
     SyncQueue<LidarPointCloudPtr> point_cloud_queue_;
 
+    //链路延时统计开关
+    bool delay_stat_switch_;
+
     using MipiFramePtr = std::shared_ptr<MipiFrame>;
     SyncQueue<MipiFramePtr> mipi_data_queue_;
     LidarSensorIndex sensor_index_ {MIDDLE_LIDAR};

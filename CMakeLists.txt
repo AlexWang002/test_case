@@ -3,7 +3,7 @@ find_package(pva-sdk 2.5 REQUIRED)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-project(lidar_robosense_SDK LANGUAGES CXX VERSION 2.01.00)
+project(lidar_robosense_SDK LANGUAGES CXX VERSION 2.01.01)
 
 # Options
 option(COMPILE_EXAMPLES "Build Lidar SDK examples" ON)

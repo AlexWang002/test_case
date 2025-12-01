@@ -53,9 +53,9 @@ static constexpr uint16_t CALIB_REQUEST_ADDR    {0x0073U};
 static constexpr uint16_t CALIB_ACK_ADDR        {0x0074U};
 static constexpr uint8_t POWEROFF_SIGNAL        {0x01U};
 
-// using TimePoint = std::chrono::steady_clock::time_point;
-// SyncQueue<TimePoint> inputTimeQueue(20, [](TimePoint data) {});
-// SyncQueue<TimePoint> inputTimeQueue1(20, [](TimePoint data) {});
+using TimePoint = std::chrono::steady_clock::time_point;
+SyncQueue<TimePoint> inputTimeQueue(20, [](TimePoint data) {});
+SyncQueue<TimePoint> inputTimeQueue1(20, [](TimePoint data) {});
 
 enum class PowerOffStatus : uint8_t {
     NOT_READY = 0x00U,
@@ -258,7 +258,8 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
     bool enable_mipi_crc = mpark::get<bool>(config_data[0]);
     config_path_ = mpark::get<std::string>(config_data[1]);
     log_config.log_file_path_ = mpark::get<std::string>(config_data[2]);
-    thread::thread_params = mpark::get<std::vector<thread::ThreadConfig>>(config_data[3]);
+    delay_stat_switch_ = mpark::get<bool>(config_data[3]);
+    thread::thread_params = mpark::get<std::vector<thread::ThreadConfig>>(config_data[4]);
 
     funcCheckMipiCrc_ = enable_mipi_crc ? checkMipiCrc : noop;
 
@@ -532,7 +533,7 @@ LidarSdkErrorCode RSLidarSdkImpl::setCalibrationEnable(const bool enabled) {
  * \retval LidarSdkErrorCode::LIDAR_SDK_FAILD: Injection failed.
  */
 LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void* ptrAdc) {
-    // auto start_time = std::chrono::steady_clock::now();
+    auto start_time = std::chrono::steady_clock::now();
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!is_initialized_.load(std::memory_order_seq_cst)) {
@@ -587,24 +588,30 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
                    static_cast<uint32_t>(mipi_frame->data[28] << 16) |
                    static_cast<uint32_t>(mipi_frame->data[29] <<  8) |
                    static_cast<uint32_t>(mipi_frame->data[30]);
-    // LogInfo("[gpu] {}: time {:.2f}ms",
-    //         seq, utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001);
+    if (delay_stat_switch_) {
+        LogInfo("[gpu] {}: time {:.2f}ms",
+                seq, utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001);
+    }
 
     checkMipiIndexContinuity(mipi_frame->index);
     checkMipiTimeConsumption(mipi_frame->index, adc_buffer->tsof, adc_buffer->teof);
     checkMipiCounterContinuity(mipi_frame->index, mipi_frame->data, mipi_frame->len);
-    // auto crc_start = std::chrono::steady_clock::now();
+    auto crc_start = std::chrono::steady_clock::now();
     funcCheckMipiCrc_(mipi_frame->data, mipi_frame->len);
 
-    // LogInfo("[crc] {}: time {:.2f}ms",
-    //         seq, utils::timeInterval<std::chrono::microseconds>(crc_start) * 0.001);
+    if (delay_stat_switch_) {
+        LogInfo("[crc] {}: time {:.2f}ms",
+                seq, utils::timeInterval<std::chrono::microseconds>(crc_start) * 0.001);
+    }
     sensor_index_ = sensor;
 
-    // LogInfo("[injectAdc] {}: time {:.2f}ms",
-    //         seq, utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001);
-    // bool ret{false};
-    // (void)inputTimeQueue.push(start_time, ret);
-    // (void)inputTimeQueue1.push(start_time, ret);
+    if (delay_stat_switch_) {
+        LogInfo("[injectAdc] {}: time {:.2f}ms",
+                seq, utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001);
+    }
+    bool ret{false};
+    (void)inputTimeQueue.push(start_time, ret);
+    (void)inputTimeQueue1.push(start_time, ret);
 
     bool overflow = false;
     size_t sz = mipi_data_queue_.push(mipi_frame, overflow);
@@ -870,8 +877,8 @@ void RSLidarSdkImpl::handleMsopData() {
             auto current_time = callbacks_.getTimeNowPhc();
             static auto last_time = callbacks_.getTimeNowPhc(); // unit: ns, 1e-9 sec
             pointcloud_fps_counter_ptr_->updateFrame(current_time);
-            // TimePoint input_time;
-            // (void)inputTimeQueue.pop(input_time);
+            TimePoint input_time;
+            (void)inputTimeQueue.pop(input_time);
             auto seq = cloud_ptr->frame_seq;
 
             if (current_time - last_time > 1.1e9) { // 1.1秒，用于打印FPS
@@ -880,8 +887,10 @@ void RSLidarSdkImpl::handleMsopData() {
                 LogDebug(pointcloud_fps_counter_ptr_->getStatus().c_str());
             }
             size_t bufferSize = cloud_ptr->data_length;
-            // LogInfo("[HandleMSOP] {}: time {:.2f}ms",
-            //         seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
+            if (delay_stat_switch_) {
+                LogInfo("[HandleMSOP] {}: time {:.2f}ms",
+                        seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
+            }
             callbacks_.pointCloud(sensor_index_, cloud_ptr.get(), static_cast<uint32_t>(bufferSize));
         }
     }
@@ -1226,11 +1235,12 @@ void RSLidarSdkImpl::handleLidarMipiData() {
         }
     }
 #if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
-    // TimePoint input_time;
-    // (void)inputTimeQueue1.pop(input_time);
-
-    // LogInfo("[handleMIPI] {}: time {:.2f}ms",
-    //         seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
+    TimePoint input_time;
+    (void)inputTimeQueue1.pop(input_time);
+    if (delay_stat_switch_) {
+        LogInfo("[handleMIPI] {}: time {:.2f}ms",
+                seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
+    }
     }
 #endif
 }
@@ -1245,7 +1255,11 @@ void RSLidarSdkImpl::handleLidarMipiData() {
 bool RSLidarSdkImpl::loadConfiguration(const std::string& configPath) {
     LogTrace("Begin of load the inner parameter configuration example ...");
     // NOTE Set true cause the inner parameter save function NOT yet fully supported.
+#if defined(__arm__) || defined(__aarch64__)
     bool result{false};
+#else
+    bool result{true};
+#endif
     std::string bin_file_path = configPath + "middle_lidar_inner_para.bin";
     std::string json_file_path = configPath + "lidar_sn_inner_para_crc.json";
 

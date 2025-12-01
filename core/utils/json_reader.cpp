@@ -117,12 +117,14 @@ std::vector<DataVariant> parseJsonFile(const std::string& file) {
         DataVariant mipi_crc = getJsonData<bool>(target, "ENABLE_MIPI_CRC");
         DataVariant param_path = getJsonData<std::string>(target, "INNER_PARAM_PATH");
         DataVariant log_path = getJsonData<std::string>(target, "LOG_CONFIG_FILE");
+        DataVariant delay_stat = getJsonData<bool>(target, "DELAY_STAT");
         DataVariant threads = getJsonData<std::vector<thread::ThreadConfig>>(target, "THREADS");
         DataVariant algo_param = getJsonData<AlgoSwitch>(target, "ALGORITHM");
         algo_switch = getJsonData<AlgoSwitch>(target, "ALGORITHM");
         result.push_back(mipi_crc);
         result.push_back(param_path);
         result.push_back(log_path);
+        result.push_back(delay_stat);
         result.push_back(threads);
         result.push_back(algo_param);
 

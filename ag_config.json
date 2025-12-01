@@ -35,8 +35,9 @@
     },
     "RobosenseLidar" : {
         "ENABLE_MIPI_CRC": true,
-        "INNER_PARAM_PATH": "./",
+        "INNER_PARAM_PATH": "/osdata/satelite/lidar/",
         "LOG_CONFIG_FILE": "./rs_lidar_sdk.log",
+        "DELAY_STAT": true,
         "THREADS": [
             {
                 "id": 1,
@@ -73,7 +74,8 @@
             "ENABLE_TRAIL_REMOVE": true,
             "ENABLE_DENOISE": true,
             "ENABLE_STRAY": true,
-            "ENABLE_SPRAY": true
+            "ENABLE_SPRAY": true,
+            "ENABLE_DELETE": false
         }
     }
 }
