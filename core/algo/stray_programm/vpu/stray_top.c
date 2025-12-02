@@ -3,8 +3,8 @@
  * \{
  * \file stray_top.c
  * \brief
- * \version 0.1
- * \date 2025-10-13
+ * \version 0.2
+ * \date 2025-12-02
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -13,6 +13,7 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
+ * | 0.2 | 2025-12-02 | Add comments |
  *
  *
  ******************************************************************************/
@@ -30,9 +31,6 @@
 VMEM(A, uint16_t, raw_data,
         RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT * RAW_DATA_CNT));
 VMEM(A, RasterDataFlowHandler, raw_data_handler);
-
-// VMEM(A, uint16_t, row_ids,
-//         RDF_SINGLE(uint16_t, 192, 1))
 
 VMEM(B, uint16_t, dist_wave,
         RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT * 2, KR_W_DIST, KR_H_DIST));
@@ -98,34 +96,22 @@ typedef struct {
     AgenCFG stray_mask0;
     AgenCFG stray_mask1;
 
-    AgenCFG test_load;
-    AgenCFG test_store;
-
     int32_t niter;
     int32_t vecw;
 } StrayConfig_t;
 
+/**
+ * \brief Initialize agen configuration
+ * 
+ * \param[in]    config   : agen configuration
+ * \param[ib]    config   : row id array
+ * \param[out]   config   : agen configuration
+*/
 void agenConfigInit(StrayConfig_t *config, uint16_t *row_ids)
 {
     config->vecw = pva_elementsof(dvshortx);
     int32_t vecw = config->vecw;
     config->niter = 60;
-
-    AgenWrapper test_load_wrapper;
-    test_load_wrapper.size = sizeof(uint16_t);
-    test_load_wrapper.n1 = 1;
-    test_load_wrapper.s1 = 32;
-    agen test_load_agen = init((dvshort *)NULL);
-    INIT_AGEN1(test_load_agen, test_load_wrapper);
-    config->test_load = extract_agen_cfg(test_load_agen);
-
-    AgenWrapper test_store_wrapper;
-    test_store_wrapper.size = sizeof(uint16_t);
-    test_store_wrapper.n1 = 1;
-    test_store_wrapper.s1 = 32;
-    agen test_store_agen = init((dvushort *)NULL);
-    INIT_AGEN1(test_store_agen, test_store_wrapper);
-    config->test_store = extract_agen_cfg(test_store_agen);
 
     AgenWrapper row_id_wrapper;
     row_id_wrapper.size = sizeof(uint16_t);
@@ -284,12 +270,15 @@ void agenConfigInit(StrayConfig_t *config, uint16_t *row_ids)
     config->stray_mask1 = extract_agen_cfg(stray_mask1_agen);
 }
 
+/**
+ * \brief Modify start address of agen
+ * 
+ * \param[in]   config   : agen configuration
+ * \param[out]  config   : agen configuration
+*/
 void agenConfigModify(StrayConfig_t *config)
 {
     /*input*/
-    //cupvaModifyAgenCfgBase(&config->test_load, &ground_height[ground_offset]);
-    //cupvaModifyAgenCfgBase(&config->test_store, test_result);
-
     cupvaModifyAgenCfgBase(&config->dist_wave0, &dist_wave[dist_offset]);
     cupvaModifyAgenCfgBase(&config->dist_wave1, &dist_wave[dist_offset + (TILE_WIDTH + 2) * 10 + 1]);
     cupvaModifyAgenCfgBase(&config->att0, &att0[att0_offset]);
@@ -308,6 +297,9 @@ void agenConfigModify(StrayConfig_t *config)
     cupvaModifyAgenCfgBase(&config->stray_mask1, &stray_mask1[stray_mask1_offset]);
 }
 
+/**
+ * \brief Set halo value
+*/
 void setHaloValue()
 {
     for (int i = 0; i < TILE_HEIGHT * 2; i ++) {
@@ -316,6 +308,9 @@ void setHaloValue()
     }
 }
 
+/**
+ * \brief Update double buffer offset
+*/
 void offsetUpdate()
 {
     dist_offset = cupvaRasterDataFlowGetOffset(dist_wave_handler, dist_offset);
@@ -329,23 +324,14 @@ void offsetUpdate()
     stray_mask1_offset = cupvaRasterDataFlowGetOffset(stray_mask1_handler, stray_mask1_offset);
 }
 
+/**
+ * \brief Stray-remove algo pva function
+ * 
+ * \param[in]  config   : agen configuration
+ * \param[in]  tile_idx : tile id
+*/
 void strayProc(StrayConfig_t *config, int tile_idx)
 {
-#if 0
-    agen test_load_agen = init_agen_from_cfg(config->test_load);
-    agen test_store_agen = init_agen_from_cfg(config->test_store);
-
-
-    dvshortx test = dvshort_load(test_load_agen);
-    test = (test == -3768);
-    vstore(test, test_store_agen);
-
-    for (int i = 0; i < 32; i ++) {
-        printf("%d ", test_result[i]);
-    }
-    printf("\n\n");
-#endif
-
     agen row_id_agen = init_agen_from_cfg(config->row_id);
     agen dist_wave0_agen = init_agen_from_cfg(config->dist_wave0);
     agen dist_wave1_agen = init_agen_from_cfg(config->dist_wave1);
@@ -365,6 +351,7 @@ void strayProc(StrayConfig_t *config, int tile_idx)
 
     int32_t niter = config->niter;
 
+    // 初始化0向量
     vec0.lo = replicateh(0);
     vec0.hi = replicateh(0);
 
@@ -578,6 +565,12 @@ void strayProc(StrayConfig_t *config, int tile_idx)
     }
 }
 
+/**
+ * \brief Initialize row id array
+ * 
+ * \param[in]  row_ids  : row id array
+ * \param[out] row_ids  : row id array
+*/
 void initRowIds(uint16_t *row_ids)
 {
     for (int i = 0; i < 192; i ++) {
@@ -585,6 +578,9 @@ void initRowIds(uint16_t *row_ids)
     }
 }
 
+/**
+ * \brief VPU Main function
+*/
 CUPVA_VPU_MAIN()
 {
     StrayConfig_t config;

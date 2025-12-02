@@ -3,8 +3,8 @@
  * \{
  * \file stray.cpp
  * \brief
- * \version 0.1
- * \date 2025-10-13
+ * \version 0.2
+ * \date 2025-12-02
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -13,6 +13,7 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
+ * | 0.2 | 2025-12-02 | Add comments |
  * 
  *
  ******************************************************************************/
@@ -36,6 +37,11 @@ PVA_DECLARE_EXECUTABLE(stray_dev)
 StrayPvaBuffer stray_pva_buff;
 Stream stray_stream;
 
+/**
+ * \brief Alloc pva host memory
+ * 
+ * @return pva error code
+*/
 int strayBufferAlloc()
 {
     try
@@ -78,6 +84,11 @@ int strayBufferAlloc()
     return 0;
 }
 
+/**
+ * \brief Release the alloced pva host memory
+ * 
+ * @return pva error code
+*/
 int strayBufferRelease()
 {
     try
@@ -102,6 +113,11 @@ int strayBufferRelease()
 
 /**
  * \brief Create and submit pva task for stray algo
+ * 
+ * \param[in]  rainwall_cnt  : rainwall cnt
+ * \param[in]  rainwall_dist : rainwall dist
+ * \param[out] exception_msg : pva task exception message
+ * \param[out] status_code   : pva task error code
 */
 int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg, int32_t& status_code)
 {
@@ -118,7 +134,7 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
         prog["rainwall_cnt"].set((int *)&rainwall_cnt, sizeof(int));
 
         RasterDataFlow &stray_var_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto stray_var_handler               = prog["stray_var_handler"];       //数据流的传输由句柄触发
+        auto stray_var_handler               = prog["stray_var_handler"];               //数据流的传输由句柄触发
         uint16_t *stray_var                  = prog["stray_var"].ptr<uint16_t>();
 
         stray_var_dataflow.handler(stray_var_handler)
@@ -127,7 +143,7 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .tile(STRAY_VAR_CNT, VIEW_HEIGHT);
 
         RasterDataFlow &dist_wave_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto dist_wave_handler               = prog["dist_wave_handler"];       //数据流的传输由句柄触发
+        auto dist_wave_handler               = prog["dist_wave_handler"];               //数据流的传输由句柄触发
         uint16_t *dist_wave                  = prog["dist_wave"].ptr<uint16_t>();
 
         dist_wave_dataflow.handler(dist_wave_handler)
@@ -136,8 +152,8 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .tile(TILE_WIDTH, TILE_HEIGHT * 2)
                             .halo(KR_W_DIST, KR_H_DIST);
         
-        RasterDataFlow &att0_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto att0_handler               = prog["att0_handler"];       //数据流的传输由句柄触发
+        RasterDataFlow &att0_dataflow   = prog.addDataFlowHead<RasterDataFlow>();   //向CmdProgram中添加一个RasterDataFlow
+        auto att0_handler               = prog["att0_handler"];                     //数据流的传输由句柄触发
         uint16_t *att0                  = prog["att0"].ptr<uint16_t>();
 
         att0_dataflow.handler(att0_handler)
@@ -146,8 +162,8 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .tile(TILE_WIDTH, TILE_HEIGHT)
                             .halo(KR_W_PEAK, KR_H_PEAK);
         
-        RasterDataFlow &att1_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto att1_handler               = prog["att1_handler"];       //数据流的传输由句柄触发
+        RasterDataFlow &att1_dataflow   = prog.addDataFlowHead<RasterDataFlow>();   //向CmdProgram中添加一个RasterDataFlow
+        auto att1_handler               = prog["att1_handler"];                     //数据流的传输由句柄触发
         uint16_t *att1                  = prog["att1"].ptr<uint16_t>();
 
         att1_dataflow.handler(att1_handler)
@@ -157,7 +173,7 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .halo(KR_W_PEAK, KR_H_PEAK);
         
         RasterDataFlow &class_line_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto class_line_handler               = prog["class_line_handler"];       //数据流的传输由句柄触发
+        auto class_line_handler               = prog["class_line_handler"];              //数据流的传输由句柄触发
         uint16_t *class_line                  = prog["class_line"].ptr<uint16_t>();
 
         class_line_dataflow.handler(class_line_handler)
@@ -167,7 +183,7 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .halo(KR_W_CLASS, KR_H_CLASS);
         
         RasterDataFlow &ground_height_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto ground_height_handler               = prog["ground_height_handler"];       //数据流的传输由句柄触发
+        auto ground_height_handler               = prog["ground_height_handler"];           //数据流的传输由句柄触发
         uint16_t *ground_height                  = prog["ground_height"].ptr<uint16_t>();
 
         ground_height_dataflow.handler(ground_height_handler)
@@ -176,7 +192,7 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .tile(TILE_WIDTH, TILE_HEIGHT);
         
         RasterDataFlow &raw_data_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto raw_data_handler               = prog["raw_data_handler"];       //数据流的传输由句柄触发
+        auto raw_data_handler               = prog["raw_data_handler"];                //数据流的传输由句柄触发
         uint16_t *raw_data                  = prog["raw_data"].ptr<uint16_t>();
 
         raw_data_dataflow.handler(raw_data_handler)
@@ -185,7 +201,7 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .tile(TILE_WIDTH, TILE_HEIGHT * RAW_DATA_CNT);
         
         RasterDataFlow &stray_mask0_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto stray_mask0_handler               = prog["stray_mask0_handler"];       //数据流的传输由句柄触发
+        auto stray_mask0_handler               = prog["stray_mask0_handler"];             //数据流的传输由句柄触发
         uint16_t *stray_mask0                  = prog["stray_mask0"].ptr<uint16_t>();
 
         stray_mask0_dataflow.handler(stray_mask0_handler)
@@ -194,7 +210,7 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .tile(TILE_WIDTH, TILE_HEIGHT);
         
         RasterDataFlow &stray_mask1_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto stray_mask1_handler               = prog["stray_mask1_handler"];       //数据流的传输由句柄触发
+        auto stray_mask1_handler               = prog["stray_mask1_handler"];             //数据流的传输由句柄触发
         uint16_t *stray_mask1                  = prog["stray_mask1"].ptr<uint16_t>();
 
         stray_mask1_dataflow.handler(stray_mask1_handler)
@@ -214,12 +230,14 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {
+            //若错误码不为空，返回错误码
             status_code = (int32_t)statusCode;
             return 2;
         }
     }
     catch (cupva::Exception const &e)
     {
+        //若捕获到异常，返回异常信息
         exception_msg = std::string(e.what());
         return 1;
     }
