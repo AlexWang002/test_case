@@ -13,12 +13,8 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
-<<<<<<< HEAD
  * | 0.2 | 2025-12-02 | Add comments |
  *
-=======
- *
->>>>>>> vp2.1_comment
  *
  ******************************************************************************/
 
@@ -155,15 +151,9 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .tileBuffer(dist_wave)
                             .tile(TILE_WIDTH, TILE_HEIGHT * 2)
                             .halo(KR_W_DIST, KR_H_DIST);
-<<<<<<< HEAD
 
         RasterDataFlow &att0_dataflow   = prog.addDataFlowHead<RasterDataFlow>();   //向CmdProgram中添加一个RasterDataFlow
         auto att0_handler               = prog["att0_handler"];                     //数据流的传输由句柄触发
-=======
-
-        RasterDataFlow &att0_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto att0_handler               = prog["att0_handler"];       //数据流的传输由句柄触发
->>>>>>> vp2.1_comment
         uint16_t *att0                  = prog["att0"].ptr<uint16_t>();
 
         att0_dataflow.handler(att0_handler)
@@ -171,15 +161,9 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .tileBuffer(att0)
                             .tile(TILE_WIDTH, TILE_HEIGHT)
                             .halo(KR_W_PEAK, KR_H_PEAK);
-<<<<<<< HEAD
 
         RasterDataFlow &att1_dataflow   = prog.addDataFlowHead<RasterDataFlow>();   //向CmdProgram中添加一个RasterDataFlow
         auto att1_handler               = prog["att1_handler"];                     //数据流的传输由句柄触发
-=======
-
-        RasterDataFlow &att1_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto att1_handler               = prog["att1_handler"];       //数据流的传输由句柄触发
->>>>>>> vp2.1_comment
         uint16_t *att1                  = prog["att1"].ptr<uint16_t>();
 
         att1_dataflow.handler(att1_handler)
