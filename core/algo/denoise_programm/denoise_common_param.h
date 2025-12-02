@@ -11,8 +11,6 @@
 #define KERNEL_RADIUS_HEIGHT    2
 #define TILE_CNT 8
 
-#define ALGO_ENABLE 1 // 算法开关
-
 typedef struct {
     int win_len_h;  // 水平方向半窗长
     int win_len_v;  // 垂直方向半窗长
@@ -32,6 +30,5 @@ typedef struct {
     .denoise_dist = { 3000, 12000, 24000 }, \
     .denoise_point = {{{1, 0, 2},{1, 0, 2},{1, 0, 2},{1, 0, 2}},{{1, 1, 2},{1, 1, 2},{1, 1, 2},{1, 1, 2}},{{1, 1, 2},{1, 1, 2},{1, 1, 2},{1, 1, 2}},{{1, 1, 2},{1, 1, 2},{1, 1, 2},{1, 1, 2}}} \
 }
-
 
 #endif

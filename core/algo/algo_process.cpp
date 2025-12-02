@@ -41,7 +41,6 @@
 #include "rs_new_logger.h"
 #include "trail.h"
 #include "denoise.h"
-#include "groundfit.h"
 #include "upsample.h"
 #include "highcalc.h"
 #include "spray.h"
@@ -380,16 +379,16 @@ void CloudManager::algoFinalProcess(void)
                 memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 //auto start = std::chrono::steady_clock::now();
                 algo_func_.upsampleExec(frame_buffer);
+                //auto end = std::chrono::steady_clock::now();
+                //auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+                //std::cout << "upsample_main time: " << duration.count() << " us" << std::endl;
+                //total_time += duration;
                 /** 最后一列置0 */
                 uint32_t start_idx = (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H;
                 memset(&DistOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
                 memset(&RefOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
                 memset(&AttrOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
 
-                //auto end = std::chrono::steady_clock::now();
-                //auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                //std::cout << "upsample_main time: " << duration.count() << " us" << std::endl;
-                //total_time += duration;
                 for (int32_t col = 0; col < algo_func_.VIEW_W; ++col) {
                     int32_t surface_id = frame_buffer->surface_id.load();
                     /** 拷贝上采样后的数据到dist和ref中 */
@@ -540,14 +539,12 @@ void CloudManager::algoProcess(int32_t task_id)
                         /*PVA以整帧为单位执行denoise算法*/
                         if(task_id == 0){
                             if(col == algo_func_.VIEW_W + algo_func_.max_data_size - 1){
-                                /*拷贝整帧数据到denoise算法的PVA buffer中*/
                                 //auto denoise_start = std::chrono::steady_clock::now();
                                 algo_func_.denoiseExec(frame_buffer);
                                 //auto denoise_end = std::chrono::steady_clock::now();
                                 //auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
                                 //std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
 
-                                /** Process */
                                 //auto trail_start = std::chrono::steady_clock::now();
                                 algo_func_.trailExec(frame_buffer);
                                 //auto trail_end = std::chrono::steady_clock::now();

@@ -3,8 +3,8 @@
  * \{
  * \file denoise_top.c
  * \brief
- * \version 0.2
- * \date 2025-09-29
+ * \version 0.3
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -20,7 +20,7 @@
  *
  * | ver |    date    |  description |
  * |-----|------------|--------------|
- * | 0.3 | 2025-11-18 | Add row id judgement|
+ * | 0.3 | 2025-11-28 | Synchronize model modifications and optimize time-consuming|
  *
  ******************************************************************************/
 /******************************************************************************/
@@ -55,6 +55,16 @@ typedef struct {
 } DenoiseConfig_t;
 
 VMEM(B, DenoiseConfig_t, DenoiseParam);
+/**
+ * \brief  Denoise agen configuration
+ *
+ * \param[in] ColIdx: Point cloud column index
+ *                 Range: 1-192. Accuracy: 1.
+ * \param[in] LinePitch: Line pitch with halo
+ *                 Range: 194. Accuracy: NA.
+ * \param[in] config: Denoise configuration structure
+ *                 Range: NA. Accuracy: NA.
+ */
 void agenConfig(uint16_t *ColIdx, int32_t LinePitch, DenoiseConfig_t *config) {
     /*获取向量宽度（每个dvshortx包含的元素数）*/
     config->vecw = pva_elementsof(dvshortx); // 32
@@ -107,7 +117,14 @@ void agenConfig(uint16_t *ColIdx, int32_t LinePitch, DenoiseConfig_t *config) {
 
     config->niter = (TILE_WIDTH / vecw) * TILE_HEIGHT;
 }
-
+/**
+ * \brief  Denoise agen configuration
+ *
+ * \param[in] config: Denoise configuration structure
+ *                 Range: NA. Accuracy: NA.
+ * \param[in] params: Denoise parameters structure
+ *                 Range: NA. Accuracy: NA.
+ */
 void Denoise_exec(DenoiseConfig_t *config, NoiseParam_t *params)
 {
     agen dist_agen        = init_agen_from_cfg(config->input_dist);
@@ -193,7 +210,9 @@ void Denoise_exec(DenoiseConfig_t *config, NoiseParam_t *params)
         vstore(dist_valid & (con3 | con2), mask_agen);
     }
 }
-
+/**
+ * \brief Denoise VPU main function
+*/
 CUPVA_VPU_MAIN()
 {
     NoiseParam_t *params = (NoiseParam_t *)algorithmParams;
@@ -233,5 +252,4 @@ CUPVA_VPU_MAIN()
     cupvaRasterDataFlowSync(MaskHandler);
     return 0;
 }
-/** [release_and_close] */
 

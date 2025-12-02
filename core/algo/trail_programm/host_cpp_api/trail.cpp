@@ -3,8 +3,8 @@
  * \{
  * \file trail.cpp
  * \brief
- * \version 0.1
- * \date 2025-09-11
+ * \version 0.2
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -14,14 +14,17 @@
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-11-28 | Add exception log messages |
  ******************************************************************************/
 
 /******************************************************************************/
 /*                         Include dependant headers                          */
 /******************************************************************************/
 #include <cupva_host_nonsafety.hpp>
-#include <cupva_host.hpp> /**< Main host-side C++-API header file */
-#include <cupva_platform.h> /**< Header that includes macros for specifying PVA executables */
+#include <cupva_host.hpp>
+#include <cupva_platform.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -75,7 +78,13 @@ void TrailDataFree()
 }
 
 /**
- * \brief Trail processing main function in host-side C++ API
+ * \brief Create and submit pva task for trail algo
+ *
+ * \param[in] exception_msg: Exception message
+ *                 Range: NA. Accuracy: NA.
+ *
+ * \param[in] status_code: column index of the buffer
+ *                 Range: 0-2. Accuracy: 1.
 */
 int trail_main(std::string& exception_msg, int32_t& status_code)
 {
@@ -83,17 +92,16 @@ int trail_main(std::string& exception_msg, int32_t& status_code)
     {
         Executable exec = Executable::Create(PVA_EXECUTABLE_DATA(trail_dev),
                                              PVA_EXECUTABLE_SIZE(trail_dev));
-
         CmdProgram prog = CmdProgram::Create(exec);
 
         prog["algorithmParams"].set((int *)&TrailParams, sizeof(TrailParam_t));
-        RasterDataFlow &sourceDistDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto sourceDistDataFlowHandler     = prog["sourceDistDataFlowHandler"];
-        uint16_t *inputDistBufferVMEM   = prog["inputDistBufferVMEM"].ptr<uint16_t>();
+        RasterDataFlow &sourceDistDataFlow  = prog.addDataFlowHead<RasterDataFlow>();
+        auto sourceDistDataFlowHandler      = prog["sourceDistDataFlowHandler"];
+        uint16_t *inputDistBufferVMEM       = prog["inputDistBufferVMEM"].ptr<uint16_t>();
 
         RasterDataFlow &destinationDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto destinationDataFlowHandler     = prog["destinationDataFlowHandler"];
-        uint16_t *outputValidBufferVMEM       = prog["outputValidBufferVMEM"].ptr<uint16_t>();
+        uint16_t *outputValidBufferVMEM     = prog["outputValidBufferVMEM"].ptr<uint16_t>();
 
         sourceDistDataFlow.handler(sourceDistDataFlowHandler)
             .src(DistIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)

@@ -5,8 +5,6 @@
 #include <math.h>
 
 /** [params] */
-#define ALGO_ON
-
 #define VECW          32
 #define TILE_WIDTH    96
 #define TILE_HEIGHT   95
@@ -18,8 +16,6 @@
 #define KERNEL_RADIUS_HEIGHT  6
 
 #define TILE_COUNT    16
-
-#define DIS_THRE_RATIO_VALUE 71
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -44,7 +40,7 @@ typedef struct{
     .Draw_D_H = 150,\
     .SlopDifThre = 3, \
     .dist_th_ratio = 1, \
-    .DisThreRatio = DIS_THRE_RATIO_VALUE, \
+    .DisThreRatio = 71, \
     .BypassDis = 2400, \
     .near_cnt_th_h = 3, \
     .near_cnt_th_v = 5, \

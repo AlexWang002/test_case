@@ -3,8 +3,8 @@
  * \{
  * \file upsample_top_v.c
  * \brief
- * \version 0.2
- * \date 2025-09-11
+ * \version 0.3
+ * \date 2025-11-19
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -17,6 +17,10 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.2 | 2025-10-13 | Upsample vector version |
+ *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.3 | 2025-11-19 | Add attribute output |
  ******************************************************************************/
 /******************************************************************************/
 /*                         Include dependant headers                          */
@@ -73,7 +77,7 @@ typedef struct {
 
 /**
  * \brief  Agen initialization function
- * \param[in] config : Upsample agen configuration
+ * \param[in] agen_config : Upsample agen configuration
  *                Range: 0-1. Accuracy: 1.
  * \param[in] HaloLinePitch : Halo input linepitch
  *              Range: 194. Accuracy: 1.
@@ -208,7 +212,7 @@ static void upsample_exec(InsertParam_t *param, UpsampleConfig_t *agen_config) {
 }
 
 /**
- * \brief  VPU main function
+ * \brief  Upsample VPU main function
  */
 CUPVA_VPU_MAIN() {
     InsertParam_t *upsample_param = (InsertParam_t *)algorithmParams;
@@ -261,9 +265,8 @@ CUPVA_VPU_MAIN() {
         cupvaModifyAgenCfgBase(&agen_config.output_ref_up, &outputRefUpBufferVMEM[dstRefOffset]);
         cupvaModifyAgenCfgBase(&agen_config.output_attr_up, &outputAttrBufferVMEM[dstAttrOffset]);
 
-#ifdef ALGO_ON
         upsample_exec(upsample_param, &agen_config);
-#endif
+
         srcDistOffset = cupvaRasterDataFlowGetOffset(InputDistDataFlowHandler, srcDistOffset);
         srcRefOffset = cupvaRasterDataFlowGetOffset(InputRefDataFlowHandler, srcRefOffset);
         srcDistRawOffset = cupvaRasterDataFlowGetOffset(InputDistRawDataFlowHandler, srcDistRawOffset);

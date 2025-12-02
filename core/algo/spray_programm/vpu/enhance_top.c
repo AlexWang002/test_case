@@ -3,8 +3,8 @@
  * \{
  * \file enhance_top.c
  * \brief
- * \version 0.1
- * \date 2025-11-13
+ * \version 0.2
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -14,6 +14,9 @@
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-11-28 | Optimize time-consuming |
  ******************************************************************************/
 /******************************************************************************/
 /*                         Include dependant headers                          */
@@ -73,7 +76,6 @@ int32_t final0_offset = 0, final1_offset = 0;
 dvshortx vec0;
 dvshortx vec15;
 
-/*二维去噪算法AGEN结构体*/
 typedef struct {
     AgenCFG input_dist0;
     AgenCFG input_dist1;
@@ -98,14 +100,18 @@ typedef struct {
     int32_t niter;            // 总迭代次数（= 横向向量数 × 瓦片高度）
     int32_t vecw;             // 向量宽度（pva_elementsof(dvshortx)）
 } SprayConfig_t;
-
+/**
+ * \brief Rain enhance configuration initialization function
+ *
+ * \param[in] config: Spray configuration structure
+ *                 Range: NA. Accuracy: NA.
+ */
 void agenConfigInit(SprayConfig_t *config)
 {
     /*获取向量宽度（每个dvshortx包含的元素数）*/
     config->vecw = pva_elementsof(dvshortx); // 32
     int32_t vecw = config->vecw;
 
-    /*循环次数：5 * 3 * 6 * 95*/
     AgenWrapper input_wrapper0;
     input_wrapper0.size = sizeof(uint16_t);
     input_wrapper0.n1   = 5;
@@ -131,7 +137,7 @@ void agenConfigInit(SprayConfig_t *config)
     agen input_agen5 = init((dvushort *)NULL);
     INIT_AGEN4(input_agen5, input_wrapper0);
     config->input_rain1 = extract_agen_cfg(input_agen5);
-    /*循环次数：6 * 95*/
+
     AgenWrapper input_wrapper2;
     input_wrapper2.size = sizeof(uint16_t);
     input_wrapper2.n1   = TILE_WIDTH / vecw;
@@ -186,13 +192,18 @@ void agenConfigInit(SprayConfig_t *config)
     INIT_AGEN2(input_agen11, input_wrapper3);
     config->rain1_center = extract_agen_cfg(input_agen11);
 
-    /*计算总迭代次数（横向向量数 × 纵向行数）*/
     config->niter = (TILE_WIDTH / vecw) * TILE_HEIGHT;
 }
-
+/**
+ * \brief Rain enhance algorithm execution function
+ *
+ * \param[in] spray_Param: Spray parameters structure
+ *                 Range: NA. Accuracy: NA.
+ * \param[in] config: Spray configuration structure
+ *                 Range: NA. Accuracy: NA.
+ */
 void rainEnhanceExec(SprayParam_t *spray_Param, SprayConfig_t *config)
 {
-    /*Initialize AGEN*/
     agen input_dist_agen0 = init_agen_from_cfg(config->input_dist0);
     agen input_dist_agen1 = init_agen_from_cfg(config->input_dist1);
     agen input_ref_agen0 = init_agen_from_cfg(config->input_ref0);
@@ -278,7 +289,12 @@ void rainEnhanceExec(SprayParam_t *spray_Param, SprayConfig_t *config)
         vstore(final1, output_final_agen1);
     }
 }
-
+/**
+ * \brief Update agent data configuration offset
+ *
+ * \param[in] config: Spray configuration structure
+ *                 Range: NA. Accuracy: NA.
+*/
 void agenConfigModify(SprayConfig_t *config)
 {
     /** Update agen base address */
@@ -298,7 +314,9 @@ void agenConfigModify(SprayConfig_t *config)
     cupvaModifyAgenCfgBase(&config->output_final0, &outputFinalBufferVMEM0[final0_offset]);
     cupvaModifyAgenCfgBase(&config->output_final1, &outputFinalBufferVMEM1[final1_offset]);
 }
-
+/**
+ * \brief Update data address offset
+*/
 void offsetUpdate()
 {
     dist0_offset = cupvaRasterDataFlowGetOffset(sourceDistDataFlowHandler0, dist0_offset);
@@ -315,7 +333,9 @@ void offsetUpdate()
     final0_offset = cupvaRasterDataFlowGetOffset(destinationDataFlowHandler0, final0_offset);
     final1_offset = cupvaRasterDataFlowGetOffset(destinationDataFlowHandler1, final1_offset);
 }
-
+/**
+ * \brief Rain enhance VPU main function
+*/
 CUPVA_VPU_MAIN()
 {
     spray_Param = (SprayParam_t *)algorithmParams;

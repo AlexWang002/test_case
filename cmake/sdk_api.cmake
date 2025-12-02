@@ -10,7 +10,6 @@ add_library(${PROJECT_NAME} ${SDK_API_TYPE} ${SOURCES})
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/trail_programm)
 add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/denoise_programm)
-add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/groundfit_programm)
 add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/upsample_programm)
 add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/stray_programm)
 add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/spray_programm)
@@ -30,8 +29,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_SOURCE_DIR}/core/algo/trail_programm/host_cpp_api
     ${CMAKE_SOURCE_DIR}/core/algo/denoise_programm
     ${CMAKE_SOURCE_DIR}/core/algo/denoise_programm/host_cpp_api
-    ${CMAKE_SOURCE_DIR}/core/algo/groundfit_programm
-    ${CMAKE_SOURCE_DIR}/core/algo/groundfit_programm/host_cpp_api
     ${CMAKE_SOURCE_DIR}/core/algo/upsample_programm
     ${CMAKE_SOURCE_DIR}/core/algo/upsample_programm/host_cpp_api
     ${CMAKE_SOURCE_DIR}/core/algo/stray_programm
@@ -52,7 +49,6 @@ target_link_libraries(${PROJECT_NAME}
     pthread
     trail_api
     denoise_api
-    groundfit_api
     upsample_api
     stray_api
     spray_api
