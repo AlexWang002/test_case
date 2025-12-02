@@ -435,31 +435,7 @@ void AlgoFunction::algoInit()
  */
 void AlgoFunction::algoFrameChange(void)
 {
-    memset(denoise_valid_buffer, 0, sizeof(denoise_valid_buffer));
-
-    memset(dist_wave0_buffer1, 0, sizeof(dist_wave0_buffer1));
-    memset(dist_wave1_buffer1, 0, sizeof(dist_wave1_buffer1));
-    memset(refl_wave0_buffer1, 0, sizeof(refl_wave0_buffer1));
-    memset(refl_wave1_buffer1, 0, sizeof(refl_wave1_buffer1));
-    memset(attr_wave0_buffer1, 0, sizeof(attr_wave0_buffer1));
-    memset(attr_wave1_buffer1, 0, sizeof(attr_wave1_buffer1));
-    memset(high_wave0_buffer1, 0, sizeof(high_wave0_buffer1));
-    memset(high_wave1_buffer1, 0, sizeof(high_wave1_buffer1));
-
-    memset(dist_wave0_buffer5, 0, sizeof(dist_wave0_buffer5));
-    memset(dist_wave1_buffer5, 0, sizeof(dist_wave1_buffer5));
-    memset(refl_wave0_buffer5, 0, sizeof(refl_wave0_buffer5));
-    memset(refl_wave1_buffer5, 0, sizeof(refl_wave1_buffer5));
-
-    rear1 = -1; //去噪
-    rear2 = -1; //拖点
     rear3 = -1; //杂散
-    rear4 = -1; //雨雾
-    rear5 = -1; //上采样
-
-    basic_rear = -1;
-    filter_rear = -1;
-    empty_rear = -1;
 }
 
 void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
