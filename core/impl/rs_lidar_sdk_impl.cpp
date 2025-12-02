@@ -890,11 +890,12 @@ void RSLidarSdkImpl::handleMsopData() {
             }
             size_t bufferSize = cloud_ptr->data_length;
 
-            uint64_t time_ns = cloud_ptr->frame_timestamp * 1000;
-            uint64_t time_now = callbacks_.getTimeNowPhc();
+            if (delay_stat_switch_) {
+                uint64_t time_ns = cloud_ptr->frame_timestamp * 1000;
+                uint64_t time_now = callbacks_.getTimeNowPhc();
 
-            LogInfo("Seq: {}, time consumption {:.3f}ms", seq, (time_now - time_ns)*0.001*0.001);
-
+                LogInfo("Seq: {}, time consumption {:.3f}ms", seq, (time_now - time_ns)*0.001*0.001);
+            }
             if (delay_stat_switch_ && (seq % 10 == 0)) {
                 LogInfo("[HandleMSOP] {}: time {:.2f}ms",
                         seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
