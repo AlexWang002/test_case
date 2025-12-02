@@ -1802,11 +1802,17 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
     }
 }
 
-void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
+/**
+ * \brief  Stray-delete algo function 
+ *
+ * \param[in] pstFrameBuffer: frame buffer
+ */
+void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
 {
     static bool first{true};
     if (first) {
         first = false;
+        //初次执行时申请pva host buffer
         strayBufferAlloc();
     }
 
@@ -1854,9 +1860,12 @@ void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
                 memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
                 RainWall_out = {0, 0, 0};
             }
-            strayDelete(stray_col, stray_col_buffer, stray_col_neib_buf);
+
+            //在CPU端计算杂散相关的标签
+            strayDelete(stray_col, stray_col_buffer);
         }
 
+        //拷贝计算好的标签及部分原始数据到pva host buffer
         for (int i = 0; i < 76; i ++) {
             memcpy((uint16_t *)&stray_pva_buff.dist_wave_h[i * 10 * 192 * 2], pstFrameBuffer->dist0[i * 10], 10 * 192 * sizeof(uint16_t));
             memcpy((uint16_t *)&stray_pva_buff.dist_wave_h[i * 10 * 192 * 2 + 10 * 192], pstFrameBuffer->dist1[i * 10], 10 * 192 * sizeof(uint16_t));
@@ -1878,6 +1887,7 @@ void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
 
+        //提交杂散删除pva任务（若失败，则进行提交重试）
         for (retry_cnt = 0; retry_cnt < 3; retry_cnt ++) {
             auto time_start = std::chrono::steady_clock::now();
             ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code);
@@ -1915,20 +1925,12 @@ void AlgoFunction::strayDeleteCombine(tstFrameBuffer* pstFrameBuffer)
 /**
  * @brief stray delete algorithm of lidar
  *
- * @param col_idx column index of the buffer
+ * @param[in] col_idx column index of the buffer
  *                  Range: 0 - 759. Accuracy: 1.
- * @param stray_col_buffer stray buffer column index
+ * @param[in] stray_col_buffer stray buffer column index
  *                  Range: 0 - 2. Accuracy: 1.
- * @param stray_col_neib_buf stray neighbor buffer column index
- *                  Range: 0 - 2. Accuracy: 1.
- * @param stray_mark_out0 stray wave0 buffer mark value
- *                  Range: 0 - 1. Accuracy: 1.
- * @param stray_mark_out1 stray wave1 buffer mark value
- *                  Range: 0 - 1. Accuracy: 1.
  */
-void AlgoFunction::strayDelete(int col_idx,
-    int stray_col_buffer,
-    int *stray_col_neib_buf) {
+void AlgoFunction::strayDelete(int col_idx, int stray_col_buffer) {
     if(col_idx < 0 || col_idx >= VIEW_W){
         return;
     }

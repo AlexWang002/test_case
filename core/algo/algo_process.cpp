@@ -305,7 +305,7 @@ void CloudManager::algoFinalProcess(void)
                 // std::cout << "highcalc duration: " << highcalc_duration.count() << "us" << std::endl;
 
                 //auto stray_start = std::chrono::steady_clock::now();
-                algo_func_.strayDeleteCombine(frame_buffer);
+                algo_func_.strayDeleteExec(frame_buffer);
                 //auto stray_end = std::chrono::steady_clock::now();
                 //auto stray_duration = std::chrono::duration_cast<std::chrono::microseconds>(stray_end - stray_start);
                 //std::cout << "stray duration: " << stray_duration.count() << "us" << std::endl;
