@@ -3,8 +3,8 @@
  * \{
  * \file spray.cpp
  * \brief
- * \version 0.1
- * \date 2025-09-11
+ * \version 0.2
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -14,6 +14,9 @@
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-11-28 | Add exception log messages |
  ******************************************************************************/
 
 /******************************************************************************/
@@ -133,7 +136,13 @@ void sprayDataFree()
 }
 
 /**
- * \brief Spray processing main function in host-side C++ API
+ * \brief Create and submit pva task for spray remove algo
+ *
+ * \param[in] exception_msg: Exception message
+ *                 Range: NA. Accuracy: NA.
+ *
+ * \param[in] status_code: column index of the buffer
+ *                 Range: 0-2. Accuracy: 1.
 */
 int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
 {
@@ -146,7 +155,7 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
 
         prog["algorithmParams"].set((int *)&SprayParams, sizeof(SprayParam_t));
 
-        RasterDataFlow &sourceDistDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();//输入单回波距离
+        RasterDataFlow &sourceDistDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceDistDataFlowHandler0 = prog["sourceDistDataFlowHandler0"];
         uint16_t *inputDistBufferVMEM0 = prog["inputDistBufferVMEM0"].ptr<uint16_t>();
 
@@ -156,7 +165,7 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        RasterDataFlow &sourceDistDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();//输入双回波距离
+        RasterDataFlow &sourceDistDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceDistDataFlowHandler1 = prog["sourceDistDataFlowHandler1"];
         uint16_t *inputDistBufferVMEM1 = prog["inputDistBufferVMEM1"].ptr<uint16_t>();
 
@@ -166,7 +175,7 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        RasterDataFlow &sourceRefDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();//输入单回波反射率
+        RasterDataFlow &sourceRefDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceRefDataFlowHandler0 = prog["sourceRefDataFlowHandler0"];
         uint16_t *inputRefBufferVMEM0 = prog["inputRefBufferVMEM0"].ptr<uint16_t>();
 
@@ -176,7 +185,7 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        RasterDataFlow &sourceRefDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();//输入双回波反射率
+        RasterDataFlow &sourceRefDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceRefDataFlowHandler1 = prog["sourceRefDataFlowHandler1"];
         uint16_t *inputRefBufferVMEM1 = prog["inputRefBufferVMEM1"].ptr<uint16_t>();
 
@@ -186,7 +195,7 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        RasterDataFlow &sourceAttDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();//输入单回波属性
+        RasterDataFlow &sourceAttDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceAttDataFlowHandler0 = prog["sourceAttDataFlowHandler0"];
         uint16_t *inputAttBufferVMEM0 = prog["inputAttBufferVMEM0"].ptr<uint16_t>();
 
@@ -196,7 +205,7 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        RasterDataFlow &sourceAttDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();//输入双回波属性
+        RasterDataFlow &sourceAttDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceAttDataFlowHandler1 = prog["sourceAttDataFlowHandler1"];
         uint16_t *inputAttBufferVMEM1 = prog["inputAttBufferVMEM1"].ptr<uint16_t>();
 
@@ -206,7 +215,7 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        RasterDataFlow &sourceGlinkDataFlow = prog.addDataFlowHead<RasterDataFlow>();//输入单回波地面链接
+        RasterDataFlow &sourceGlinkDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceGlkDataFlowHandler = prog["sourceGlkDataFlowHandler"];
         uint16_t *inputGlkBufferVMEM = prog["inputGlkBufferVMEM"].ptr<uint16_t>();
 
@@ -215,7 +224,7 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
             .tileBuffer(inputGlkBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT * 4);
 
-        RasterDataFlow &destinationDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();//输出单回波标记
+        RasterDataFlow &destinationDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();
         auto destinationDataFlowHandler0 = prog["destinationDataFlowHandler0"];
         uint16_t *outputRainBufferVMEM0 = prog["outputRainBufferVMEM0"].ptr<uint16_t>();
 
@@ -224,7 +233,7 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
             .tileBuffer(outputRainBufferVMEM0)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        RasterDataFlow &destinationDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();//输出双回波标记
+        RasterDataFlow &destinationDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();
         auto destinationDataFlowHandler1 = prog["destinationDataFlowHandler1"];
         uint16_t *outputRainBufferVMEM1 = prog["outputRainBufferVMEM1"].ptr<uint16_t>();
 
@@ -256,7 +265,15 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
     return 0;
 }
 
-
+/**
+ * \brief Create and submit pva task for rain enhance algo
+ *
+ * \param[in] exception_msg: Exception message
+ *                 Range: NA. Accuracy: NA.
+ *
+ * \param[in] status_code: column index of the buffer
+ *                 Range: 0-2. Accuracy: 1.
+*/
 int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
 {
     try
@@ -268,9 +285,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
 
         prog["algorithmParams"].set((int *)&SprayParams, sizeof(SprayParam_t));
 
-        /*pva input*/
-        /*Dist wave0*/
-        RasterDataFlow &sourceDistDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();//输入单回波距离
+        RasterDataFlow &sourceDistDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceDistDataFlowHandler0 = prog["sourceDistDataFlowHandler0"];
         uint16_t *inputDistBufferVMEM0 = prog["inputDistBufferVMEM0"].ptr<uint16_t>();
 
@@ -280,8 +295,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        /*Dist wave1*/
-        RasterDataFlow &sourceDistDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();//输入双回波距离
+        RasterDataFlow &sourceDistDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceDistDataFlowHandler1 = prog["sourceDistDataFlowHandler1"];
         uint16_t *inputDistBufferVMEM1 = prog["inputDistBufferVMEM1"].ptr<uint16_t>();
 
@@ -291,7 +305,6 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        /*Ref wave0*/
         RasterDataFlow &sourceRefDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceRefDataFlowHandler0 = prog["sourceRefDataFlowHandler0"];
         uint16_t *inputRefBufferVMEM0 = prog["inputRefBufferVMEM0"].ptr<uint16_t>();
@@ -301,7 +314,6 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .tileBuffer(inputRefBufferVMEM0)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        /*Ref wave1*/
         RasterDataFlow &sourceRefDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceRefDataFlowHandler1 = prog["sourceRefDataFlowHandler1"];
         uint16_t *inputRefBufferVMEM1 = prog["inputRefBufferVMEM1"].ptr<uint16_t>();
@@ -311,8 +323,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .tileBuffer(inputRefBufferVMEM1)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        /*Gnd wave0 & wave1*/
-        RasterDataFlow &sourceGlkDataFlow = prog.addDataFlowHead<RasterDataFlow>();//输入单回波距离
+        RasterDataFlow &sourceGlkDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceGlkDataFlowHandler = prog["sourceGlkDataFlowHandler"];
         uint16_t *inputGlkBufferVMEM = prog["inputGlkBufferVMEM"].ptr<uint16_t>();
 
@@ -321,8 +332,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .tileBuffer(inputGlkBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT * 4);
 
-        /*Rain wave0*/
-        RasterDataFlow &sourceRainDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();//输入单回波反射率
+        RasterDataFlow &sourceRainDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceRainDataFlowHandler0 = prog["sourceRainDataFlowHandler0"];
         uint16_t *inputRainBufferVMEM0 = prog["inputRainBufferVMEM0"].ptr<uint16_t>();
 
@@ -332,8 +342,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        /*Rain wave1*/
-        RasterDataFlow &sourceRainDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();//输入双回波反射率
+        RasterDataFlow &sourceRainDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();
         auto sourceRainDataFlowHandler1 = prog["sourceRainDataFlowHandler1"];
         uint16_t *inputRainBufferVMEM1 = prog["inputRainBufferVMEM1"].ptr<uint16_t>();
 
@@ -343,8 +352,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        /*pva output*/
-        RasterDataFlow &destinationDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();//输出单回波标记
+        RasterDataFlow &destinationDataFlow0 = prog.addDataFlowHead<RasterDataFlow>();
         auto destinationDataFlowHandler0 = prog["destinationDataFlowHandler0"];
         uint16_t *outputFinalBufferVMEM0 = prog["outputFinalBufferVMEM0"].ptr<uint16_t>();
 
@@ -353,7 +361,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
             .tileBuffer(outputFinalBufferVMEM0)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        RasterDataFlow &destinationDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();//输出双回波标记
+        RasterDataFlow &destinationDataFlow1 = prog.addDataFlowHead<RasterDataFlow>();
         auto destinationDataFlowHandler1 = prog["destinationDataFlowHandler1"];
         uint16_t *outputFinalBufferVMEM1 = prog["outputFinalBufferVMEM1"].ptr<uint16_t>();
 

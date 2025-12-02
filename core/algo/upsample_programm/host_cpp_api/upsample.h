@@ -3,8 +3,8 @@
  * \{
  * \headerfile upsample.h "upsample.h"
  * \brief
- * \version 0.1
- * \date 2025-09-11
+ * \version 0.2
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -14,6 +14,9 @@
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-11-28 | add exception log messages|
  ******************************************************************************/
 #ifndef UPSAMPLE_H
 #define UPSAMPLE_H
@@ -21,8 +24,8 @@
 /*                         Include dependant headers                          */
 /******************************************************************************/
 #include <cupva_host_nonsafety.hpp>
-#include <cupva_host.hpp> // Main host-side C++-API header file
-#include <cupva_platform.h> // Header that
+#include <cupva_host.hpp>
+#include <cupva_platform.h>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */

@@ -3,8 +3,8 @@
  * \{
  * \file upsample.cpp
  * \brief
- * \version 0.1
- * \date 2025-09-11
+ * \version 0.2
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -14,14 +14,17 @@
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-11-28 | add exception log messages|
  ******************************************************************************/
 
 /******************************************************************************/
 /*                         Include dependant headers                          */
 /******************************************************************************/
 #include <cupva_host_nonsafety.hpp>
-#include <cupva_host.hpp> /**< Main host-side C++-API header file */
-#include <cupva_platform.h> /**< Header that includes macros for specifying PVA executables */
+#include <cupva_host.hpp>
+#include <cupva_platform.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -108,7 +111,13 @@ void upsampleDataFree()
 }
 
 /**
- * \brief Upsample processing main function in host-side C++ API
+ * \brief Create and submit pva task for upsample algo
+ *
+ * \param[in] exception_msg: Exception message
+ *                 Range: NA. Accuracy: NA.
+ *
+ * \param[in] status_code: column index of the buffer
+ *                 Range: 0-2. Accuracy: 1.
 */
 int upsample_main(std::string& exception_msg, int32_t& status_code)
 {
@@ -188,7 +197,6 @@ int upsample_main(std::string& exception_msg, int32_t& status_code)
             .tileBuffer(outputAttrBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        /** 编译程序数据流 */
         prog.compileDataFlows();
 
         SyncObj sync = SyncObj::Create();
@@ -196,9 +204,7 @@ int upsample_main(std::string& exception_msg, int32_t& status_code)
         CmdRequestFences rf{fence};
         CmdStatus status[2];
         upsample_stream.submit({&prog, &rf}, status);
-        /** 等待Fence失效 */
         fence.wait();
-        /** 检查cmd状态 */
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {

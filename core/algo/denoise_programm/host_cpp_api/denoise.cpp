@@ -3,8 +3,8 @@
  * \{
  * \file denoise.cpp
  * \brief
- * \version 0.2
- * \date 2025-09-29
+ * \version 0.3
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -18,6 +18,9 @@
  * |-----|------------|--------------|
  * | 0.2 | 2025-09-29 | Use vpu's Wide-SIMD vector processor to accelerate denoise algo|
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.3 | 2025-11-28 | Synchronize model modifications and add exception log messages|
  ******************************************************************************/
 
 /******************************************************************************/
@@ -90,6 +93,12 @@ int denoiseDataFree()
 
 /**
  * \brief Create and submit pva task for denoise algo
+ *
+ * \param[in] exception_msg: Exception message
+ *                 Range: NA. Accuracy: NA.
+ *
+ * \param[in] status_code: column index of the buffer
+ *                 Range: 0-2. Accuracy: 1.
 */
 int denoiseProcPva(std::string& exception_msg, int32_t& status_code)
 {
@@ -126,7 +135,6 @@ int denoiseProcPva(std::string& exception_msg, int32_t& status_code)
         SyncObj sync = SyncObj::Create();
         Fence fence{sync};
         CmdRequestFences rf{fence};
-
         CmdStatus status[2];
         denoise_stream.submit({&prog, &rf}, status);
         fence.wait();

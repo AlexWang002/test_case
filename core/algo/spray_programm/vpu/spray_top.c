@@ -4,7 +4,7 @@
  * \file spray_top.c
  * \brief
  * \version 0.2
- * \date 2025-09-11
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -16,8 +16,7 @@
  *
  * | ver |    date    |  description |
  * |-----|------------|--------------|
- * | 0.2 | 2025-09-29 | Spray vector version |
-
+ * | 0.2 | 2025-11-28 | Optimize time-consuming |
  ******************************************************************************/
 /******************************************************************************/
 /*                         Include dependant headers                          */
@@ -124,8 +123,19 @@ typedef struct {
 
 VMEM(B, Part1Config_t, part1_cfg);
 VMEM(B, GradConfig_t, grad_cfg);
-/** 中心点计算 */
-void Part1_Init(Part1Config_t *config, uint16_t *zone_idx, uint16_t *wave0_cond3_buffer, uint16_t *wave1_cond3_buffer)
+/**
+ * \brief Spray judgment initialization function
+ *
+ * \param[in] config: Spray judgment configuration structure
+ *                 Range: NA. Accuracy: NA.
+ * \param[in] config: zone index
+ *                 Range: 1-16. Accuracy: 1.
+ * \param[in] wave0_cond3_buffer: First wave condition 3
+ *                 Range: 0-1. Accuracy: 1.
+ * \param[in] wave1_cond3_buffer: Second wave condition 3
+ *                 Range: 0-1. Accuracy: 1.
+ */
+void Judge_Init(Part1Config_t *config, uint16_t *zone_idx, uint16_t *wave0_cond3_buffer, uint16_t *wave1_cond3_buffer)
 {
     config->vecw = pva_elementsof(dvshortx);
     int32_t vecw = config->vecw;
@@ -256,7 +266,16 @@ void Part1_Init(Part1Config_t *config, uint16_t *zone_idx, uint16_t *wave0_cond3
 
     config->niter = TILE_WIDTH / config->vecw * TILE_HEIGHT;
 }
-
+/**
+ * \brief Spray gradient conditions calculation initialization function
+ *
+ * \param[in] config: Spray configuration structure
+ *                 Range: NA. Accuracy: NA.
+ * \param[out] wave0_cond3_buffer: First wave condition 3
+ *                 Range: 0-1. Accuracy: 1.
+ * \param[out] wave1_cond3_buffer: Second wave condition 3
+ *                 Range: 0-1. Accuracy: 1.
+ */
 void Grad_Init(GradConfig_t *config, uint16_t *wave0_cond3_buffer, uint16_t *wave1_cond3_buffer)
 {
     config->vecw = pva_elementsof(dvshortx);
@@ -325,7 +344,13 @@ void Grad_Init(GradConfig_t *config, uint16_t *wave0_cond3_buffer, uint16_t *wav
     config->niter = TILE_WIDTH / config->vecw * TILE_HEIGHT;
 }
 
-void Part1_Config(Part1Config_t *config)
+/**
+ * \brief Spray judgment configuration function
+ *
+ * \param[in] config: Spray judgment configuration structure
+ *                 Range: NA. Accuracy: NA.
+ */
+void Judge_Config(Part1Config_t *config)
 {
     cupvaModifyAgenCfgBase(&config->dist0_center, &inputDistBufferVMEM0[dist0_offset + 2 * 194 + 1]);
     cupvaModifyAgenCfgBase(&config->dist1_center, &inputDistBufferVMEM1[dist1_offset + 2 * 194 + 1]);
@@ -349,6 +374,13 @@ void Part1_Config(Part1Config_t *config)
     cupvaModifyAgenCfgBase(&config->output_mask0, &outputRainBufferVMEM0[mask0_offset]);
     cupvaModifyAgenCfgBase(&config->output_mask1, &outputRainBufferVMEM1[mask1_offset]);
 }
+
+/**
+ * \brief Spray gradient conditions configuration function
+ *
+ * \param[in] config: Spray gradient conditions configuration structure
+ *                 Range: NA. Accuracy: NA.
+ */
 void Grad_Config(GradConfig_t *config)
 {
     cupvaModifyAgenCfgBase(&config->ver_dist0, &inputDistBufferVMEM0[dist0_offset + 1]);
@@ -357,7 +389,13 @@ void Grad_Config(GradConfig_t *config)
     cupvaModifyAgenCfgBase(&config->hor_dist1, &inputDistBufferVMEM1[dist1_offset + 2 * 194]);
 }
 
-void Part1_exec(Part1Config_t *config) {
+/**
+ * \brief Spray judgment function
+ *
+ * \param[in] config: Spray judgment configuration structure
+ *                 Range: NA. Accuracy: NA.
+ */
+void Judge_exec(Part1Config_t *config) {
     /** Initialize AGEN */
     agen input_dist_agen0 = init_agen_from_cfg(config->input_dist0);
     agen input_dist_agen1 = init_agen_from_cfg(config->input_dist1);
@@ -534,6 +572,12 @@ void Part1_exec(Part1Config_t *config) {
     }
 }
 
+/**
+ * \brief Spray gradient conditions calculation function
+ *
+ * \param[in] config: Spray gradient conditions configuration structure
+ *                 Range: NA. Accuracy: NA.
+ */
 void Grad_exec(GradConfig_t *config)
 {
     agen ver_dist0_agen  = init_agen_from_cfg(config->ver_dist0);
@@ -651,7 +695,7 @@ void Grad_exec(GradConfig_t *config)
 }
 
 /**
- * \brief  VPU main function
+ * \brief  Spray VPU main function
  */
 CUPVA_VPU_MAIN() {
     spray_Param = (SprayParam_t *)algorithmParams;
@@ -662,7 +706,7 @@ CUPVA_VPU_MAIN() {
     vec0 = chess_dont_care(dvshortx) & 0;
 
     Grad_Init(&grad_cfg, wave0_cond3_buffer, wave1_cond3_buffer);
-    Part1_Init(&part1_cfg, zone_idx, wave0_cond3_buffer, wave1_cond3_buffer);
+    Judge_Init(&part1_cfg, zone_idx, wave0_cond3_buffer, wave1_cond3_buffer);
 
     cupvaRasterDataFlowTrig(sourceDistDataFlowHandler0);
     cupvaRasterDataFlowTrig(sourceDistDataFlowHandler1);
@@ -691,10 +735,10 @@ CUPVA_VPU_MAIN() {
         cupvaRasterDataFlowTrig(sourceGlkDataFlowHandler);
 
         Grad_Config(&grad_cfg);
-        Part1_Config(&part1_cfg);
+        Judge_Config(&part1_cfg);
 
         Grad_exec(&grad_cfg);
-        Part1_exec(&part1_cfg);
+        Judge_exec(&part1_cfg);
 
         dist0_offset = cupvaRasterDataFlowGetOffset(sourceDistDataFlowHandler0, dist0_offset);
         dist1_offset = cupvaRasterDataFlowGetOffset(sourceDistDataFlowHandler1, dist1_offset);
