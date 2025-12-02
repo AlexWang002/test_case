@@ -9,8 +9,8 @@ namespace lidar{
 
 const uint32_t kRSLidarSdkVersionMajor{2};
 const uint32_t kRSLidarSdkVersionMinor{01};
-const uint32_t kRSLidarSdkVersionPatch{00};
-const std::string kRSLidarSdkVersionStr{"2.01.00"};
+const uint32_t kRSLidarSdkVersionPatch{01};
+const std::string kRSLidarSdkVersionStr{"2.01.01"};
 constexpr uint32_t kSdkVersionEncoded{((kRSLidarSdkVersionMajor % 10) * 10000) +
                                       ((kRSLidarSdkVersionMinor % 100) * 100) +
                                         kRSLidarSdkVersionPatch};

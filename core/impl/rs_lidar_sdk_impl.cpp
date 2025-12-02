@@ -589,8 +589,10 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
                    static_cast<uint32_t>(mipi_frame->data[29] <<  8) |
                    static_cast<uint32_t>(mipi_frame->data[30]);
     if (delay_stat_switch_) {
-        LogInfo("[gpu] {}: time {:.2f}ms",
-                seq, utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001);
+        auto time_interval = utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001;
+        if (time_interval > 1.5) {
+            LogInfo("[gpu] {}: time {:.2f}ms", seq, time_interval);
+        }
     }
 
     checkMipiIndexContinuity(mipi_frame->index);
@@ -599,16 +601,16 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
     auto crc_start = std::chrono::steady_clock::now();
     funcCheckMipiCrc_(mipi_frame->data, mipi_frame->len);
 
-    if (delay_stat_switch_) {
-        LogInfo("[crc] {}: time {:.2f}ms",
-                seq, utils::timeInterval<std::chrono::microseconds>(crc_start) * 0.001);
-    }
+    // if (delay_stat_switch_) {
+    //     LogInfo("[crc] {}: time {:.2f}ms",
+    //             seq, utils::timeInterval<std::chrono::microseconds>(crc_start) * 0.001);
+    // }
     sensor_index_ = sensor;
 
-    if (delay_stat_switch_) {
-        LogInfo("[injectAdc] {}: time {:.2f}ms",
-                seq, utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001);
-    }
+    // if (delay_stat_switch_) {
+    //     LogInfo("[injectAdc] {}: time {:.2f}ms",
+    //             seq, utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001);
+    // }
     bool ret{false};
     (void)inputTimeQueue.push(start_time, ret);
     (void)inputTimeQueue1.push(start_time, ret);
@@ -887,7 +889,13 @@ void RSLidarSdkImpl::handleMsopData() {
                 LogDebug(pointcloud_fps_counter_ptr_->getStatus().c_str());
             }
             size_t bufferSize = cloud_ptr->data_length;
-            if (delay_stat_switch_) {
+
+            uint64_t time_ns = cloud_ptr->frame_timestamp * 1000;
+            uint64_t time_now = callbacks_.getTimeNowPhc();
+
+            LogInfo("Seq: {}, time consumption {:.3f}ms", seq, (time_now - time_ns)*0.001*0.001);
+
+            if (delay_stat_switch_ && (seq % 10 == 0)) {
                 LogInfo("[HandleMSOP] {}: time {:.2f}ms",
                         seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
             }
@@ -1132,10 +1140,10 @@ void RSLidarSdkImpl::handleLidarMipiData() {
         uint8_t* mipi_data = mipi_frame->data;
         size_t frame_size = mipi_frame->len;
 #if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
-    // uint32_t seq = static_cast<uint32_t>(mipi_data[27] << 24) |
-    //                static_cast<uint32_t>(mipi_data[28] << 16) |
-    //                static_cast<uint32_t>(mipi_data[29] <<  8) |
-    //                static_cast<uint32_t>(mipi_data[30]);
+        uint32_t seq = static_cast<uint32_t>(mipi_data[27] << 24) |
+                    static_cast<uint32_t>(mipi_data[28] << 16) |
+                    static_cast<uint32_t>(mipi_data[29] <<  8) |
+                    static_cast<uint32_t>(mipi_data[30]);
         for (uint8_t part_index{0U}; part_index < EMX_MIPI_PART_NUM; ++part_index) {
             uint8_t* part_data = mipi_data + part_index * EMX_MIPI_PART_LEN;
 #else
@@ -1235,12 +1243,12 @@ void RSLidarSdkImpl::handleLidarMipiData() {
         }
     }
 #if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
-    TimePoint input_time;
-    (void)inputTimeQueue1.pop(input_time);
-    if (delay_stat_switch_) {
-        LogInfo("[handleMIPI] {}: time {:.2f}ms",
-                seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
-    }
+        TimePoint input_time;
+        (void)inputTimeQueue1.pop(input_time);
+        if (delay_stat_switch_ && (seq % 10) == 0) {
+            LogInfo("[handleMIPI] {}: time {:.2f}ms",
+                    seq, utils::timeInterval<std::chrono::microseconds>(input_time) * 0.001);
+        }
     }
 #endif
 }
