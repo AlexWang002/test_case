@@ -5,8 +5,6 @@
 #include <math.h>
 
 /** [params] */
-#define ALGO_ON
-
 #define TILE_WIDTH            192
 #define TILE_HEIGHT           40
 #define TILE_COUNT            19

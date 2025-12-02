@@ -130,9 +130,9 @@ int upsample_main(std::string& exception_msg, int32_t& status_code)
 
         prog["algorithmParams"].set((int *)&Up_param, sizeof(InsertParam_t));
 
-        RasterDataFlow &InputDistDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto InputDistDataFlowHandler     = prog["InputDistDataFlowHandler"];
-        uint16_t *inputDistBufferVMEM   = prog["inputDistBufferVMEM"].ptr<uint16_t>();
+        RasterDataFlow &InputDistDataFlow    = prog.addDataFlowHead<RasterDataFlow>();
+        auto InputDistDataFlowHandler        = prog["InputDistDataFlowHandler"];
+        uint16_t *inputDistBufferVMEM        = prog["inputDistBufferVMEM"].ptr<uint16_t>();
         InputDistDataFlow.handler(InputDistDataFlowHandler)
             .src(DistDownIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputDistBufferVMEM)
@@ -141,32 +141,32 @@ int upsample_main(std::string& exception_msg, int32_t& status_code)
 
         RasterDataFlow &InputDistRawDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto InputDistRawDataFlowHandler     = prog["InputDistRawDataFlowHandler"];
-        uint16_t *inputDistRawBufferVMEM   = prog["inputDistRawBufferVMEM"].ptr<uint16_t>();
+        uint16_t *inputDistRawBufferVMEM     = prog["inputDistRawBufferVMEM"].ptr<uint16_t>();
         InputDistRawDataFlow.handler(InputDistRawDataFlowHandler)
             .src(DistRawIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputDistRawBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        RasterDataFlow &InputRefDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto InputRefDataFlowHandler     = prog["InputRefDataFlowHandler"];
-        uint16_t *inputRefBufferVMEM   = prog["inputRefBufferVMEM"].ptr<uint16_t>();
+        RasterDataFlow &InputRefDataFlow     = prog.addDataFlowHead<RasterDataFlow>();
+        auto InputRefDataFlowHandler         = prog["InputRefDataFlowHandler"];
+        uint16_t *inputRefBufferVMEM         = prog["inputRefBufferVMEM"].ptr<uint16_t>();
         InputRefDataFlow.handler(InputRefDataFlowHandler)
             .src(RefDownIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputRefBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT)
             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        RasterDataFlow &InputRefRawDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto InputRefRawDataFlowHandler     = prog["InputRefRawDataFlowHandler"];
-        uint16_t *inputRefRawBufferVMEM   = prog["inputRefRawBufferVMEM"].ptr<uint16_t>();
+        RasterDataFlow &InputRefRawDataFlow  = prog.addDataFlowHead<RasterDataFlow>();
+        auto InputRefRawDataFlowHandler      = prog["InputRefRawDataFlowHandler"];
+        uint16_t *inputRefRawBufferVMEM      = prog["inputRefRawBufferVMEM"].ptr<uint16_t>();
         InputRefRawDataFlow.handler(InputRefRawDataFlowHandler)
             .src(RefRawIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputRefRawBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        RasterDataFlow &InputAttrDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto InputAttrDataFlowHandler     = prog["InputAttrDataFlowHandler"];
-        uint16_t *inputAttrBufferVMEM   = prog["inputAttrBufferVMEM"].ptr<uint16_t>();
+        RasterDataFlow &InputAttrDataFlow    = prog.addDataFlowHead<RasterDataFlow>();
+        auto InputAttrDataFlowHandler        = prog["InputAttrDataFlowHandler"];
+        uint16_t *inputAttrBufferVMEM        = prog["inputAttrBufferVMEM"].ptr<uint16_t>();
         InputAttrDataFlow.handler(InputAttrDataFlowHandler)
             .src(AttrIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(inputAttrBufferVMEM)
@@ -175,22 +175,22 @@ int upsample_main(std::string& exception_msg, int32_t& status_code)
 
         RasterDataFlow &OutputDistUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
         auto OutputDistUpDataFlowHandler     = prog["OutputDistUpDataFlowHandler"];
-        uint16_t *outputDistUpBufferVMEM       = prog["outputDistUpBufferVMEM"].ptr<uint16_t>();
+        uint16_t *outputDistUpBufferVMEM     = prog["outputDistUpBufferVMEM"].ptr<uint16_t>();
         OutputDistUpDataFlow.handler(OutputDistUpDataFlowHandler)
             .dst(DistOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(outputDistUpBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
-        RasterDataFlow &OutputRefUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto OutputRefUpDataFlowHandler     = prog["OutputRefUpDataFlowHandler"];
-        uint16_t *outputRefUpBufferVMEM       = prog["outputRefUpBufferVMEM"].ptr<uint16_t>();
+        RasterDataFlow &OutputRefUpDataFlow  = prog.addDataFlowHead<RasterDataFlow>();
+        auto OutputRefUpDataFlowHandler      = prog["OutputRefUpDataFlowHandler"];
+        uint16_t *outputRefUpBufferVMEM      = prog["outputRefUpBufferVMEM"].ptr<uint16_t>();
         OutputRefUpDataFlow.handler(OutputRefUpDataFlowHandler)
             .dst(RefOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
             .tileBuffer(outputRefUpBufferVMEM)
             .tile(VIEW_WIDTH, TILE_HEIGHT);
 
         RasterDataFlow &OutputAttrUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto OutputAttrDataFlowHandler     = prog["OutputAttrDataFlowHandler"];
+        auto OutputAttrDataFlowHandler       = prog["OutputAttrDataFlowHandler"];
         uint16_t *outputAttrBufferVMEM       = prog["outputAttrBufferVMEM"].ptr<uint16_t>();
         OutputAttrUpDataFlow.handler(OutputAttrDataFlowHandler)
             .dst(AttrOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)

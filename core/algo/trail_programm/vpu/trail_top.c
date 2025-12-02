@@ -893,7 +893,6 @@ void trail_cond_part5_exec(TrailParam_t *trail_Param, Part5Config_t *config)
     agen output_agen         = init_agen_from_cfg(config->output);
 
     int32_t niter = config->niter;
-
     int32_t near_cnt_th_v = trail_Param->near_cnt_th_v;
     for (int32_t i = 0; i < niter; i++) chess_prepare_for_pipelining
     chess_loop_range(12, )
