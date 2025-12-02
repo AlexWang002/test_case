@@ -705,10 +705,6 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
                 uint16_t* ref1 = &frame_buffer->ref1[upsample_col][0];
                 uint16_t* att0 = &frame_buffer->att0[upsample_col][0];
                 uint16_t* att1 = &frame_buffer->att1[upsample_col][0];
-                // uint16_t* gnd0 = &frame_buffer->gnd_mark0[upsample_col][0];
-                // uint16_t* gnd1 = &frame_buffer->gnd_mark1[upsample_col][0];
-                // int16_t* high0 = &frame_buffer->high0[upsample_col][0];
-                // int16_t* high1 = &frame_buffer->high1[upsample_col][0];
 
                 for (int32_t i = 0; i < algo_func_.VIEW_H; ++i) {
                     const RSEMXMsopWave* kWaves0 = &kRawData.pixels[i].waves[0];
@@ -720,8 +716,6 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
                     ref1[i] = kWaves1->intensity;
                     att1[i] = kWaves1->attribute;
                 }
-
-                // algo_func_.highCalcFunc(dist0, dist1, high_calc_col, high0, high1, gnd0, gnd1);
             } else {
                 uint16_t* dist0_raw = &frame_buffer->dist0_raw[upsample_col][0];
                 uint16_t* ref0_raw = &frame_buffer->ref0_raw[upsample_col][0];
