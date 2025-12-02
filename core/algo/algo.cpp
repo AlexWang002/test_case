@@ -438,6 +438,12 @@ void AlgoFunction::algoFrameChange(void)
     rear3 = -1; //杂散
 }
 
+/**
+ * \brief  Denoise algorithm main process in pva
+ *
+ * \param[in] pstFrameBuffer: frame buffer
+ *              Range: N/A. Accuracy: N/A.
+ */
 void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
 {
     static bool first{true};
@@ -486,6 +492,12 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
     }
 }
 
+/**
+ * \brief  Trail algorithm main process in pva
+ *
+ * \param[in] pstFrameBuffer: frame buffer
+ *              Range: N/A. Accuracy: N/A.
+ */
 void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
 {
     static bool first{true};
@@ -532,7 +544,7 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
 }
 
 /**
- * \brief  Stray-delete algo function 
+ * \brief  Stray-delete algo function
  *
  * \param[in] pstFrameBuffer: frame buffer
  */
@@ -1288,6 +1300,12 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
     }
 }
 
+/**
+ * \brief  High calculation algorithm main process in pva
+ *
+ * \param[in] pstFrameBuffer: frame buffer
+ *              Range: N/A. Accuracy: N/A.
+ */
 void AlgoFunction::highcalcExec(tstFrameBuffer* pstFrameBuffer)
 {
     static bool first{true};
@@ -1332,6 +1350,12 @@ void AlgoFunction::highcalcExec(tstFrameBuffer* pstFrameBuffer)
     memcpy((uint8_t *)pstFrameBuffer->gnd_mark1[0], (uint8_t *)&h_gnd_out1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
 }
 
+/**
+ * \brief  Upsample algorithm main process in pva
+ *
+ * \param[in] pstFrameBuffer: frame buffer
+ *              Range: N/A. Accuracy: N/A.
+ */
 void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
 {
     std::string exception_msg;
