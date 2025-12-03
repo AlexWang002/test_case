@@ -59,7 +59,7 @@ VMEM(B, uint16_t, hortrail_judge_buffer, TILE_WIDTH * TILE_HEIGHT);
 VMEM(A, uint16_t, wall_judge_buffer, TILE_WIDTH * TILE_HEIGHT);
 VMEM(B, uint16_t, nearCntVBuffer, TILE_WIDTH * TILE_HEIGHT);
 VMEM(C, uint16_t, verCntBuffer, TILE_WIDTH * TILE_HEIGHT);
-VMEM(A, uint16_t, draw_judge_Buffer, TILE_WIDTH * TILE_HEIGHT);
+VMEM(B, uint16_t, draw_judge_Buffer, TILE_WIDTH * TILE_HEIGHT);
 
 typedef struct
 {
