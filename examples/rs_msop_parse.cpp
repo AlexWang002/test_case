@@ -367,11 +367,12 @@ bool parseMsopPkt(const uint8_t* packet, size_t size) {
         const int32_t yaw_base = static_cast<int32_t>(swap_int16(block.azimuth));
         const ChannelData* channel = block.channel_data;
         const int16_t time_offset = static_cast<int16_t>(block.time_offset);
+        const int16_t pitch_offset = std::floor(swap_int16(block.motor_speed) / 327.68f);
 
         for (uint16_t channel_idx = 0U; channel_idx < kChannelPerBlock; ++channel_idx) {
             int32_t yaw_value = yaw_base + yaw_offset_[channel_idx >> 3];
             int32_t yaw = static_cast<int32_t>(kYawFactor * yaw_value);
-            const int32_t pitch = surface_pitch_offset + pitch_angle_[channel_idx];
+            const int32_t pitch = surface_pitch_offset + pitch_angle_[channel_idx] - pitch_offset;
             const float cos_pitch = cos_lookup(pitch);
             const float sin_pitch = sin_lookup(pitch);
             const float cos_yaw = cos_lookup(yaw);

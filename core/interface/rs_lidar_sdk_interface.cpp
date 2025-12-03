@@ -22,8 +22,6 @@
 /*                     Include dependant library headers                      */
 /******************************************************************************/
 #include <cstring>
-#include <fstream>
-#include <iostream>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */

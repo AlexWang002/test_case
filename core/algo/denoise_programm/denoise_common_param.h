@@ -7,15 +7,9 @@
 #define TILE_WIDTH      192
 #define TILE_HEIGHT     95
 #define VIEW_HEIGHT     760
-#define TOTAL_HEIGHT    760
-
 #define KERNEL_RADIUS_WIDTH     1
 #define KERNEL_RADIUS_HEIGHT    2
-
 #define TILE_CNT 8
-#define BlockSize              24    // 数据分块大小
-
-#define ALGO_ENABLE 1 // 算法开关
 
 typedef struct {
     int win_len_h;  // 水平方向半窗长
@@ -36,6 +30,5 @@ typedef struct {
     .denoise_dist = { 3000, 12000, 24000 }, \
     .denoise_point = {{{1, 0, 2},{1, 0, 2},{1, 0, 2},{1, 0, 2}},{{1, 1, 2},{1, 1, 2},{1, 1, 2},{1, 1, 2}},{{1, 1, 2},{1, 1, 2},{1, 1, 2},{1, 1, 2}},{{1, 1, 2},{1, 1, 2},{1, 1, 2},{1, 1, 2}}} \
 }
-
 
 #endif

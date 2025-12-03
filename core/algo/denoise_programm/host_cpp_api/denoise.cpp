@@ -3,8 +3,8 @@
  * \{
  * \file denoise.cpp
  * \brief
- * \version 0.2
- * \date 2025-09-29
+ * \version 0.3
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -13,11 +13,14 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
- * 
+ *
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.2 | 2025-09-29 | Use vpu's Wide-SIMD vector processor to accelerate denoise algo|
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.3 | 2025-11-28 | Synchronize model modifications and add exception log messages|
  ******************************************************************************/
 
 /******************************************************************************/
@@ -90,67 +93,61 @@ int denoiseDataFree()
 
 /**
  * \brief Create and submit pva task for denoise algo
+ *
+ * \param[in] exception_msg: Exception message
+ *                 Range: NA. Accuracy: NA.
+ *
+ * \param[in] status_code: column index of the buffer
+ *                 Range: 0-2. Accuracy: 1.
 */
-int denoiseProcPva()
+int denoiseProcPva(std::string& exception_msg, int32_t& status_code)
 {
     try
     {
-        /*host端mask缓冲区清0*/
-        memset(denoise_mask_buffer_h, 0, TILE_WIDTH * VIEW_HEIGHT * sizeof(uint16_t));
-
-        //构建可执行文件
         Executable exec = Executable::Create(PVA_EXECUTABLE_DATA(denoise_dev),
                                              PVA_EXECUTABLE_SIZE(denoise_dev));
 
         CmdProgram prog = CmdProgram::Create(exec);
 
-        /*设置去噪算法相关参数*/
         prog["algorithmParams"].set((int *)&NoiseParams, sizeof(NoiseParam_t));
 
-        /*host将半帧dist数据传输给pva（分为8个tile）*/
-        RasterDataFlow &src_dist_dataflow   = prog.addDataFlowHead<RasterDataFlow>();  //向CmdProgram中添加一个RasterDataFlow
-        auto src_dist_dataflow_handler      = prog["src_dist_dataflow_handler"];       //数据流的传输由句柄触发
-        uint16_t *input_dist_vmem           = prog["input_dist_vmem"].ptr<uint16_t>();
+        RasterDataFlow &DistDataflow = prog.addDataFlowHead<RasterDataFlow>();
+        auto DistHandler             = prog["DistHandler"];
+        uint16_t *DistBuffer         = prog["DistBuffer"].ptr<uint16_t>();
 
-        src_dist_dataflow.handler(src_dist_dataflow_handler)
+        DistDataflow.handler(DistHandler)
                             .src(denoise_dist_buffer_d, TILE_WIDTH, VIEW_HEIGHT, TILE_WIDTH)
-                            .tileBuffer(input_dist_vmem)
+                            .tileBuffer(DistBuffer)
                             .tile(TILE_WIDTH, TILE_HEIGHT)
                             .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
 
-        /*pva将计算好的mask结果传回host端（分为8个tile）*/
-        RasterDataFlow &dst_mask_dataflow   = prog.addDataFlowHead<RasterDataFlow>();   //向CmdProgram中添加一个RasterDataFlow
-        auto dst_mask_dataflow_handler      = prog["dst_mask_dataflow_handler"];        //数据流的传输由句柄触发
-        uint16_t *output_mask_vmem          = prog["output_mask_vmem"].ptr<uint16_t>();
+        RasterDataFlow &MaskDataflow = prog.addDataFlowHead<RasterDataFlow>();
+        auto MaskHandler             = prog["MaskHandler"];
+        uint16_t *MaskBuffer         = prog["MaskBuffer"].ptr<uint16_t>();
 
-        dst_mask_dataflow.handler(dst_mask_dataflow_handler)
+        MaskDataflow.handler(MaskHandler)
                             .dst(denoise_mask_buffer_d, TILE_WIDTH, VIEW_HEIGHT, TILE_WIDTH)
-                            .tileBuffer(output_mask_vmem)
+                            .tileBuffer(MaskBuffer)
                             .tile(TILE_WIDTH, TILE_HEIGHT);
-
-        /*传输最后2列mask数据*/
-        RasterDataFlow &dst_last_mask_dataflow   = prog.addDataFlowHead<RasterDataFlow>();   //向CmdProgram中添加一个RasterDataFlow
-        auto dst_last_mask_dataflow_handler      = prog["dst_last_mask_dataflow_handler"];        //数据流的传输由句柄触发
-        uint16_t *output_last_mask_vmem          = prog["output_last_mask_vmem"].ptr<uint16_t>();
-
-        dst_last_mask_dataflow.handler(dst_last_mask_dataflow_handler)
-                            .dst(denoise_mask_buffer_d, TILE_WIDTH, 2, TILE_WIDTH)
-                            .tileBuffer(output_last_mask_vmem)
-                            .tile(TILE_WIDTH, 2);
 
         prog.compileDataFlows();
 
         SyncObj sync = SyncObj::Create();
         Fence fence{sync};
         CmdRequestFences rf{fence};
-
         CmdStatus status[2];
         denoise_stream.submit({&prog, &rf}, status);
         fence.wait();
+        cupva::Error statusCode = CheckCommandStatus(status[0]);
+        if (statusCode != Error::None)
+        {
+            status_code = (int32_t)statusCode;
+            return 2;
+        }
     }
     catch (cupva::Exception const &e)
     {
-        std::cout << "Caught a cuPVA exception with message: " << e.what() << std::endl;
+        exception_msg = std::string(e.what());
         return 1;
     }
     return 0;

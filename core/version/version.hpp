@@ -1,3 +1,20 @@
-#define RSLIDARSDK_VERSION_MAJOR 2
-#define RSLIDARSDK_VERSION_MINOR 00
-#define RSLIDARSDK_VERSION_PATCH 00
+#ifndef I_SDK_VERSION_H
+#define I_SDK_VERSION_H
+
+#include <string>
+#include <cstdint>
+
+namespace robosense{
+namespace lidar{
+
+const uint32_t kRSLidarSdkVersionMajor{2};
+const uint32_t kRSLidarSdkVersionMinor{01};
+const uint32_t kRSLidarSdkVersionPatch{01};
+const std::string kRSLidarSdkVersionStr{"2.01.01"};
+constexpr uint32_t kSdkVersionEncoded{((kRSLidarSdkVersionMajor % 10) * 10000) +
+                                      ((kRSLidarSdkVersionMinor % 100) * 100) +
+                                        kRSLidarSdkVersionPatch};
+} // namespace lidar
+} // namespace robosense
+
+#endif // I_SDK_VERSION_H

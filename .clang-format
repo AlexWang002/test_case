@@ -1,5 +1,6 @@
 ---
 # 参考https://releases.llvm.org/10.0.0/tools/clang/docs/ClangFormatStyleOptions.html
+# 整份文件最低要求：clang-format ≥ 11.0
 
 Language:        Cpp
 # BasedOnStyle:  Google
@@ -13,7 +14,7 @@ AlignAfterOpenBracket: Align
 # 连续赋值时，不对齐所有等号
 AlignConsecutiveAssignments: false
 
-# 连续位域定义，对齐所有位域符
+# 连续位域定义，对齐所有位域符 # ≥11.0
 AlignConsecutiveBitFields: true
 
 # 连续声明时，对齐所有声明的变量名
@@ -47,7 +48,7 @@ AllowShortBlocksOnASingleLine: Empty
 # 不允许短的case放在同一行
 AllowShortCaseLabelsOnASingleLine: false
 
-# 不允许短的enum放在同一行
+# 不允许短的enum放在同一行 # ≥11.0
 AllowShortEnumsOnASingleLine: false
 
 # 不允许所有短的函数放在同一行
@@ -252,7 +253,7 @@ SpaceAfterTemplateKeyword: true
 SpaceBeforeAssignmentOperators: true
 
 # 在初始化列表前是否加空格
-SpaceBeforeCpp11BracedList: true
+SpaceBeforeCpp11BracedList: false
 
 # 构造函数初始化列表冒号前面是否加空格
 SpaceBeforeCtorInitializerColon: true

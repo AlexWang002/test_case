@@ -3,8 +3,8 @@
  * \{
  * \headerfile trail.h "trail.h"
  * \brief
- * \version 0.1
- * \date 2025-09-11
+ * \version 0.2
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -14,6 +14,9 @@
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-11-28 | Add exception log messages |
  ******************************************************************************/
 #ifndef TRAIL_H
 #define TRAIL_H
@@ -44,7 +47,7 @@ extern uint16_t TrailMask[VIEW_HEIGHT][VIEW_WIDTH];
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
 /******************************************************************************/
-extern void trail_main();
+extern int trail_main(std::string& exception_msg, int32_t& status_code);
 extern void TrailDataAlloc();
 extern void TrailDataFree();
 

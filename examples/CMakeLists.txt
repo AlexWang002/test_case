@@ -12,10 +12,18 @@ message("=============================================================")
 
 
 if(COMPILE_ARM_VERSION)
-    add_executable(rs_demo_online demo_online.cpp rs_msop_parse.cpp ${CMAKE_SOURCE_DIR}/core/utils/sync_queue.h)
-    target_link_libraries(rs_demo_online  "-Wl,-unresolved-symbols=ignore-in-shared-libs"
+    add_executable(rs_demo_online
+        demo_online.cpp
+        rs_msop_parse.cpp
+        ${CMAKE_SOURCE_DIR}/core/utils/sync_queue.h
+    )
+
+    set(customer_lib ${CMAKE_SOURCE_DIR}/3rdparty/dimw/lib/libsensor_ipcclient_$<IF:$<BOOL:${COMPILE_MIPI_10HZ}>,10hz,$<IF:$<BOOL:${COMPILE_MIPI_30HZ}>,30hz,60hz>>.so)
+
+    target_link_libraries(rs_demo_online
+        "-Wl,-unresolved-symbols=ignore-in-shared-libs"
         lidar_robosense_SDK
-        ${CMAKE_SOURCE_DIR}/3rdparty/dimw/lib/libsensor_ipcclient.so
+        ${customer_lib}
     )
 
     target_include_directories(rs_demo_online
@@ -25,25 +33,18 @@ if(COMPILE_ARM_VERSION)
         ${CMAKE_SOURCE_DIR}/3rdparty/dimw/include/
         ${CMAKE_SOURCE_DIR}/3rdparty/dimw/include/CameraAccess
     )
-    install(TARGETS rs_demo_online  DESTINATION ${CMAKE_SOURCE_DIR}/arm_test)
 
-    add_executable(rs_demo_offline demo_offline.cpp ${CMAKE_SOURCE_DIR}/core/utils/sync_queue.h)
-    target_link_libraries(rs_demo_offline  "-Wl,-unresolved-symbols=ignore-in-shared-libs"
-        lidar_robosense_SDK
-        ${CMAKE_SOURCE_DIR}/3rdparty/dimw/lib/libsensor_ipcclient.so
+    install(TARGETS rs_demo_online
+        DESTINATION ${CMAKE_SOURCE_DIR}/arm_test
     )
-
-    target_include_directories(rs_demo_offline
-        PRIVATE
-        ${CMAKE_SOURCE_DIR}/api
-        ${CMAKE_SOURCE_DIR}/core/utils
-        ${CMAKE_SOURCE_DIR}/3rdparty/dimw/include/
-        ${CMAKE_SOURCE_DIR}/3rdparty/dimw/include/CameraAccess
-    )
-    install(TARGETS rs_demo_offline  DESTINATION ${CMAKE_SOURCE_DIR}/arm_test)
 else()
-    add_executable(rs_demo_offline demo_offline.cpp ${CMAKE_SOURCE_DIR}/core/utils/sync_queue.h)
-    target_link_libraries(rs_demo_offline PRIVATE
+    add_executable(rs_demo_offline
+        demo_offline.cpp
+        ${CMAKE_SOURCE_DIR}/core/utils/sync_queue.h
+    )
+
+    target_link_libraries(rs_demo_offline
+        PRIVATE
         lidar_robosense_SDK
     )
 endif()

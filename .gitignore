@@ -9,3 +9,4 @@ rs_lidar_sdk*
 temp
 release
 mipi_data/*txt
+3rdparty/yaml-cpp

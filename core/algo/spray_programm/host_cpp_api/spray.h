@@ -1,10 +1,10 @@
 /*******************************************************************************
- * \addtogroup trail_programm
+ * \addtogroup spray_programm
  * \{
- * \headerfile trail.h "trail.h"
+ * \headerfile spray.h "spray.h"
  * \brief
- * \version 0.1
- * \date 2025-09-11
+ * \version 0.2
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -14,6 +14,9 @@
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.2 | 2025-11-28 | Add exception log messages |
  ******************************************************************************/
 #ifndef SPRAY_H
 #define SPRAY_H
@@ -24,6 +27,7 @@
 #include <cupva_host_nonsafety.hpp>
 #include <cupva_host.hpp>
 #include <cupva_platform.h>
+#include <string>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -52,8 +56,8 @@ extern uint16_t *FinalOut1_h;
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
 /******************************************************************************/
-extern void sprayRemovePva();
-extern void rainEnhancePva();
+extern int sprayRemovePva(std::string& exception_msg, int32_t& status_code);
+extern int rainEnhancePva(std::string& exception_msg, int32_t& status_code);
 extern void sprayDataAlloc();
 extern void sprayDataFree();
 

@@ -3,8 +3,8 @@
  * \{
  * \headerfile denoise.h "denoise.h"
  * \brief
- * \version 0.2
- * \date 2025-09-29
+ * \version 0.3
+ * \date 2025-11-28
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -13,11 +13,14 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-09-11 | Init version |
- * 
+ *
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.2 | 2025-09-29 | Use vpu's Wide-SIMD vector processor to accelerate denoise algo|
  *
+ * | ver |    date    |  description |
+ * |-----|------------|--------------|
+ * | 0.3 | 2025-11-28 | Synchronize model modifications and add exception log messages|
  ******************************************************************************/
 #ifndef DENOISE_H
 #define DENOISE_H
@@ -30,6 +33,7 @@
 #include <cupva_platform.h> // Header that includes macros for specifying PVA executables
 #include <iostream>
 #include <fstream>
+#include <string>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -39,7 +43,7 @@
 /******************************************************************************/
 /*                     Declaration of exported variables                      */
 /******************************************************************************/
-extern uint16_t *denoise_dist_buffer_d; 
+extern uint16_t *denoise_dist_buffer_d;
 extern uint16_t *denoise_dist_buffer_h;
 
 extern uint16_t *denoise_mask_buffer_d;
@@ -48,7 +52,7 @@ extern uint16_t *denoise_mask_buffer_h;
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
 /******************************************************************************/
-int denoiseProcPva();
+int denoiseProcPva(std::string& exception_msg, int32_t& status_code);
 int denoiseDataAlloc();
 int denoiseDataFree();
 

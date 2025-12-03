@@ -192,8 +192,8 @@ class FaultManager {
      * @return int32_t fault level
      */
     template <typename U = T, typename E = FaultEnum>
-    std::enable_if_t<std::is_same<U, uint64_t>::value && std::is_same<E, FaultBits>::value, int32_t> getFaultLevel() {
-        constexpr uint64_t kAllDefinedFaultsMask {0xFF}; // Covers bits 0 to 7
+    std::enable_if_t<std::is_same<U, uint64_t>::value && std::is_same<E, FaultBits>::value, uint8_t> getFaultLevel() {
+        constexpr uint64_t kAllDefinedFaultsMask {0xFFUL}; // Covers bits 0 to 7
         constexpr uint64_t kPrimaryFaultMask {1ULL << static_cast<uint64_t>(FaultBits::LidarObstructionFault)};
         constexpr uint64_t kSecondaryFaultMask {kAllDefinedFaultsMask & ~kPrimaryFaultMask};
 
@@ -201,13 +201,13 @@ class FaultManager {
 
         // Check for any secondary faults (including only defined bits)
         if (current_status & kSecondaryFaultMask) {
-            return 2;
+            return 2U;
         }
         // Check for primary fault
         if (current_status & kPrimaryFaultMask) {
-            return 1;
+            return 1U;
         }
-        return 0;
+        return 0U;
     }
 
   private:

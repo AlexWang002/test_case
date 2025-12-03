@@ -4,7 +4,7 @@
  * \headerfile stray.h "stray.h"
  * \brief
  * \version 0.2
- * \date 2025-09-29
+ * \date 2025-12-02
  *
  * \copyright (c) 2014 - 2025 RoboSense, Co., Ltd.  All rights reserved.
  *
@@ -13,6 +13,7 @@
  * | ver |    date    |  description |
  * |-----|------------|--------------|
  * | 0.1 | 2025-10-13 | Init version |
+ * | 0.2 | 2025-12-02 | Add comments |
  *
  ******************************************************************************/
 #ifndef STRAY_H
@@ -22,10 +23,11 @@
 /*                         Include dependant headers                          */
 /******************************************************************************/
 #include <cupva_host_nonsafety.hpp>
-#include <cupva_host.hpp> // Main host-side C++-API header file
+#include <cupva_host.hpp>   // Main host-side C++-API header file
 #include <cupva_platform.h> // Header that includes macros for specifying PVA executables
 #include <iostream>
 #include <fstream>
+#include <string>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -69,7 +71,7 @@ extern StrayPvaBuffer stray_pva_buff;
 
 extern int strayBufferAlloc();
 extern int strayBufferRelease();
-extern int strayProcPva(int rainwall_cnt, int rainwall_dist);
+extern int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg, int32_t& status_code);
 
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */

@@ -28,14 +28,11 @@
 /******************************************************************************/
 #include <atomic>
 #include <cstdint>
-#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
 #include <thread>
 #include <condition_variable>
-#include <deque>
-#include <iostream>
 #include <pthread.h>
 #include <sched.h>
 
@@ -44,7 +41,7 @@
 /******************************************************************************/
 #include "algo.h"
 #include "common/fault_manager.h"
-#include "decoder/include/decoder_emx.h"
+#include "decoder/decoder_emx.h"
 #include "rs_new_logger.h"
 
 #define ALGO_FRM_BUF_SIZE (3)

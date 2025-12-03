@@ -117,12 +117,14 @@ std::vector<DataVariant> parseJsonFile(const std::string& file) {
         DataVariant mipi_crc = getJsonData<bool>(target, "ENABLE_MIPI_CRC");
         DataVariant param_path = getJsonData<std::string>(target, "INNER_PARAM_PATH");
         DataVariant log_path = getJsonData<std::string>(target, "LOG_CONFIG_FILE");
+        DataVariant delay_stat = getJsonData<bool>(target, "DELAY_STAT");
         DataVariant threads = getJsonData<std::vector<thread::ThreadConfig>>(target, "THREADS");
         DataVariant algo_param = getJsonData<AlgoSwitch>(target, "ALGORITHM");
         algo_switch = getJsonData<AlgoSwitch>(target, "ALGORITHM");
         result.push_back(mipi_crc);
         result.push_back(param_path);
         result.push_back(log_path);
+        result.push_back(delay_stat);
         result.push_back(threads);
         result.push_back(algo_param);
 
@@ -191,6 +193,7 @@ AlgoSwitch getJsonData<AlgoSwitch>(const json& json_obj, const std::string& key)
         config.enable_denoise = getJsonData<bool>(target, "ENABLE_DENOISE");
         config.enable_stray = getJsonData<bool>(target, "ENABLE_STRAY");
         config.enable_spray = getJsonData<bool>(target, "ENABLE_SPRAY");
+        config.enable_delete = getJsonData<bool>(target, "ENABLE_DELETE");
         config.data_valid = true;
     } catch (const json::exception& e) {
         throw std::runtime_error("JSON parsing error for key '" + key + "': " + e.what());
@@ -261,7 +264,8 @@ std::string DataVariantVisitor::operator()(const AlgoSwitch& value) const {
     result += "Enable trail remove : " + boolToString(value.enable_trail_remove) + "\n" +
               "Enable de-noise     : " + boolToString(value.enable_denoise) + "\n" +
               "Enable stray        : " + boolToString(value.enable_stray) + "\n" +
-              "Enable spray        : " + boolToString(value.enable_spray) + "\n";
+              "Enable spray        : " + boolToString(value.enable_spray) + "\n" +
+              "Enable delete       : " + boolToString(value.enable_delete) + "\n";
 
     return result;
 }
