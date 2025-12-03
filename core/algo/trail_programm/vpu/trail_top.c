@@ -59,6 +59,7 @@ VMEM(B, uint16_t, hortrail_judge_buffer, TILE_WIDTH * TILE_HEIGHT);
 VMEM(A, uint16_t, wall_judge_buffer, TILE_WIDTH * TILE_HEIGHT);
 VMEM(B, uint16_t, nearCntVBuffer, TILE_WIDTH * TILE_HEIGHT);
 VMEM(C, uint16_t, verCntBuffer, TILE_WIDTH * TILE_HEIGHT);
+VMEM(A, uint16_t, draw_judge_Buffer, TILE_WIDTH * TILE_HEIGHT);
 
 typedef struct
 {
@@ -115,6 +116,7 @@ typedef struct
 
 typedef struct
 {
+    AgenCFG center_dist;
     AgenCFG near_cnt_v;
     AgenCFG ver_cnt;
     AgenCFG wall_judge;
@@ -122,6 +124,7 @@ typedef struct
     AgenCFG Hortrail_judge;
     AgenCFG con3_1;
     AgenCFG refer_mask;
+    AgenCFG draw_judge;
     AgenCFG output;
     int32_t niter;
 } Part5Config_t;
@@ -284,7 +287,7 @@ void trail_cond_part1_init(uint16_t *near_dist_th, uint16_t *adj_dis_thre_d, uin
     agen con3_1_agen = init((dvushort *)con3_1);
     INIT_AGEN2(con3_1_agen, agen_wrapper);
     agen refer_mask_agen = init((dvushort *)refer_mask);
-    INIT_AGEN2(con3_1_agen, agen_wrapper);
+    INIT_AGEN2(refer_mask_agen, agen_wrapper);
 
     config->input_dist     = extract_agen_cfg(input_agen);
     config->adj_dis_thre_d = extract_agen_cfg(adj_dis_thre_d_agen);
@@ -403,12 +406,9 @@ void trail_cond_draw_exec(TrailParam_t *trail_Param, DrawConfig_t *config)
     dvshortx dist[13];
     dvshortx pred[13];
     dvshortx dif_distC_abs[13];
-    dvshortx dif_dist[12];
+    dvshortx dif_dist[13];
     dvshortx corner_mask[13];
-    dvshortx draw_cono_cnt[13];
     dvshortx cono_valid[13];
-    dvshortx left_valid[13];
-    dvshortx right_valid[13];
 
     for (int32_t i = 0; i < niter; i++) chess_prepare_for_pipelining
     chess_loop_range(3, )
@@ -420,10 +420,8 @@ void trail_cond_draw_exec(TrailParam_t *trail_Param, DrawConfig_t *config)
         {
             dist[idx] = dvushort_load(input_agen);
             pred[idx] = (dist[idx] == 0);
+            dif_dist[idx] = chess_dont_care(dvshortx) & 0;
             corner_mask[idx] = chess_dont_care(dvshortx) & 0;
-            draw_cono_cnt[idx] = chess_dont_care(dvshortx) & 0;
-            left_valid[idx] = chess_dont_care(dvshortx) & 0;
-            right_valid[idx] = chess_dont_care(dvshortx) & 0;
             cono_valid[idx] = chess_dont_care(dvshortx) & 0;
         }
         for(int idx = 0; idx < 2 * KERNEL_RADIUS_HEIGHT + 1; idx++)
@@ -432,7 +430,7 @@ void trail_cond_draw_exec(TrailParam_t *trail_Param, DrawConfig_t *config)
 
             if(idx > 0)
             {
-                dif_dist[idx - 1] = dvabsdif(dist[idx], dist[idx - 1]);
+                dif_dist[idx] = dist[idx] - dist[idx - 1];
             }
             if(idx <= 3)
             {
@@ -442,44 +440,58 @@ void trail_cond_draw_exec(TrailParam_t *trail_Param, DrawConfig_t *config)
             {
                 right_cnt += dvmux((~pred[idx]) & (dif_distC_abs[idx] > trail_Param->Draw_D_H), 1, vec0);
             }
+            cono_valid[idx] = (dif_distC_abs[idx] < 100) & (dif_dist[idx] > 0);
         }
+
+        dvshortx left_valid = vec0;
+        dvshortx right_valid = vec0;
+        dvshortx res_mask1 = vec0;
+        dvshortx res_mask2 = vec0;
+        dvshortx case1 = vec0;
+        dvshortx case2 = vec0;
+        dvshortx con_mask_sum = vec0;
+        dvshortx result1 = vec0;
+        dvshortx result2 = vec0;
 
         for(int cnt = 1; cnt < 2 * KERNEL_RADIUS_HEIGHT; cnt++)
         {
-            cono_valid[cnt] = (dif_distC_abs[cnt] < 100) & (dif_dist[cnt - 1] > 0);
+            left_valid = vec0;
+            right_valid = vec0;
+            case1 = vec0;
+            case2 = vec0;
+            corner_mask[cnt] = (dif_distC_abs[cnt] >= dif_distC_abs[cnt - 1]) &
+                                (dif_distC_abs[cnt] >= dif_distC_abs[cnt + 1]) &
+                                (~pred[cnt]) & (dif_distC_abs[cnt] < 100);
+            for(int j = 1; j <= cnt; j++)
+            {
+                left_valid += cono_valid[j];
+            }
+            for(int k = cnt; k < 2 * KERNEL_RADIUS_HEIGHT; k++)
+            {
+                right_valid += cono_valid[k];
+            }
+            if(cnt < 6)
+            {
+                case1 = right_cnt > 0;
+            }
             if(cnt > 6)
             {
-                corner_mask[cnt] = (left_cnt > 0) & (dif_distC_abs[cnt] >= dif_distC_abs[cnt - 1]) &
-                                (dif_distC_abs[cnt] >= dif_distC_abs[cnt + 1]) &
-                                (~pred[cnt]) & (dif_distC_abs[cnt] < 100);
-                corner_cnt += corner_mask[cnt];
+                case2 = left_cnt > 0;
             }
-            else if(cnt < 6)
-            {
-                corner_mask[cnt] = (right_cnt > 0) & (dif_distC_abs[cnt] >= dif_distC_abs[cnt - 1]) &
-                                (dif_distC_abs[cnt] >= dif_distC_abs[cnt + 1]) &
-                                (~pred[cnt]) & (dif_distC_abs[cnt] < 100);
-                corner_cnt += corner_mask[cnt];
-            }
+
+            con_mask_sum += cono_valid[cnt];
+            res_mask1 += ((case1 | case2) & corner_mask[cnt]) > 0;
+            res_mask2 += (case1 | case2) & corner_mask[cnt] & (left_valid > 1) & (right_valid < 3);
         }
 
-        dvshortx cond1_1 = left_cnt > 0 & corner_cnt >= trail_Param->draw_near_cnt_th_h;
-        dvshortx cond1_2 = right_cnt > 0 & corner_cnt >= trail_Param->draw_near_cnt_th_h;
-        dvshortx cond2_1 = vec0;
-        for(int m = 0; m < 2 * KERNEL_RADIUS_HEIGHT + 1; m++)
-        {
-            for(int j = 0; j < m; j++)
-            {
-                left_valid[m] += cono_valid[j];
-            }
-            for(int k = m + 1; k < 2 * KERNEL_RADIUS_HEIGHT + 1; k++)
-            {
-                right_valid[m] += cono_valid[k];
-            }
-            cond2_1 += (corner_mask[m]) & (left_valid[m] > 1) & (right_valid[m] < 3);
-        }
-        dvshortx cond2 = cond2_1 > 0;
-        dvshortx cond = (cond1_1 | cond1_2) & cond2;
+        result1 = dvmux(res_mask1 > 0, con_mask_sum, vec0);
+        result2 = dvmux(res_mask2 > 0, con_mask_sum, vec0);
+
+        dvshortx cond1_1 = left_cnt > 0 & result1 >= trail_Param->draw_near_cnt_th_h;
+        dvshortx cond1_2 = right_cnt > 0 & result1 >= trail_Param->draw_near_cnt_th_h;
+        dvshortx cond1_3 = result2 > 0;
+
+        dvshortx cond = (cond1_1 | cond1_2) & cond1_3;
         vstore(cond, draw_judge_agen);
     }
 }
@@ -810,8 +822,8 @@ void trail_cond_part4_exec(TrailParam_t *trail_Param, Part4Config_t *config)
  * \brief  Part5 initialization function
  * \param[in] config : Part5 configuration structure
  *                Range: NA. Accuracy: NA.
- * \param[in] output_line_pitch : Line pitch without halo
- *                Range: 192. Accuracy: NA.
+ * \param[in] input_line_pitch : Line pitch with halo
+ *                Range: 194. Accuracy: NA.
  * \param[in] near_cnt_v : Vertical distance to nearest point count
  *                Range: 0-9. Accuracy: 1.
  * \param[in] ver_cnt : Number of neighborhood points satisfying the absolute
@@ -829,8 +841,8 @@ void trail_cond_part4_exec(TrailParam_t *trail_Param, Part4Config_t *config)
  *                Range: 0-1. Accuracy: 1.
  */
 void trail_cond_part5_init(uint16_t *near_cnt_v, uint16_t *ver_cnt, uint16_t *wall_judge, uint16_t *mask,
-                                 uint16_t *Hortrail_judge, uint16_t *con3_1, uint16_t *refer_mask,
-                                 int32_t output_line_pitch, Part5Config_t *config)
+                                 uint16_t *Hortrail_judge, uint16_t *con3_1, uint16_t *refer_mask, uint16_t *draw_judge,
+                                 int32_t input_line_pitch, Part5Config_t *config)
 {
     AgenWrapper agen_wrapper;
     agen_wrapper.size = sizeof(uint16_t);
@@ -853,16 +865,21 @@ void trail_cond_part5_init(uint16_t *near_cnt_v, uint16_t *ver_cnt, uint16_t *wa
     INIT_AGEN2(con3_1_agen, agen_wrapper);
     agen refer_mask_agen = init((dvushort *)refer_mask);
     INIT_AGEN2(refer_mask_agen, agen_wrapper);
-
-    AgenWrapper output_wrapper;
-    output_wrapper.size = sizeof(uint16_t);
-    output_wrapper.n1   = TILE_WIDTH / VECW;
-    output_wrapper.s1   = VECW;
-    output_wrapper.n2   = TILE_HEIGHT;
-    output_wrapper.s2   = output_line_pitch;
+    agen draw_judge_agen = init((dvushort *)draw_judge);
+    INIT_AGEN2(draw_judge_agen, agen_wrapper);
     agen output_agen    = init((dvushort *)NULL);
-    INIT_AGEN2(output_agen, output_wrapper);
+    INIT_AGEN2(output_agen, agen_wrapper);
 
+    AgenWrapper dist_wrapper;
+    dist_wrapper.size = sizeof(uint16_t);
+    dist_wrapper.n1   = TILE_WIDTH / VECW;
+    dist_wrapper.s1   = VECW;
+    dist_wrapper.n2   = TILE_HEIGHT;
+    dist_wrapper.s2   = input_line_pitch;
+    agen dist_agen    = init((dvushort *)NULL);
+    INIT_AGEN2(dist_agen, dist_wrapper);
+
+    config->center_dist    = extract_agen_cfg(dist_agen);
     config->near_cnt_v     = extract_agen_cfg(near_cnt_v_agen);
     config->ver_cnt        = extract_agen_cfg(ver_cnt_agen);
     config->wall_judge     = extract_agen_cfg(wall_judge_agen);
@@ -870,6 +887,7 @@ void trail_cond_part5_init(uint16_t *near_cnt_v, uint16_t *ver_cnt, uint16_t *wa
     config->Hortrail_judge = extract_agen_cfg(Hortrail_judge_agen);
     config->con3_1         = extract_agen_cfg(con3_1_agen);
     config->refer_mask     = extract_agen_cfg(refer_mask_agen);
+    config->draw_judge     = extract_agen_cfg(draw_judge_agen);
     config->output         = extract_agen_cfg(output_agen);
     config->niter          = (TILE_WIDTH / VECW) * TILE_HEIGHT;
 }
@@ -890,10 +908,13 @@ void trail_cond_part5_exec(TrailParam_t *trail_Param, Part5Config_t *config)
     agen Hortrail_judge_agen = init_agen_from_cfg(config->Hortrail_judge);
     agen con3_1_agen         = init_agen_from_cfg(config->con3_1);
     agen refer_mask_agen     = init_agen_from_cfg(config->refer_mask);
+    agen draw_judge_agen     = init_agen_from_cfg(config->draw_judge);
+    agen center_dist_agen     = init_agen_from_cfg(config->center_dist);
     agen output_agen         = init_agen_from_cfg(config->output);
 
     int32_t niter = config->niter;
     int32_t near_cnt_th_v = trail_Param->near_cnt_th_v;
+    int32_t draw_dist_end = trail_Param->draw_dist_end;
     for (int32_t i = 0; i < niter; i++) chess_prepare_for_pipelining
     chess_loop_range(12, )
     chess_unroll_loop(4)
@@ -905,13 +926,16 @@ void trail_cond_part5_exec(TrailParam_t *trail_Param, Part5Config_t *config)
         dvshortx Hortrail_judge = dvushort_load(Hortrail_judge_agen);
         dvshortx con3_1         = dvushort_load(con3_1_agen);
         dvshortx refer_mask     = dvushort_load(refer_mask_agen);
+        dvshortx draw_judge     = dvushort_load(draw_judge_agen);
+        dvshortx center_dist    = dvushort_load(center_dist_agen);
 
         dvshortx con3_2         = near_cnt_v < near_cnt_th_v;
         dvshortx con3           = con3_1 & con3_2;
         dvshortx con4_3         = ver_cnt < 3;
         dvshortx con4           = wall_judge | con4_3;
-        dvshortx Vertrail_judge = con3 & con4;
-        dvshortx output         = mask & Vertrail_judge & Hortrail_judge & ~refer_mask;
+        dvshortx con5           = draw_judge & (center_dist < draw_dist_end);
+        dvshortx Vertrail_judge = (con3 & con4) | con5;
+        dvshortx output         = mask & ((Hortrail_judge & (refer_mask == 0)) | draw_judge) & Vertrail_judge;
 
         vstore(output, output_agen);
     }
@@ -935,12 +959,12 @@ CUPVA_VPU_MAIN() {
     check_center_init(maskBuffer, nearDistThBuffer, adjDisThreDBuffer, srcDistLinePitch, &maskParam);
     trail_cond_part1_init(nearDistThBuffer, adjDisThreDBuffer, con1_3buffer, con3_1buffer, refer_buffer,
                             srcDistLinePitch, &Part1Param);
-    // trail_cond_draw_init(draw_judge_Buffer, srcDistLinePitch, &DrawParam);
+    trail_cond_draw_init(draw_judge_Buffer, srcDistLinePitch, &DrawParam);
     trail_cond_part2_init(adjDisThreDBuffer, con1_3buffer, hortrail_judge_buffer, srcDistLinePitch, &Part2Param);
     trail_cond_part3_init(wall_judge_buffer, srcDistLinePitch, &Part3Param);
     trail_cond_part4_init(nearDistThBuffer, nearCntVBuffer, verCntBuffer,srcDistLinePitch, &Part4Param);
     trail_cond_part5_init(nearCntVBuffer, verCntBuffer, wall_judge_buffer, maskBuffer, hortrail_judge_buffer,
-                            con3_1buffer, refer_buffer, dstLinePitch, &Part5Param);
+                            con3_1buffer, refer_buffer, draw_judge_Buffer, srcDistLinePitch, &Part5Param);
 
     for (int TileIdx = 0; TileIdx < TILE_COUNT; TileIdx++)
     {
@@ -953,16 +977,17 @@ CUPVA_VPU_MAIN() {
         /** Update agen base address */
         cupvaModifyAgenCfgBase(&maskParam.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 6 * srcDistLinePitch]);
         cupvaModifyAgenCfgBase(&Part1Param.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 4 * srcDistLinePitch]);
-        // cupvaModifyAgenCfgBase(&DrawParam.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH]);
+        cupvaModifyAgenCfgBase(&DrawParam.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH]);
         cupvaModifyAgenCfgBase(&Part2Param.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 4 * srcDistLinePitch]);
         cupvaModifyAgenCfgBase(&Part3Param.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 4 * srcDistLinePitch]);
         cupvaModifyAgenCfgBase(&Part4Param.input_dist, &inputDistBufferVMEM[srcDistOffset + 6 * srcDistLinePitch]);
         cupvaModifyAgenCfgBase(&Part4Param.center, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 6 * srcDistLinePitch]);
+        cupvaModifyAgenCfgBase(&Part5Param.center_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 6 * srcDistLinePitch]);
         cupvaModifyAgenCfgBase(&Part5Param.output, &outputValidBufferVMEM[dstOffset]);
 
         check_center_exec(trail_Param, &maskParam);
         trail_cond_part1_exec(trail_Param, &Part1Param);
-        // trail_cond_draw_exec(trail_Param, &DrawParam);
+        trail_cond_draw_exec(trail_Param, &DrawParam);
         trail_cond_part2_exec(trail_Param, &Part2Param);
         trail_cond_part3_exec(trail_Param, &Part3Param);
         trail_cond_part4_exec(trail_Param, &Part4Param);
