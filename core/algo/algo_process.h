@@ -99,6 +99,7 @@ class CloudManager
     std::vector<std::thread> algo_handle_threads_;
     std::thread handle_thread_;
     std::atomic<bool> to_exit_handle_{false};
+    std::atomic<bool> to_start_algo_{false};
     std::function<void(const uint8_t* pkt, size_t size)> cb_send_;
 
     AlgoFunction algo_func_;
