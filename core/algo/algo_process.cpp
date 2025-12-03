@@ -273,7 +273,7 @@ void CloudManager::algoFinalProcess(void)
     /** 申请上采样变量内存空间 */
     upsampleDataAlloc();
     try {
-        while (false == to_exit_handle_.load() && true == to_start_algo_.load()) {
+        while (false == to_exit_handle_.load()) {
             uint16_t dist[algo_func_.VIEW_H * 2]{0};
             uint8_t ref[algo_func_.VIEW_H * 2]{0};
             AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
@@ -528,7 +528,7 @@ void CloudManager::algoProcess(int32_t task_id)
             // TrailDataAlloc();
         }
 
-        while (false == to_exit_handle_.load() && true == to_start_algo_.load()) {
+        while (false == to_exit_handle_.load()) {
             std::chrono::microseconds total_time = (std::chrono::microseconds)0;
             if (cacl_done_[task_id].load() == 0) {
                 bool isLostPkt = false;
@@ -734,9 +734,6 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
 
         if ((pkt_cnt & 0x1) == 1) {
             frame_buffer->recv_idx.store(upsample_col + 1);
-        }
-        if(!to_start_algo_.load() && (pkt_cnt == algo_func_.UP_VIEW_W - 1)){
-            to_start_algo_.store(true);
         }
     } else {
         LogError("ERROR: pkt_seq value is invalid:{}", pkt_cnt);
