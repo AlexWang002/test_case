@@ -248,8 +248,8 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code)
         Fence fence{sync};
         CmdRequestFences rf{fence};
         CmdStatus status[2];
-        Spray_stream.submit({&prog, &rf}, status);
-        fence.wait();
+        Spray_stream.submit({&prog, &rf}, status, IN_ORDER, 6000, 3000);
+        fence.wait(); // sprayremove task timeout: 6ms
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {
@@ -376,8 +376,8 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code)
         Fence fence{sync};
         CmdRequestFences rf{fence};
         CmdStatus status[2];
-        Spray_stream.submit({&prog, &rf}, status);
-        fence.wait();
+        Spray_stream.submit({&prog, &rf}, status, IN_ORDER, 3500, 3000);
+        fence.wait(); // rainenhance task timeout: 3.5ms
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {

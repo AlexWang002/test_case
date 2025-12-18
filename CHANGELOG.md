@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.00.00] - 2025-12-10
+
+### Update
+
+- 增加json配置VPU使能功能，字段’VPU_AUTH’写true:开启VPU使能；写false:关闭VPU使能
+- 增加PVA算法各阶段时延日志打印
+- 增加PVA算法任务超时限制
+- 优化高度计算算法PVA耗时
+- 优化杂散算法CPU部分耗时
+
+### Change
+
+- ag_config.json中算法线程的调度策略调整至FIFO
+- 将deviceinfo相关业务移至点云业务后，不计入handlemipi总耗时
+- runDeviceInfoCallback回调频率调整至10Hz
+- SDK版本号更新为VP3.00.00
+
+### Fix
+
+- 修复帧序号乱序问题
+- 解决10Hz偶发中间件getFrame报错问题
+
 ## [2.01.01] - 2025-12-02
 
 ### Update

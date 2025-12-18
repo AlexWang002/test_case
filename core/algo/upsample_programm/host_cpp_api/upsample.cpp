@@ -203,8 +203,8 @@ int upsample_main(std::string& exception_msg, int32_t& status_code)
         Fence fence{sync};
         CmdRequestFences rf{fence};
         CmdStatus status[2];
-        upsample_stream.submit({&prog, &rf}, status);
-        fence.wait();
+        upsample_stream.submit({&prog, &rf}, status, IN_ORDER, 3500, 3000);
+        fence.wait(); // upsample task timeout: 3.5ms
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {
