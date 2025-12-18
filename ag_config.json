@@ -38,6 +38,7 @@
         "INNER_PARAM_PATH": "/osdata/satelite/lidar/",
         "LOG_CONFIG_FILE": "./rs_lidar_sdk.log",
         "DELAY_STAT": true,
+        "VPU_AUTH": true,
         "THREADS": [
             {
                 "id": 1,

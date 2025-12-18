@@ -225,8 +225,8 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
         CmdRequestFences rf{fence};
 
         CmdStatus status[2];
-        stray_stream.submit({&prog, &rf}, status);
-        fence.wait();
+        stray_stream.submit({&prog, &rf}, status, IN_ORDER, 4500, 3000);
+        fence.wait(); // stray task timeout: 4.5ms
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {

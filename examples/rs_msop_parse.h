@@ -64,8 +64,7 @@ typedef struct {
     uint16_t data_length;            //   2 bytes
     uint16_t counter;                //   2 bytes
     uint32_t data_id;                //   4 bytes
-    uint32_t crc32;                  //   4 bytes
-} LidarDifop2Pkt;                    // 500 bytes
+} LidarDifop2Pkt;                    // 496 bytes
 
 typedef enum {
     PCD_ASCII,  // ASCII格式

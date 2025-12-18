@@ -52,11 +52,19 @@ static const uint16_t kBlockPerFrame {1520U};
 static constexpr uint32_t kPointsPerFrame {192U * 1520U};
 static const float kDistanceRes {0.005f};
 
-static constexpr float kYawFactor = 1.0f / 5.12f;
-static constexpr double kDegToRadFactor = 3.14159265358979323846 / 180.0;
+static constexpr float kYawFactor{1.0f / 5.12f};
+static constexpr double kDegToRadFactor{3.14159265358979323846 / 180.0};
+static constexpr double kRadToDegFactor{180.0 / 3.14159265358979323846};
 
-static const uint8_t kDifop2Id[4] = {0xA5U, 0xFFU, 0x00U, 0xAEU};
-static const uint8_t kMsopId[4] = {0x55U, 0xAAU, 0x5AU, 0xA5U};
+static const uint8_t kDifop2Id[4]{0xA5U, 0xFFU, 0x00U, 0xAEU};
+static const uint8_t kMsopId[4]{0x55U, 0xAAU, 0x5AU, 0xA5U};
+
+const double kAngle{1.0 * kDegToRadFactor};
+const double kSinBeta{(std::sin(kAngle))};
+const double kCosBeta{(std::cos(kAngle))};
+const double kNegSinBeta{(-1.0 * std::sin(kAngle))};
+const int32_t kBeta{100};
+
 
 /******************************************************************************/
 /*                 Declaration or Definition of local variables               */
@@ -71,12 +79,8 @@ float cos_table[45000] = {0.0f};
 float* sin_;
 float* cos_;
 
-std::unique_ptr<LidarPointCloud, void (*)(LidarPointCloud*)> point_cloud_ {
-    nullptr,
-    [](LidarPointCloud* p) {
-        free(p);
-    }
-};
+std::unique_ptr<LidarPointCloud, void (*)(LidarPointCloud*)> point_cloud_ {nullptr,
+                                                                           [](LidarPointCloud* p) { free(p); }};
 
 /******************************************************************************/
 /*                       Definition of local functions                        */
@@ -114,7 +118,7 @@ inline float cos_lookup(int32_t index) {
  * \retval true: The input distance is valid.
  * \retval false: The input distance is not valid.
  */
-inline bool distance_valid(float distance) {
+inline bool distanceValid(float distance) {
     return ((distance >= 0.2f) && (distance <= 300.0f));
 }
 
@@ -152,9 +156,7 @@ bool readBinData(const std::string& file_path, char* data, uint32_t& len) {
     return true;
 }
 
-bool savePointCloudToPCD(const std::string& kFileName,
-                         LidarPointCloud* cloud,
-                         PCDFormat format) {
+bool savePointCloudToPCD(const std::string& kFileName, LidarPointCloud* cloud, PCDFormat format) {
     if (((!cloud) || (!cloud->point)) || (cloud->point_num == 0)) {
         std::cerr << "Invalid point cloud data" << std::endl;
         return false;
@@ -193,8 +195,7 @@ bool savePointCloudToPCD(const std::string& kFileName,
             const LidarPoint* kP = &cloud->point[i];
             os << kP->x << " " << kP->y << " " << kP->z << " "
                << static_cast<int>(kP->intensity) << " " // 反射率转int输出
-               << static_cast<int>(kP->channel_number)
-               << " " // uint8_t转int避免被解析为字符
+               << static_cast<int>(kP->channel_number) << " " // uint8_t转int避免被解析为字符
                << kP->timestamp << std::endl;
         }
     } else {
@@ -203,9 +204,9 @@ bool savePointCloudToPCD(const std::string& kFileName,
             const LidarPoint* kP = &cloud->point[i];
 
             // 严格按结构体成员顺序写入，不做类型转换
-            os.write(reinterpret_cast<const char*>(&kP->x), sizeof(kP->x)); // float (4字节)
-            os.write(reinterpret_cast<const char*>(&kP->y), sizeof(kP->y)); // float (4字节)
-            os.write(reinterpret_cast<const char*>(&kP->z), sizeof(kP->z)); // float (4字节)
+            os.write(reinterpret_cast<const char*>(&kP->x), sizeof(kP->x));                 // float (4字节)
+            os.write(reinterpret_cast<const char*>(&kP->y), sizeof(kP->y));                 // float (4字节)
+            os.write(reinterpret_cast<const char*>(&kP->z), sizeof(kP->z));                 // float (4字节)
             os.write(reinterpret_cast<const char*>(&kP->intensity), sizeof(kP->intensity)); // uint8_t (1字节，反射率)
             os.write(reinterpret_cast<const char*>(&kP->channel_number), sizeof(kP->channel_number)); // uint8_t (1字节)
             os.write(reinterpret_cast<const char*>(&kP->timestamp), sizeof(kP->timestamp)); // int16_t (2字节)
@@ -268,8 +269,7 @@ bool parseDifopPkt(const uint8_t* packet, size_t size) {
     const size_t difop2_len = sizeof(LidarDifop2Pkt);
 
     if (size != difop2_len) {
-        std::cout << "input difop packet size is not equal to difop2 len: "
-                  << difop2_len << std::endl;
+        std::cout << "input difop packet size is not equal to difop2 len: " << difop2_len << std::endl;
         return false;
     }
     if (0 != memcmp(packet, kDifop2Id, sizeof(kDifop2Id))) {
@@ -328,12 +328,6 @@ bool parseMsopPkt(const uint8_t* packet, size_t size) {
     const LidarPointCloudPackets& pkt = *reinterpret_cast<const LidarPointCloudPackets*>(packet);
     const uint8_t* data_id = reinterpret_cast<const uint8_t*>(&(pkt.data_id));
 
-    std::cout << std::hex << std::setw(2) << std::setfill('0');
-    for (uint8_t i = 0U; i < 4U; i++) {
-        std::cout << "data_id[" << i << "]: " << (int)data_id[i] << std::endl;
-    }
-    std::cout << std::dec << std::endl;
-
     if (0 != memcmp(data_id, kMsopId, sizeof(kMsopId))) {
         std::cout << "Wrong MSOP packet id" << std::endl;
         return false;
@@ -350,9 +344,7 @@ bool parseMsopPkt(const uint8_t* packet, size_t size) {
         return false;
     }
     uint64_t pkt_ts = pkt.frame_timestamp;
-    std::cout << "pkt_ts: " << pkt_ts << std::endl;
     uint32_t frame_cnt = ntohl(pkt.frame_seq);
-    std::cout << "frame_cnt: " << frame_cnt << std::endl;
 
     const uint8_t surface_id = pkt.mirror_id;
     const int32_t surface_pitch_offset = surface_pitch_offset_[surface_id];
@@ -372,18 +364,20 @@ bool parseMsopPkt(const uint8_t* packet, size_t size) {
         for (uint16_t channel_idx = 0U; channel_idx < kChannelPerBlock; ++channel_idx) {
             int32_t yaw_value = yaw_base + yaw_offset_[channel_idx >> 3];
             int32_t yaw = static_cast<int32_t>(kYawFactor * yaw_value);
-            const int32_t pitch = surface_pitch_offset + pitch_angle_[channel_idx] - pitch_offset;
+            const int32_t pitch = surface_pitch_offset + pitch_angle_[channel_idx] - pitch_offset + kBeta;
             const float cos_pitch = cos_lookup(pitch);
             const float sin_pitch = sin_lookup(pitch);
             const float cos_yaw = cos_lookup(yaw);
             const float sin_yaw = sin_lookup(yaw);
             const float distance = ntohs(channel->radius) * kDistanceRes;
 
-            if (distance_valid(distance)) {
+            if (distanceValid(distance)) {
                 float cos_dis = distance * cos_pitch;
-                current_point->x = cos_dis * cos_yaw;
+                float x = cos_dis * cos_yaw;
+                float z = distance * sin_pitch;
+                current_point->x = kCosBeta * x + kSinBeta * z;
                 current_point->y = cos_dis * sin_yaw;
-                current_point->z = distance * sin_pitch;
+                current_point->z = kNegSinBeta * x + kCosBeta * z;
             } else {
                 current_point->x = NAN;
                 current_point->y = NAN;
@@ -413,11 +407,11 @@ int main(int32_t argc, char* argv[]) {
         std::cout << "initMsop failed" << std::endl;
         return -1;
     }
-    char* difop2_data = static_cast<char*>(malloc(500));
+    char* difop2_data = static_cast<char*>(malloc(sizeof(LidarDifop2Pkt)));
     uint32_t difop2_len {0U};
     ret = readBinData("./difop2.bin", difop2_data, difop2_len);
 
-    if (!ret || (500 != difop2_len)) {
+    if (!ret || (sizeof(LidarDifop2Pkt) != difop2_len)) {
         std::cout << "readBinData failed" << difop2_len << std::endl;
 
         return -1;

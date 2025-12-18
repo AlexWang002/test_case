@@ -43,8 +43,9 @@
 #include "common/fault_manager.h"
 #include "decoder/decoder_emx.h"
 #include "rs_new_logger.h"
+#include "sync_queue.h"
 
-#define ALGO_FRM_BUF_SIZE (3)
+#define ALGO_FRM_BUF_SIZE (1)
 #define ALGO_THREAD_NUM (2)
 #define ALGO_LOSS_PKT_CODE (-1)
 #define ALGO_VERSION_MAJOR 01
@@ -58,6 +59,11 @@ namespace robosense
 {
 namespace lidar
 {
+
+// using TimePoint = std::chrono::steady_clock::time_point;
+// extern SyncQueue<TimePoint> inputTimeQueue;
+// extern SyncQueue<TimePoint> inputTimeQueue1;
+
 /******************************************************************************/
 /*                   Definition of classes or templates                       */
 /******************************************************************************/
@@ -127,6 +133,7 @@ class CloudManager
     void updateAlgoIdx(int32_t proc_col, uint32_t task_id);
 
   public:
+    bool process_delay_switch_ = false;
     void start(void);
     bool stop(void);
     void receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size);

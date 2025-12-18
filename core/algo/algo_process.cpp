@@ -60,7 +60,8 @@ namespace robosense
 {
 namespace lidar
 {
-
+// SyncQueue<TimePoint> inputTimeQueue(20, [](TimePoint data) {});
+// SyncQueue<TimePoint> inputTimeQueue1(20, [](TimePoint data) {});
 /**
  * \brief  Set thread kName
  * \param[in] kName : new thread kName
@@ -173,6 +174,8 @@ void CloudManager::start(void)
 {
     to_exit_handle_.store(false);
 
+    algo_func_.algo_delay_switch_ = this->process_delay_switch_;
+
     for (auto& idx : algo_proc_idx_) {
         idx.store(0);
     }
@@ -272,6 +275,8 @@ void CloudManager::algoFinalProcess(void)
     utils::addThread(tid, "algoFinalProcess");
     /** 申请上采样变量内存空间 */
     upsampleDataAlloc();
+    static int cnt{0};
+
     try {
         while (false == to_exit_handle_.load()) {
             uint16_t dist[algo_func_.VIEW_H * 2]{0};
@@ -296,25 +301,16 @@ void CloudManager::algoFinalProcess(void)
                 }
                 cv_calc_.notify_all();
             };
+
+            cnt = (cnt + 1) % 10;
             if (sendEnoughData(algo_func_.VIEW_W - 1)) {
-                // auto highcalc_start = std::chrono::steady_clock::now();
                 algo_func_.highcalcExec(frame_buffer);
-                // auto highcalc_end = std::chrono::steady_clock::now();
-                // auto highcalc_duration = std::chrono::duration_cast<std::chrono::microseconds>(highcalc_end - highcalc_start);
-                // std::cout << "highcalc duration: " << highcalc_duration.count() << "us" << std::endl;
 
-                //auto stray_start = std::chrono::steady_clock::now();
                 algo_func_.strayDeleteExec(frame_buffer);
-                //auto stray_end = std::chrono::steady_clock::now();
-                //auto stray_duration = std::chrono::duration_cast<std::chrono::microseconds>(stray_end - stray_start);
-                //std::cout << "stray duration: " << stray_duration.count() << "us" << std::endl;
 
-                //auto spray_start = std::chrono::steady_clock::now();
                 algo_func_.sprayRemoveExec(frame_buffer);
-                //auto spray_end = std::chrono::steady_clock::now();
-                //auto spray_duration = std::chrono::duration_cast<std::chrono::microseconds>(spray_end - spray_start);
-                //std::cout << "spray duration: " << spray_duration.count() << "us" << std::endl;
 
+                auto time_start1 = std::chrono::steady_clock::now();
                 memcpy(dist_wave0, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(dist_wave1, frame_buffer->dist1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);//加入双回波数据
                 memcpy(refl_wave0, frame_buffer->ref0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
@@ -377,12 +373,15 @@ void CloudManager::algoFinalProcess(void)
                 memcpy(RefDownIn_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                //auto start = std::chrono::steady_clock::now();
+                auto time_end1 = std::chrono::steady_clock::now();
+                auto time_duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time_end1 - time_start1);
+                if (this->process_delay_switch_ && cnt == 0) {
+                    LogInfo("[algo6][stage1] {}us.", time_duration1.count());
+                }
+
                 algo_func_.upsampleExec(frame_buffer);
-                //auto end = std::chrono::steady_clock::now();
-                //auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-                //std::cout << "upsample_main time: " << duration.count() << " us" << std::endl;
-                //total_time += duration;
+
+                auto time_start3 = std::chrono::steady_clock::now();
                 /** 最后一列置0 */
                 uint32_t start_idx = (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H;
                 memset(&DistOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
@@ -476,6 +475,11 @@ void CloudManager::algoFinalProcess(void)
                         resetAndSwitchFrame();
                     }
                 }
+                auto time_end3 = std::chrono::steady_clock::now();
+                auto time_duration3 = std::chrono::duration_cast<std::chrono::microseconds>(time_end3 - time_start3);
+                if (this->process_delay_switch_ && cnt == 0) {
+                    LogInfo("[algo6][stage3] {}us.", time_duration3.count());
+                }
             } else {
                 //发生丢包之后，先清0当前帧数据，然后切换到下一帧
                 frame_buffer->frame_droped.store(false);
@@ -515,11 +519,8 @@ void CloudManager::algoFinalProcess(void)
  */
 void CloudManager::algoProcess(int32_t task_id)
 {
+    //std::this_thread::sleep_for(std::chrono::milliseconds(800));
     try {
-        // std::cout << "*******************" << std::endl;
-        // std::cout << "task_id: " << task_id << std::endl;
-        // std::cout << "*******************" << std::endl;
-
         if (task_id == 0) {
             pid_t tid = gettid();
             utils::addThread(tid, "algorithm");
@@ -539,17 +540,9 @@ void CloudManager::algoProcess(int32_t task_id)
                         /*PVA以整帧为单位执行denoise算法*/
                         if(task_id == 0){
                             if(col == algo_func_.VIEW_W + algo_func_.max_data_size - 1){
-                                //auto denoise_start = std::chrono::steady_clock::now();
                                 algo_func_.denoiseExec(frame_buffer);
-                                //auto denoise_end = std::chrono::steady_clock::now();
-                                //auto denoise_duration = std::chrono::duration_cast<std::chrono::microseconds>(denoise_end - denoise_start);
-                                //std::cout << "denoise duration: " << denoise_duration.count() << "us" << std::endl;
 
-                                //auto trail_start = std::chrono::steady_clock::now();
                                 algo_func_.trailExec(frame_buffer);
-                                //auto trail_end = std::chrono::steady_clock::now();
-                                //auto trail_duration = std::chrono::duration_cast<std::chrono::microseconds>(trail_end - trail_start);
-                                //std::cout << "trail duration: " << trail_duration.count() << "us" << std::endl;
                             }
                         }
                         else{
@@ -575,7 +568,7 @@ void CloudManager::algoProcess(int32_t task_id)
                 }
             } else {
                 std::unique_lock<std::mutex> lock(mtx_calc_);
-                bool res = cv_calc_.wait_for(lock, std::chrono::milliseconds(200), [&] {
+                bool res = cv_calc_.wait_for(lock, std::chrono::milliseconds(2000), [&] {
                     return (cacl_done_[task_id].load() == 0 || to_exit_handle_.load());
                 });
 
@@ -666,6 +659,22 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
             algo_func_.updateGroundFitParams();//更新地面拟合参数
         }
         last_pkt_recv_ = pkt_cnt;
+
+        // int32_t current_proc_idx = proc_buffer_idx_.load();
+        // int32_t recv_buf_idx = recv_buffer_idx_.load();
+        // // 计算环形缓冲区中的距离
+        // int32_t distance = 0;
+        // if (recv_buf_idx >= current_proc_idx) {
+        //     distance = recv_buf_idx - current_proc_idx;
+        // } else {
+        //     distance = (ALGO_FRM_BUF_SIZE - current_proc_idx) + recv_buf_idx;
+        // }
+        // // 如果接收超前处理超过1帧，丢弃当前数据包
+        // if (distance >= 2) {
+        //     //LogWarn("ALGO: Recv buffer ahead of proc buffer by {} frames, dropping packet", distance);
+        //     return;
+        // }
+
         frame_buffer = &frame_buffer_[recv_buffer_idx_.load()];  //重新定向到当前帧的帧缓冲区
 
         uint8_t surface_id_pkt = kRawData.header.surface_id;
@@ -769,7 +778,7 @@ bool CloudManager::sendEnoughData(int32_t col)
         return true;
     }
 
-    bool success = cv_send_.wait_for(lock, std::chrono::milliseconds(200), [&] {
+    bool success = cv_send_.wait_for(lock, std::chrono::milliseconds(2000), [&] {
         bool all_loss = true;
         bool all_ready = true;
         for(const auto& kIdx : algo_proc_idx_) {
@@ -814,7 +823,7 @@ bool CloudManager::recvEnoughData(int32_t col, AlgoFunction::tstFrameBuffer* fra
     if (frame_buffer != nullptr && frame_buffer->recv_idx.load() > required_col) {
         return true;
     }
-    bool success = cv_recv_.wait_for(lock, std::chrono::milliseconds(200),
+    bool success = cv_recv_.wait_for(lock, std::chrono::milliseconds(2000),
                                         [&] { return ((frame_buffer->frame_droped.load()) || (frame_buffer->recv_idx.load() > required_col));});
     if ((!success) || frame_buffer->frame_droped.load()) {
         if (!success) {

@@ -400,7 +400,7 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor, const void* kBuffe
     static uint64_t min_interval {98000UL};
     static uint32_t last_fram_seq {0U};
     if (((frame_time_interval > (max_interval)) || (frame_time_interval < min_interval)) ||
-        ((kLidarCloud->frame_seq % 60) == 0)) {
+        ((kLidarCloud->frame_seq % 1) == 0)) {
         std::cout << "[LidarPointCloudPackets Info :" << kLidarCloud->frame_seq << "]: "
                   << ", frame_timestamp:" << kLidarCloud->frame_timestamp << " us"
                   << ", point_num:" << kLidarCloud->point_num << ", frame_seq:" << kLidarCloud->frame_seq

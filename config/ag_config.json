@@ -37,7 +37,8 @@
         "ENABLE_MIPI_CRC": true,
         "INNER_PARAM_PATH": "/osdata/satelite/lidar/",
         "LOG_CONFIG_FILE": "/applog/lidar/rs_lidar_sdk.log",
-        "DELAY_STAT": false,
+        "DELAY_STAT": true,
+        "VPU_AUTH": true,
         "THREADS": [
             {
                 "id": 1,
@@ -53,19 +54,19 @@
             },
             {
                 "id": 3,
-                "policy": "SCHED_OTHER",
+                "policy": "SCHED_FIFO",
                 "priority": 35,
                 "cpu_affinity": [5]
             },
             {
                 "id": 4,
-                "policy": "SCHED_RR",
+                "policy": "SCHED_FIFO",
                 "priority": 35,
                 "cpu_affinity": [5]
             },
             {
                 "id": 5,
-                "policy": "SCHED_RR",
+                "policy": "SCHED_FIFO",
                 "priority": 35,
                 "cpu_affinity": [6]
             }
