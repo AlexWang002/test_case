@@ -459,35 +459,33 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
 
     if (algo_Param.DenoiseOn) {
         /*拷贝整帧数据到denoise算法的PVA buffer中*/
-        auto time_start = std::chrono::steady_clock::now();
         memcpy(denoise_dist_buffer_h, pstFrameBuffer->dist0,  VIEW_H * VIEW_W * sizeof(uint16_t));
-        auto time_end = std::chrono::steady_clock::now();
-        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
-        if (this->algo_delay_switch_ && cnt == 0) {
-            LogInfo("[algo1][stage1] {}us.", time_duration.count());
-        }
 
         std::string exception_msg;
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
+        uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
 
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
-            auto time_start2 = std::chrono::steady_clock::now();
-            ret = denoiseProcPva(exception_msg, status_code);
-            auto time_end2 = std::chrono::steady_clock::now();
-            auto time_duration2 = std::chrono::duration_cast<std::chrono::microseconds>(time_end2 - time_start2);
+            auto time_start = std::chrono::steady_clock::now();
+            ret = denoiseProcPva(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
+            auto time_end = std::chrono::steady_clock::now();
+            auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
-                    LogInfo("[algo1][stage2] {}us.", time_duration2.count());
+                    LogInfo("[algo1] {}us.", time_duration.count());
+                    LogInfo("[algo1] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
+                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
                 }
+
                 break;
             }
             if (ret == 1) {
-                LogWarn("[denoise] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration2.count());
+                LogWarn("[denoise] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
             }
             else if (ret == 2) {
-                LogWarn("[denoise] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration2.count());
+                LogWarn("[denoise] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
             }
         }
         if (ret != 0) {
@@ -526,35 +524,33 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
     cnt = (cnt + 1) % 10;
 
     if (algo_Param.TrailRemoveOn) {
-        auto time_start = std::chrono::steady_clock::now();
         memcpy(DistIn_h, pstFrameBuffer->dist0, sizeof(uint16_t) * VIEW_W * VIEW_H);
-        auto time_end = std::chrono::steady_clock::now();
-        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
-        if (this->algo_delay_switch_ && cnt == 0) {
-            LogInfo("[algo2][stage1] {}us.", time_duration.count());
-        }
 
         std::string exception_msg;
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
+        uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
 
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
-            auto time_start2 = std::chrono::steady_clock::now();
-            ret = trail_main(exception_msg, status_code);
-            auto time_end2 = std::chrono::steady_clock::now();
-            auto time_duration2 = std::chrono::duration_cast<std::chrono::microseconds>(time_end2 - time_start2);
+            auto time_start = std::chrono::steady_clock::now();
+            ret = trail_main(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
+            auto time_end = std::chrono::steady_clock::now();
+            auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
-                    LogInfo("[algo2][stage2] {}us.", time_duration2.count());
+                    LogInfo("[algo2] {}us.", time_duration.count());
+                    LogInfo("[algo2] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
+                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
                 }
+
                 break;
             }
             if (ret == 1) {
-                LogWarn("[trail] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration2.count());
+                LogWarn("[trail] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
             }
             else if (ret == 2) {
-                LogWarn("[trail] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration2.count());
+                LogWarn("[trail] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
             }
         }
         if (ret != 0) {
@@ -585,7 +581,6 @@ void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
     cnt = (cnt + 1) % 10;
 
     if (algo_Param.StrayRemoveOn) {
-        auto time_start1 = std::chrono::steady_clock::now();
         for (int col_idx = 0; col_idx < VIEW_W + max_data_size; col_idx ++) {
             circularCalcIdx(rear4, buffer_size_stray);
 
@@ -612,13 +607,7 @@ void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
 
             gndHeightCalc(stray_col, stray_col_buffer);
         }
-        auto time_end1 = std::chrono::steady_clock::now();
-        auto time_duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time_end1 - time_start1);
-        if (this->algo_delay_switch_ && cnt == 0) {
-            LogInfo("[algo4][stage1] {}us.", time_duration1.count());
-        }
 
-        auto time_start2 = std::chrono::steady_clock::now();
         //拷贝计算好的标签及部分原始数据到pva host buffer
         for (int i = 0; i < 76; i ++) {
             memcpy((uint16_t *)&stray_pva_buff.dist_wave_h[i * 10 * 192 * 2], pstFrameBuffer->dist0[i * 10], 10 * 192 * sizeof(uint16_t));
@@ -636,34 +625,33 @@ void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
 
         memcpy(stray_pva_buff.att0_h, pstFrameBuffer->att0[0], 760 * 192 * sizeof(uint16_t));
         memcpy(stray_pva_buff.att1_h, pstFrameBuffer->att1[0], 760 * 192 * sizeof(uint16_t));
-        auto time_end2 = std::chrono::steady_clock::now();
-        auto time_duration2 = std::chrono::duration_cast<std::chrono::microseconds>(time_end2 - time_start2);
-        if (this->algo_delay_switch_ && cnt == 0) {
-            LogInfo("[algo4][stage2] {}us.", time_duration2.count());
-        }
 
         std::string exception_msg;
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
+        uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
 
         //提交杂散删除pva任务（若失败，则进行提交重试）
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
-            auto time_start3 = std::chrono::steady_clock::now();
-            ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code);
-            auto time_end3 = std::chrono::steady_clock::now();
-            auto time_duration3 = std::chrono::duration_cast<std::chrono::microseconds>(time_end3 - time_start3);
+            auto time_start = std::chrono::steady_clock::now();
+            ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code, 
+                                stage1, stage2, stage3, stage4, submit_time, wait_time);
+            auto time_end = std::chrono::steady_clock::now();
+            auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
-                    LogInfo("[algo4][stage3] {}us.", time_duration3.count());
+                    LogInfo("[algo4] {}us.", time_duration.count());
+                    LogInfo("[algo4] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
+                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
                 }
                 break;
             }
             if (ret == 1) {
-                LogWarn("[stray] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration3.count());
+                LogWarn("[stray] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
             }
             else if (ret == 2) {
-                LogWarn("[stray] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration3.count());
+                LogWarn("[stray] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
             }
         }
         if (ret != 0) {
@@ -1274,7 +1262,6 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
     cnt = (cnt + 1) % 10;
 
     if (algo_Param.SprayRemoveOn) {
-        auto time_start1 = std::chrono::steady_clock::now();
         memcpy(DistIn0_h, pstFrameBuffer->dist0, VIEW_H * VIEW_W * sizeof(uint16_t));
         memcpy(DistIn1_h, pstFrameBuffer->dist1, VIEW_H * VIEW_W * sizeof(uint16_t));
         memcpy(RefIn0_h, pstFrameBuffer->ref0, VIEW_H * VIEW_W * sizeof(uint16_t));
@@ -1295,27 +1282,26 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
             memcpy(&Glink_h[offset0], pstFrameBuffer->gnd_mark0[i * 20], VIEW_H * 20 * sizeof(uint16_t));
             memcpy(&Glink_h[offset1], pstFrameBuffer->gnd_mark1[i * 20], VIEW_H * 20 * sizeof(uint16_t));
         }
-        auto time_end1 = std::chrono::steady_clock::now();
-        auto time_duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time_end1 - time_start1);
-        if (this->algo_delay_switch_ && cnt == 0) {
-            LogInfo("[algo5][stage1] {}us.", time_duration1.count());
-        }
 
         std::string exception_msg;
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
+        uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
 
         //提交spray remove pva任务
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
             auto time_start2 = std::chrono::steady_clock::now();
-            ret = sprayRemovePva(exception_msg, status_code);
+            ret = sprayRemovePva(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
             auto time_end2 = std::chrono::steady_clock::now();
             auto time_duration2 = std::chrono::duration_cast<std::chrono::microseconds>(time_end2 - time_start2);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
-                    LogInfo("[algo5][stage2] {}us.", time_duration2.count());
+                    LogInfo("[algo5.1] {}us.", time_duration2.count());
+                    LogInfo("[algo5.1] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
+                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
                 }
+
                 break;
             }
             if (ret == 1) {
@@ -1335,13 +1321,15 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
         //提交rain enhance pva任务
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
             auto time_start3 = std::chrono::steady_clock::now();
-            ret = rainEnhancePva(exception_msg, status_code);
+            ret = rainEnhancePva(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
             auto time_end3 = std::chrono::steady_clock::now();
             auto time_duration3 = std::chrono::duration_cast<std::chrono::microseconds>(time_end3 - time_start3);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
-                    LogInfo("[algo5][stage3] {}us.", time_duration3.count());
+                    LogInfo("[algo5.2] {}us.", time_duration3.count());
+                    LogInfo("[algo5.2] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
+                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
                 }
                 break;
             }
@@ -1393,40 +1381,38 @@ void AlgoFunction::highcalcExec(tstFrameBuffer* pstFrameBuffer)
     static int cnt{0};
     cnt = (cnt + 1) % 10;
 
-    auto time_start1 = std::chrono::steady_clock::now();
     memcpy((uint8_t *)h_dist_in0_h, (uint8_t *)pstFrameBuffer->dist0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
     memcpy((uint8_t *)h_dist_in1_h, (uint8_t *)pstFrameBuffer->dist1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
     memcpy((uint8_t *)h_high_in0_h, (uint8_t *)pstFrameBuffer->high0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
     memcpy((uint8_t *)h_high_in1_h, (uint8_t *)pstFrameBuffer->high1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
     memcpy((uint8_t *)h_proj_dist0_h, (uint8_t *)pstFrameBuffer->proj_dist0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
     memcpy((uint8_t *)h_proj_dist1_h, (uint8_t *)pstFrameBuffer->proj_dist1[0], VIEW_H * VIEW_W * sizeof(uint16_t));
-    auto time_end1 = std::chrono::steady_clock::now();
-    auto time_duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time_end1 - time_start1);
-    if (this->algo_delay_switch_ && cnt == 0) {
-        LogInfo("[algo3][stage1] {}us.", time_duration1.count());
-    }
 
     std::string exception_msg;
     int32_t status_code;
     int ret = 0, retry_cnt = 0;
+    uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
 
     for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
-        auto time_start2 = std::chrono::steady_clock::now();
-        ret = highcalcPva(exception_msg, status_code);
-        auto time_end2 = std::chrono::steady_clock::now();
-        auto time_duration2 = std::chrono::duration_cast<std::chrono::microseconds>(time_end2 - time_start2);
+        auto time_start = std::chrono::steady_clock::now();
+        ret = highcalcPva(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
+        auto time_end = std::chrono::steady_clock::now();
+        auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
         if (ret == 0) {
             if (this->algo_delay_switch_ && cnt == 0) {
-                LogInfo("[algo3][stage2] {}us.", time_duration2.count());
+                LogInfo("[algo3] {}us.", time_duration.count());
+                LogInfo("[algo3] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
+                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
             }
+
             break;
         }
         if (ret == 1) {
-            LogWarn("[highcalc] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration2.count());
+            LogWarn("[highcalc] Caught a cuPVA exception with message {}, process time {}us.", exception_msg, time_duration.count());
         }
         else if (ret == 2) {
-            LogWarn("[highcalc] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration2.count());
+            LogWarn("[highcalc] VPU Program returned an Error Code {}, process time {}us.", status_code, time_duration.count());
         }
     }
     if (ret != 0) {
@@ -1451,20 +1437,24 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
     std::string exception_msg;
     int32_t status_code;
     int ret = 0, retry_cnt = 0;
+    uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
     static int cnt{0};
 
     cnt = (cnt + 1) % 10;
 
     for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
         auto time_start = std::chrono::steady_clock::now();
-        ret = upsample_main(exception_msg, status_code);
+        ret = upsample_main(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
         auto time_end = std::chrono::steady_clock::now();
         auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
         if (ret == 0) {
             if (this->algo_delay_switch_ && cnt == 0) {
-                LogInfo("[algo6][stage2] {}us.", time_duration.count());
+                LogInfo("[algo6] {}us.", time_duration.count());
+                LogInfo("[algo6] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
+                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
             }
+
             break;
         }
         if (ret == 1) {

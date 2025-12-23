@@ -889,10 +889,10 @@ void RSLidarSdkImpl::handleMsopData() {
 
         if (point_cloud_queue_.popWait(cloud_ptr, 300e3)) { // 300ms超时
             auto seq = cloud_ptr->frame_seq;
-            auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-            if (this->delay_stat_switch_ && (seq % 10 == 0)) {
-                LogInfo("seq: {}, pop time: {}", seq, timestamp);
-            }
+            // auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+            // if (this->delay_stat_switch_ && (seq % 10 == 0)) {
+            //     LogInfo("seq: {}, pop time: {}", seq, timestamp);
+            // }
 
             auto current_time = callbacks_.getTimeNowPhc();
             static auto last_time = callbacks_.getTimeNowPhc(); // unit: ns, 1e-9 sec
@@ -995,11 +995,11 @@ void RSLidarSdkImpl::splitFrame(uint32_t point_num) {
         if (cloud_copy) {
             bool override = false;
 
-            auto seq = cloud->frame_seq;
-            auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-            if (this->delay_stat_switch_ && (seq % 10 == 0)) {
-                LogInfo("seq: {}, push time: {}", seq, timestamp);
-            }
+            // auto seq = cloud->frame_seq;
+            // auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+            // if (this->delay_stat_switch_ && (seq % 10 == 0)) {
+            //     LogInfo("seq: {}, push time: {}", seq, timestamp);
+            // }
 
             (void)point_cloud_queue_.push(std::move(cloud_copy), override);
             if (override) {

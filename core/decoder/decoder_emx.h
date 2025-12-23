@@ -56,7 +56,10 @@ namespace robosense::lidar {
 #   define EMX_MIPI_PART_NUM    (1)
 #endif
 
-#define EMX_MIPI_DATA_LEN       (EMX_MIPI_PART_LEN * EMX_MIPI_PART_NUM)
+// #define EMX_MIPI_DATA_LEN       (EMX_MIPI_PART_LEN * EMX_MIPI_PART_NUM)
+// #define EMX_EMBED_MIPI_DATA_LEN (EMX_MIPI_DATA_LEN + EMX_GMSL_WIDTH)
+#define EMX_MIPI_PACKET_NUM     (3040)
+#define EMX_MIPI_DATA_LEN       (EMX_GMSL_WIDTH * EMX_MIPI_PACKET_NUM)
 #define EMX_EMBED_MIPI_DATA_LEN (EMX_MIPI_DATA_LEN + EMX_GMSL_WIDTH)
 
 /******************************************************************************/
