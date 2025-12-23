@@ -1098,7 +1098,7 @@ int32_t main(int32_t argc, char* argv[]) {
         // });
         if (test_poweroff) {
             std::cout << "test Poweroff " << std::endl;
-            uint16_t address = 0x0073U;
+            uint16_t address = 0x0074U;
             uint8_t data[2] {0};
             uint16_t length {1U};
             (void)readSensorI2C(LidarSensorIndex::MIDDLE_LIDAR, address, data, &length);

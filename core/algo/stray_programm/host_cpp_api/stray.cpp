@@ -26,6 +26,7 @@
 /*                      Include headers of the component                      */
 /******************************************************************************/
 #include "stray.h"
+#include <chrono>
 
 /******************************************************************************/
 /*                  Using namespace, type or template alias                   */
@@ -119,15 +120,21 @@ int strayBufferRelease()
  * \param[out] exception_msg : pva task exception message
  * \param[out] status_code   : pva task error code
 */
-int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg, int32_t& status_code)
+int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg, int32_t& status_code, 
+    uint32_t& stage1, uint32_t& stage2, uint32_t& stage3, uint32_t& stage4,
+    uint32_t& submit_time, uint32_t& wait_time)
 {
     try
     {
+        auto time1 = std::chrono::steady_clock::now();
+
         //构建可执行文件
         Executable exec = Executable::Create(PVA_EXECUTABLE_DATA(stray_dev),
                                              PVA_EXECUTABLE_SIZE(stray_dev));
 
         CmdProgram prog = CmdProgram::Create(exec);
+
+        auto time2 = std::chrono::steady_clock::now();
 
         // 设置杂散算法相关参数
         prog["rainwall_dist"].set((int *)&rainwall_dist, sizeof(int));
@@ -218,15 +225,35 @@ int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg
                             .tileBuffer(stray_mask1)
                             .tile(TILE_WIDTH, TILE_HEIGHT);
 
+        auto time3 = std::chrono::steady_clock::now();
+
         prog.compileDataFlows();
+
+        auto time4 = std::chrono::steady_clock::now();
 
         SyncObj sync = SyncObj::Create();
         Fence fence{sync};
         CmdRequestFences rf{fence};
 
         CmdStatus status[2];
-        stray_stream.submit({&prog, &rf}, status, IN_ORDER, 4500, 3000);
+        
+        auto time5 = std::chrono::steady_clock::now();
+
+        stray_stream.submit({&prog, &rf}, status);
+        
+        auto time6 = std::chrono::steady_clock::now();
+
         fence.wait(); // stray task timeout: 4.5ms
+        
+        auto time7 = std::chrono::steady_clock::now();
+
+        stage1 = std::chrono::duration_cast<std::chrono::microseconds>(time2 - time1).count();
+        stage2 = std::chrono::duration_cast<std::chrono::microseconds>(time3 - time2).count();
+        stage3 = std::chrono::duration_cast<std::chrono::microseconds>(time4 - time3).count();
+        stage4 = std::chrono::duration_cast<std::chrono::microseconds>(time5 - time4).count();
+        submit_time = std::chrono::duration_cast<std::chrono::microseconds>(time6 - time5).count();
+        wait_time = std::chrono::duration_cast<std::chrono::microseconds>(time7 - time6).count();
+
         cupva::Error statusCode = CheckCommandStatus(status[0]);
         if (statusCode != Error::None)
         {

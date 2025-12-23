@@ -302,7 +302,6 @@ void CloudManager::algoFinalProcess(void)
                 cv_calc_.notify_all();
             };
 
-            cnt = (cnt + 1) % 10;
             if (sendEnoughData(algo_func_.VIEW_W - 1)) {
                 algo_func_.highcalcExec(frame_buffer);
 
@@ -310,7 +309,6 @@ void CloudManager::algoFinalProcess(void)
 
                 algo_func_.sprayRemoveExec(frame_buffer);
 
-                auto time_start1 = std::chrono::steady_clock::now();
                 memcpy(dist_wave0, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(dist_wave1, frame_buffer->dist1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);//加入双回波数据
                 memcpy(refl_wave0, frame_buffer->ref0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
@@ -373,15 +371,9 @@ void CloudManager::algoFinalProcess(void)
                 memcpy(RefDownIn_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
                 memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                auto time_end1 = std::chrono::steady_clock::now();
-                auto time_duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time_end1 - time_start1);
-                if (this->process_delay_switch_ && cnt == 0) {
-                    LogInfo("[algo6][stage1] {}us.", time_duration1.count());
-                }
 
                 algo_func_.upsampleExec(frame_buffer);
 
-                auto time_start3 = std::chrono::steady_clock::now();
                 /** 最后一列置0 */
                 uint32_t start_idx = (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H;
                 memset(&DistOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
@@ -474,11 +466,6 @@ void CloudManager::algoFinalProcess(void)
                     if (algo_func_.VIEW_W - 1 == col) {
                         resetAndSwitchFrame();
                     }
-                }
-                auto time_end3 = std::chrono::steady_clock::now();
-                auto time_duration3 = std::chrono::duration_cast<std::chrono::microseconds>(time_end3 - time_start3);
-                if (this->process_delay_switch_ && cnt == 0) {
-                    LogInfo("[algo6][stage3] {}us.", time_duration3.count());
                 }
             } else {
                 //发生丢包之后，先清0当前帧数据，然后切换到下一帧

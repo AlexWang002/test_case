@@ -272,13 +272,6 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
     dvshortx gnd_mark0 = vec0;
     dvshortx gnd_mark1 = vec0;
 
-    dvshortx d_cur, d0_p1, d0_m1, d1_p1, d1_m1;
-    dvshortx dx_up, dx_down, dx_up2, dx_down2;
-    dvshortx dz_up, dz_down, dz_up2, dz_down2;
-    dvshortx near_up_1, near_up_2, near_down_1, near_down_2;
-    dvshortx flat_flag11, flat_flag12, flat_flag21, flat_flag22;
-    dvshortx angle_flag11, angle_flag12, angle_flag21, angle_flag22;
-
     for (int32_t i = 0; i < niter; i++) chess_prepare_for_pipelining
     chess_unroll_loop(2)
     {
@@ -291,68 +284,52 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
             z1[j] = dvshort_load(input_high_agen1);
         }
 
-        d_cur  = dist0[3];
-        d0_p1  = dist0[4];  d0_m1  = dist0[2];
-        d1_p1  = dist1[4];  d1_m1  = dist1[2];
+        //1 近邻判断
+        dvshortx near_up_1 = (dist0[4] > 0) & (dist0[4] - dist0[3] > 0) & (dist0[4] - dist0[3] <= dist_diff_th);
+        dvshortx near_up_2 = (dist1[4] > 0) & (dist1[4] - dist0[3] > 0) & (dist1[4] - dist0[3] <= dist_diff_th);
+        dvshortx near_down_1 = (dist0[2] > 0) & (dist0[3] - dist0[2] > 0) & (dist0[3] - dist0[2] <= dist_diff_th);
+        dvshortx near_down_2 = (dist1[2] > 0) & (dist0[3] - dist1[2] > 0) & (dist0[3] - dist1[2] <= dist_diff_th);
 
-        near_up_1   = (d0_p1>0) & ((d0_p1 - d_cur)>0) & ((d0_p1 - d_cur)<=dist_diff_th);
-        near_up_2   = (d1_p1>0) & ((d1_p1 - d_cur)>0) & ((d1_p1 - d_cur)<=dist_diff_th);
-        near_down_1 = (d0_m1>0) & ((d_cur - d0_m1)>0) & ((d_cur - d0_m1)<=dist_diff_th);
-        near_down_2 = (d1_m1>0) & ((d_cur - d1_m1)>0) & ((d_cur - d1_m1)<=dist_diff_th);
+        // 平面判断
+        dvshortx flat_flag11 = ((dvabsdif(z0[4], z0[3]) << 1) <= dvabsdif(x0[4], x0[3])) & 
+                                ((dvabsdif(z0[2], z0[3]) << 1) <= dvabsdif(x0[2], x0[3]));
+        dvshortx flat_flag12 = ((dvabsdif(z0[4], z0[3]) << 1) <= dvabsdif(x0[4], x0[3])) & 
+                                ((dvabsdif(z1[2], z0[3]) << 1) <= dvabsdif(x1[2], x0[3]));
+        dvshortx flat_flag21 = ((dvabsdif(z1[4], z0[3]) << 1) <= dvabsdif(x1[4], x0[3])) & 
+                                ((dvabsdif(z0[2], z0[3]) << 1) <= dvabsdif(x0[2], x0[3]));
+        dvshortx flat_flag22 = ((dvabsdif(z1[4], z0[3]) << 1) <= dvabsdif(x1[4], x0[3])) & 
+                                ((dvabsdif(z1[2], z0[3]) << 1) <= dvabsdif(x1[2], x0[3]));
 
-        dx_up   = dvabsdif(x0[4], x0[3]);
-        dx_down = dvabsdif(x0[2], x0[3]);
-        dx_up2  = dvabsdif(x1[4], x0[3]);
-        dx_down2= dvabsdif(x1[2], x0[3]);
-        dz_up   = dvabsdif(z0[4], z0[3]);
-        dz_down = dvabsdif(z0[2], z0[3]);
-        dz_up2  = dvabsdif(z1[4], z0[3]);
-        dz_down2= dvabsdif(z1[2], z0[3]);
-
-        flat_flag11 = ((dz_up<<1)<=dx_up)   & ((dz_down<<1)<=dx_down);
-        flat_flag12 = ((dz_up<<1)<=dx_up)   & ((dz_down2<<1)<=dx_down2);
-        flat_flag21 = ((dz_up2<<1)<=dx_up2) & ((dz_down<<1)<=dx_down);
-        flat_flag22 = ((dz_up2<<1)<=dx_up2) & ((dz_down2<<1)<=dx_down2);
-
-        angle_flag11 = dvabsdif(z0[4] + z0[2], (z0[3]<<1)) <= delta_z_th;
-        angle_flag12 = dvabsdif(z0[4] + z1[2], (z0[3]<<1)) <= delta_z_th;
-        angle_flag21 = dvabsdif(z1[4] + z0[2], (z0[3]<<1)) <= delta_z_th;
-        angle_flag22 = dvabsdif(z1[4] + z1[2], (z0[3]<<1)) <= delta_z_th;
-
+        // 角度判断
+        dvshortx angle_flag11 = dvabsdif(z0[4] + z0[2], (z0[3] << 1)) <= delta_z_th;
+        dvshortx angle_flag12 = dvabsdif(z0[4] + z1[2], (z0[3] << 1)) <= delta_z_th;
+        dvshortx angle_flag21 = dvabsdif(z1[4] + z0[2], (z0[3] << 1)) <= delta_z_th;
+        dvshortx angle_flag22 = dvabsdif(z1[4] + z1[2], (z0[3] << 1)) <= delta_z_th;
+        // 第一回波标志组合
         flag0[0] = near_up_1 & near_down_1 & flat_flag11 & angle_flag11;
         flag0[1] = near_up_1 & near_down_2 & flat_flag12 & angle_flag12;
         flag0[2] = near_up_2 & near_down_1 & flat_flag21 & angle_flag21;
         flag0[3] = near_up_2 & near_down_2 & flat_flag22 & angle_flag22;
-
-        /*==== 2. 中心 idx=2  flag1 ====*/
-        d_cur  = dist1[3];
-        d0_p1  = dist0[4];  d0_m1  = dist0[2];
-        d1_p1  = dist1[4];  d1_m1  = dist1[2];
-
-        near_up_1   = (d0_p1>0) & ((d0_p1 - d_cur)>0) & ((d0_p1 - d_cur)<=dist_diff_th);
-        near_up_2   = (d1_p1>0) & ((d1_p1 - d_cur)>0) & ((d1_p1 - d_cur)<=dist_diff_th);
-        near_down_1 = (d0_m1>0) & ((d_cur - d0_m1)>0) & ((d_cur - d0_m1)<=dist_diff_th);
-        near_down_2 = (d1_m1>0) & ((d_cur - d1_m1)>0) & ((d_cur - d1_m1)<=dist_diff_th);
-
-        dx_up   = dvabsdif(x0[4], x1[3]);
-        dx_down = dvabsdif(x0[2], x1[3]);
-        dx_up2  = dvabsdif(x1[4], x1[3]);
-        dx_down2= dvabsdif(x1[2], x1[3]);
-        dz_up   = dvabsdif(z0[4], z1[3]);
-        dz_down = dvabsdif(z0[2], z1[3]);
-        dz_up2  = dvabsdif(z1[4], z1[3]);
-        dz_down2= dvabsdif(z1[2], z1[3]);
-
-        flat_flag11 = ((dz_up<<1)<=dx_up)   & ((dz_down<<1)<=dx_down);
-        flat_flag12 = ((dz_up<<1)<=dx_up)   & ((dz_down2<<1)<=dx_down2);
-        flat_flag21 = ((dz_up2<<1)<=dx_up2) & ((dz_down<<1)<=dx_down);
-        flat_flag22 = ((dz_up2<<1)<=dx_up2) & ((dz_down2<<1)<=dx_down2);
-
-        angle_flag11 = dvabsdif(z0[4] + z0[2], (z1[3]<<1)) <= delta_z_th;
-        angle_flag12 = dvabsdif(z0[4] + z1[2], (z1[3]<<1)) <= delta_z_th;
-        angle_flag21 = dvabsdif(z1[4] + z0[2], (z1[3]<<1)) <= delta_z_th;
-        angle_flag22 = dvabsdif(z1[4] + z1[2], (z1[3]<<1)) <= delta_z_th;
-
+        //2 近邻判断
+        near_up_1 = (dist0[4] > 0) & (dist0[4] - dist1[3] > 0) & (dist0[4] - dist1[3] <= dist_diff_th);
+        near_up_2 = (dist1[4] > 0) & (dist1[4] - dist1[3] > 0) & (dist1[4] - dist1[3] <= dist_diff_th);
+        near_down_1 = (dist0[2] > 0) & (dist1[3] - dist0[2] > 0) & (dist1[3] - dist0[2] <= dist_diff_th);
+        near_down_2 = (dist1[2] > 0) & (dist1[3] - dist1[2] > 0) & (dist1[3] - dist1[2] <= dist_diff_th);
+        // 平面判断
+        flat_flag11 = ((dvabsdif(z0[4], z1[3]) << 1) <= dvabsdif(x0[4], x1[3])) & 
+                       ((dvabsdif(z0[2], z1[3]) << 1) <= dvabsdif(x0[2], x1[3]));
+        flat_flag12 = ((dvabsdif(z0[4], z1[3]) << 1) <= dvabsdif(x0[4], x1[3])) & 
+                       ((dvabsdif(z1[2], z1[3]) << 1) <= dvabsdif(x1[2], x1[3]));
+        flat_flag21 = ((dvabsdif(z1[4], z1[3]) << 1) <= dvabsdif(x1[4], x1[3])) & 
+                       ((dvabsdif(z0[2], z1[3]) << 1) <= dvabsdif(x0[2], x1[3]));
+        flat_flag22 = ((dvabsdif(z1[4], z1[3]) << 1) <= dvabsdif(x1[4], x1[3])) & 
+                       ((dvabsdif(z1[2], z1[3]) << 1) <= dvabsdif(x1[2], x1[3]));
+        // 角度判断
+        angle_flag11 = dvabsdif(z0[4] + z0[2], (z1[3] << 1)) <= delta_z_th;
+        angle_flag12 = dvabsdif(z0[4] + z1[2], (z1[3] << 1)) <= delta_z_th;
+        angle_flag21 = dvabsdif(z1[4] + z0[2], (z1[3] << 1)) <= delta_z_th;
+        angle_flag22 = dvabsdif(z1[4] + z1[2], (z1[3] << 1)) <= delta_z_th;
+        // 第二回波标志组合
         flag1[0] = near_up_1 & near_down_1 & flat_flag11 & angle_flag11;
         flag1[1] = near_up_1 & near_down_2 & flat_flag12 & angle_flag12;
         flag1[2] = near_up_2 & near_down_1 & flat_flag21 & angle_flag21;
@@ -366,79 +343,64 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
         ground_fillflag1 = (ground_flag & (flag0[0] | flag0[2])) | (ground_flag2 & (flag1[0] | flag1[2]));
         ground_fillflag2 = (ground_flag & (flag0[1] | flag0[3])) | (ground_flag2 & (flag1[1] | flag1[3]));
 
-        // groundFlagCalc(dist0[3], &dist0[2], z0[3], &z0[2], x0[3], &x0[2], &dist1[2], &z1[2], &x1[2], &flag0[0]);
-        // groundFlagCalc(dist1[3], &dist0[2], z1[3], &z0[2], x1[3], &x0[2], &dist1[2], &z1[2], &x1[2], &flag1[0]);
+        //3 近邻判断
+        near_up_1 = (dist0[2] > 0) & (dist0[2] - dist0[1] > 0) & (dist0[2] - dist0[1] <= dist_diff_th);
+        near_up_2 = (dist1[2] > 0) & (dist1[2] - dist0[1] > 0) & (dist1[2] - dist0[1] <= dist_diff_th);
+        near_down_1 = (dist0[0] > 0) & (dist0[1] - dist0[0] > 0) & (dist0[1] - dist0[0] <= dist_diff_th);
+        near_down_2 = (dist1[0] > 0) & (dist0[1] - dist1[0] > 0) & (dist0[1] - dist1[0] <= dist_diff_th);
 
-        /*==== 3. 中心 idx=0  flag0 ====*/
-        d_cur  = dist0[1];
-        d0_p1  = dist0[2];  d0_m1  = dist0[0];
-        d1_p1  = dist1[2];  d1_m1  = dist1[0];
+        // 平面判断
+        flat_flag11 = ((dvabsdif(z0[2], z0[1]) << 1) <= dvabsdif(x0[2], x0[1])) & 
+                       ((dvabsdif(z0[0], z0[1]) << 1) <= dvabsdif(x0[0], x0[1]));
+        flat_flag12 = ((dvabsdif(z0[2], z0[1]) << 1) <= dvabsdif(x0[2], x0[1])) & 
+                       ((dvabsdif(z1[0], z0[1]) << 1) <= dvabsdif(x1[0], x0[1]));
+        flat_flag21 = ((dvabsdif(z1[2], z0[1]) << 1) <= dvabsdif(x1[2], x0[1])) & 
+                       ((dvabsdif(z0[0], z0[1]) << 1) <= dvabsdif(x0[0], x0[1]));
+        flat_flag22 = ((dvabsdif(z1[2], z0[1]) << 1) <= dvabsdif(x1[2], x0[1])) & 
+                       ((dvabsdif(z1[0], z0[1]) << 1) <= dvabsdif(x1[0], x0[1]));
 
-        near_up_1   = (d0_p1>0) & ((d0_p1 - d_cur)>0) & ((d0_p1 - d_cur)<=dist_diff_th);
-        near_up_2   = (d1_p1>0) & ((d1_p1 - d_cur)>0) & ((d1_p1 - d_cur)<=dist_diff_th);
-        near_down_1 = (d0_m1>0) & ((d_cur - d0_m1)>0) & ((d_cur - d0_m1)<=dist_diff_th);
-        near_down_2 = (d1_m1>0) & ((d_cur - d1_m1)>0) & ((d_cur - d1_m1)<=dist_diff_th);
+        // 角度判断
+        angle_flag11 = dvabsdif(z0[2] + z0[0], (z0[1] << 1)) <= delta_z_th;
+        angle_flag12 = dvabsdif(z0[2] + z1[0], (z0[1] << 1)) <= delta_z_th;
+        angle_flag21 = dvabsdif(z1[2] + z0[0], (z0[1] << 1)) <= delta_z_th;
+        angle_flag22 = dvabsdif(z1[2] + z1[0], (z0[1] << 1)) <= delta_z_th;
 
-        dx_up   = dvabsdif(x0[2], x0[1]);
-        dx_down = dvabsdif(x0[0], x0[1]);
-        dx_up2  = dvabsdif(x1[2], x0[1]);
-        dx_down2= dvabsdif(x1[0], x0[1]);
-        dz_up   = dvabsdif(z0[2], z0[1]);
-        dz_down = dvabsdif(z0[0], z0[1]);
-        dz_up2  = dvabsdif(z1[2], z0[1]);
-        dz_down2= dvabsdif(z1[0], z0[1]);
-
-        flat_flag11 = ((dz_up<<1)<=dx_up)   & ((dz_down<<1)<=dx_down);
-        flat_flag12 = ((dz_up<<1)<=dx_up)   & ((dz_down2<<1)<=dx_down2);
-        flat_flag21 = ((dz_up2<<1)<=dx_up2) & ((dz_down<<1)<=dx_down);
-        flat_flag22 = ((dz_up2<<1)<=dx_up2) & ((dz_down2<<1)<=dx_down2);
-
-        angle_flag11 = dvabsdif(z0[2] + z0[0], (z0[1]<<1)) <= delta_z_th;
-        angle_flag12 = dvabsdif(z0[2] + z1[0], (z0[1]<<1)) <= delta_z_th;
-        angle_flag21 = dvabsdif(z1[2] + z0[0], (z0[1]<<1)) <= delta_z_th;
-        angle_flag22 = dvabsdif(z1[2] + z1[0], (z0[1]<<1)) <= delta_z_th;
-
+        // 第一回波标志组合
         flag0[0] = near_up_1 & near_down_1 & flat_flag11 & angle_flag11;
         flag0[1] = near_up_1 & near_down_2 & flat_flag12 & angle_flag12;
         flag0[2] = near_up_2 & near_down_1 & flat_flag21 & angle_flag21;
         flag0[3] = near_up_2 & near_down_2 & flat_flag22 & angle_flag22;
 
-        /*==== 4. 中心 idx=0  flag1 ====*/
-        d_cur  = dist1[1];
-        d0_p1  = dist0[2];  d0_m1  = dist0[0];
-        d1_p1  = dist1[2];  d1_m1  = dist1[0];
+        // 展开第二个 groundFlagCalc(dist1[1], &dist0[0], ...)
+        // 第二回波，当前点为 dist1[1]
 
-        near_up_1   = (d0_p1>0) & ((d0_p1 - d_cur)>0) & ((d0_p1 - d_cur)<=dist_diff_th);
-        near_up_2   = (d1_p1>0) & ((d1_p1 - d_cur)>0) & ((d1_p1 - d_cur)<=dist_diff_th);
-        near_down_1 = (d0_m1>0) & ((d_cur - d0_m1)>0) & ((d_cur - d0_m1)<=dist_diff_th);
-        near_down_2 = (d1_m1>0) & ((d_cur - d1_m1)>0) & ((d_cur - d1_m1)<=dist_diff_th);
+        //4 近邻判断
+        near_up_1 = (dist0[2] > 0) & (dist0[2] - dist1[1] > 0) & (dist0[2] - dist1[1] <= dist_diff_th);
+        near_up_2 = (dist1[2] > 0) & (dist1[2] - dist1[1] > 0) & (dist1[2] - dist1[1] <= dist_diff_th);
+        near_down_1 = (dist0[0] > 0) & (dist1[1] - dist0[0] > 0) & (dist1[1] - dist0[0] <= dist_diff_th);
+        near_down_2 = (dist1[0] > 0) & (dist1[1] - dist1[0] > 0) & (dist1[1] - dist1[0] <= dist_diff_th);
 
-        dx_up   = dvabsdif(x0[2], x1[1]);
-        dx_down = dvabsdif(x0[0], x1[1]);
-        dx_up2  = dvabsdif(x1[2], x1[1]);
-        dx_down2= dvabsdif(x1[0], x1[1]);
-        dz_up   = dvabsdif(z0[2], z1[1]);
-        dz_down = dvabsdif(z0[0], z1[1]);
-        dz_up2  = dvabsdif(z1[2], z1[1]);
-        dz_down2= dvabsdif(z1[0], z1[1]);
+        // 平面判断
+        flat_flag11 = ((dvabsdif(z0[2], z1[1]) << 1) <= dvabsdif(x0[2], x1[1])) & 
+                       ((dvabsdif(z0[0], z1[1]) << 1) <= dvabsdif(x0[0], x1[1]));
+        flat_flag12 = ((dvabsdif(z0[2], z1[1]) << 1) <= dvabsdif(x0[2], x1[1])) & 
+                       ((dvabsdif(z1[0], z1[1]) << 1) <= dvabsdif(x1[0], x1[1]));
+        flat_flag21 = ((dvabsdif(z1[2], z1[1]) << 1) <= dvabsdif(x1[2], x1[1])) & 
+                       ((dvabsdif(z0[0], z1[1]) << 1) <= dvabsdif(x0[0], x1[1]));
+        flat_flag22 = ((dvabsdif(z1[2], z1[1]) << 1) <= dvabsdif(x1[2], x1[1])) & 
+                       ((dvabsdif(z1[0], z1[1]) << 1) <= dvabsdif(x1[0], x1[1]));
 
-        flat_flag11 = ((dz_up<<1)<=dx_up)   & ((dz_down<<1)<=dx_down);
-        flat_flag12 = ((dz_up<<1)<=dx_up)   & ((dz_down2<<1)<=dx_down2);
-        flat_flag21 = ((dz_up2<<1)<=dx_up2) & ((dz_down<<1)<=dx_down);
-        flat_flag22 = ((dz_up2<<1)<=dx_up2) & ((dz_down2<<1)<=dx_down2);
+        // 角度判断
+        angle_flag11 = dvabsdif(z0[2] + z0[0], (z1[1] << 1)) <= delta_z_th;
+        angle_flag12 = dvabsdif(z0[2] + z1[0], (z1[1] << 1)) <= delta_z_th;
+        angle_flag21 = dvabsdif(z1[2] + z0[0], (z1[1] << 1)) <= delta_z_th;
+        angle_flag22 = dvabsdif(z1[2] + z1[0], (z1[1] << 1)) <= delta_z_th;
 
-        angle_flag11 = dvabsdif(z0[2] + z0[0], (z1[1]<<1)) <= delta_z_th;
-        angle_flag12 = dvabsdif(z0[2] + z1[0], (z1[1]<<1)) <= delta_z_th;
-        angle_flag21 = dvabsdif(z1[2] + z0[0], (z1[1]<<1)) <= delta_z_th;
-        angle_flag22 = dvabsdif(z1[2] + z1[0], (z1[1]<<1)) <= delta_z_th;
-
+        // 第二回波标志组合
         flag1[0] = near_up_1 & near_down_1 & flat_flag11 & angle_flag11;
         flag1[1] = near_up_1 & near_down_2 & flat_flag12 & angle_flag12;
         flag1[2] = near_up_2 & near_down_1 & flat_flag21 & angle_flag21;
         flag1[3] = near_up_2 & near_down_2 & flat_flag22 & angle_flag22;
-
-        // groundFlagCalc(dist0[1], &dist0[0], z0[1], &z0[0], x0[1], &x0[0], &dist1[0], &z1[0], &x1[0], &flag0[0]);
-        // groundFlagCalc(dist1[1], &dist0[0], z1[1], &z0[0], x1[1], &x0[0], &dist1[0], &z1[0], &x1[0], &flag1[0]);
 
         roi_flag = (dist0[1] > 0 & dist0[1] <= dist_max_th & dvabsdif(z0[1], 0) <= z_th);
         ground_flag = roi_flag & (flag0[0] | flag0[1] | flag0[2] | flag0[3]);
@@ -448,80 +410,65 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
         ground_fillflag1 |= (ground_flag & (flag0[0] | flag0[1])) | (ground_flag2 & (flag1[0] | flag1[1]));
         ground_fillflag2 |= (ground_flag & (flag0[2] | flag0[3])) | (ground_flag2 & (flag1[2] | flag1[3]));
 
-        /*==== 5. 中心 idx=1  flag0 ====*/
-        d_cur  = dist0[2];
-        d0_p1  = dist0[3];  d0_m1  = dist0[1];
-        d1_p1  = dist1[3];  d1_m1  = dist1[1];
+        //5 近邻判断
+        near_up_1 = (dist0[3] > 0) & (dist0[3] - dist0[2] > 0) & (dist0[3] - dist0[2] <= dist_diff_th);
+        near_up_2 = (dist1[3] > 0) & (dist1[3] - dist0[2] > 0) & (dist1[3] - dist0[2] <= dist_diff_th);
+        near_down_1 = (dist0[1] > 0) & (dist0[2] - dist0[1] > 0) & (dist0[2] - dist0[1] <= dist_diff_th);
+        near_down_2 = (dist1[1] > 0) & (dist0[2] - dist1[1] > 0) & (dist0[2] - dist1[1] <= dist_diff_th);
 
-        near_up_1   = (d0_p1>0) & ((d0_p1 - d_cur)>0) & ((d0_p1 - d_cur)<=dist_diff_th);
-        near_up_2   = (d1_p1>0) & ((d1_p1 - d_cur)>0) & ((d1_p1 - d_cur)<=dist_diff_th);
-        near_down_1 = (d0_m1>0) & ((d_cur - d0_m1)>0) & ((d_cur - d0_m1)<=dist_diff_th);
-        near_down_2 = (d1_m1>0) & ((d_cur - d1_m1)>0) & ((d_cur - d1_m1)<=dist_diff_th);
+        // 平面判断
+        flat_flag11 = ((dvabsdif(z0[3], z0[2]) << 1) <= dvabsdif(x0[3], x0[2])) & 
+                   ((dvabsdif(z0[1], z0[2]) << 1) <= dvabsdif(x0[1], x0[2]));
+        flat_flag12 = ((dvabsdif(z0[3], z0[2]) << 1) <= dvabsdif(x0[3], x0[2])) & 
+                   ((dvabsdif(z1[1], z0[2]) << 1) <= dvabsdif(x1[1], x0[2]));
+        flat_flag21 = ((dvabsdif(z1[3], z0[2]) << 1) <= dvabsdif(x1[3], x0[2])) & 
+                   ((dvabsdif(z0[1], z0[2]) << 1) <= dvabsdif(x0[1], x0[2]));
+        flat_flag22 = ((dvabsdif(z1[3], z0[2]) << 1) <= dvabsdif(x1[3], x0[2])) & 
+                   ((dvabsdif(z1[1], z0[2]) << 1) <= dvabsdif(x1[1], x0[2]));
 
-        dx_up   = dvabsdif(x0[3], x0[2]);
-        dx_down = dvabsdif(x0[1], x0[2]);
-        dx_up2  = dvabsdif(x1[3], x0[2]);
-        dx_down2= dvabsdif(x1[1], x0[2]);
-        dz_up   = dvabsdif(z0[3], z0[2]);
-        dz_down = dvabsdif(z0[1], z0[2]);
-        dz_up2  = dvabsdif(z1[3], z0[2]);
-        dz_down2= dvabsdif(z1[1], z0[2]);
+        // 角度判断
+        angle_flag11 = dvabsdif(z0[3] + z0[1], (z0[2] << 1)) <= delta_z_th;
+        angle_flag12 = dvabsdif(z0[3] + z1[1], (z0[2] << 1)) <= delta_z_th;
+        angle_flag21 = dvabsdif(z1[3] + z0[1], (z0[2] << 1)) <= delta_z_th;
+        angle_flag22 = dvabsdif(z1[3] + z1[1], (z0[2] << 1)) <= delta_z_th;
 
-        flat_flag11 = ((dz_up<<1)<=dx_up)   & ((dz_down<<1)<=dx_down);
-        flat_flag12 = ((dz_up<<1)<=dx_up)   & ((dz_down2<<1)<=dx_down2);
-        flat_flag21 = ((dz_up2<<1)<=dx_up2) & ((dz_down<<1)<=dx_down);
-        flat_flag22 = ((dz_up2<<1)<=dx_up2) & ((dz_down2<<1)<=dx_down2);
-
-        angle_flag11 = dvabsdif(z0[3] + z0[1], (z0[2]<<1)) <= delta_z_th;
-        angle_flag12 = dvabsdif(z0[3] + z1[1], (z0[2]<<1)) <= delta_z_th;
-        angle_flag21 = dvabsdif(z1[3] + z0[1], (z0[2]<<1)) <= delta_z_th;
-        angle_flag22 = dvabsdif(z1[3] + z1[1], (z0[2]<<1)) <= delta_z_th;
-
+        // 第一回波标志组合
         flag0[0] = near_up_1 & near_down_1 & flat_flag11 & angle_flag11;
         flag0[1] = near_up_1 & near_down_2 & flat_flag12 & angle_flag12;
         flag0[2] = near_up_2 & near_down_1 & flat_flag21 & angle_flag21;
         flag0[3] = near_up_2 & near_down_2 & flat_flag22 & angle_flag22;
 
-        /*==== 6. 中心 idx=1  flag1 ====*/
-        d_cur  = dist1[2];
-        d0_p1  = dist0[3];  d0_m1  = dist0[1];
-        d1_p1  = dist1[3];  d1_m1  = dist1[1];
+        // 第二回波计算 (当前点为dist1[2]) - 复用变量
+        //6 近邻判断
+        near_up_1 = (dist0[3] > 0) & (dist0[3] - dist1[2] > 0) & (dist0[3] - dist1[2] <= dist_diff_th);
+        near_up_2 = (dist1[3] > 0) & (dist1[3] - dist1[2] > 0) & (dist1[3] - dist1[2] <= dist_diff_th);
+        near_down_1 = (dist0[1] > 0) & (dist1[2] - dist0[1] > 0) & (dist1[2] - dist0[1] <= dist_diff_th);
+        near_down_2 = (dist1[1] > 0) & (dist1[2] - dist1[1] > 0) & (dist1[2] - dist1[1] <= dist_diff_th);
 
-        near_up_1   = (d0_p1>0) & ((d0_p1 - d_cur)>0) & ((d0_p1 - d_cur)<=dist_diff_th);
-        near_up_2   = (d1_p1>0) & ((d1_p1 - d_cur)>0) & ((d1_p1 - d_cur)<=dist_diff_th);
-        near_down_1 = (d0_m1>0) & ((d_cur - d0_m1)>0) & ((d_cur - d0_m1)<=dist_diff_th);
-        near_down_2 = (d1_m1>0) & ((d_cur - d1_m1)>0) & ((d_cur - d1_m1)<=dist_diff_th);
+        // 平面判断
+        flat_flag11 = ((dvabsdif(z0[3], z1[2]) << 1) <= dvabsdif(x0[3], x1[2])) & 
+                    ((dvabsdif(z0[1], z1[2]) << 1) <= dvabsdif(x0[1], x1[2]));
+        flat_flag12 = ((dvabsdif(z0[3], z1[2]) << 1) <= dvabsdif(x0[3], x1[2])) & 
+                    ((dvabsdif(z1[1], z1[2]) << 1) <= dvabsdif(x1[1], x1[2]));
+        flat_flag21 = ((dvabsdif(z1[3], z1[2]) << 1) <= dvabsdif(x1[3], x1[2])) & 
+                    ((dvabsdif(z0[1], z1[2]) << 1) <= dvabsdif(x0[1], x1[2]));
+        flat_flag22 = ((dvabsdif(z1[3], z1[2]) << 1) <= dvabsdif(x1[3], x1[2])) & 
+                    ((dvabsdif(z1[1], z1[2]) << 1) <= dvabsdif(x1[1], x1[2]));
 
-        dx_up   = dvabsdif(x0[3], x1[2]);
-        dx_down = dvabsdif(x0[1], x1[2]);
-        dx_up2  = dvabsdif(x1[3], x1[2]);
-        dx_down2= dvabsdif(x1[1], x1[2]);
-        dz_up   = dvabsdif(z0[3], z1[2]);
-        dz_down = dvabsdif(z0[1], z1[2]);
-        dz_up2  = dvabsdif(z1[3], z1[2]);
-        dz_down2= dvabsdif(z1[1], z1[2]);
+        // 角度判断
+        angle_flag11 = dvabsdif(z0[3] + z0[1], (z1[2] << 1)) <= delta_z_th;
+        angle_flag12 = dvabsdif(z0[3] + z1[1], (z1[2] << 1)) <= delta_z_th;
+        angle_flag21 = dvabsdif(z1[3] + z0[1], (z1[2] << 1)) <= delta_z_th;
+        angle_flag22 = dvabsdif(z1[3] + z1[1], (z1[2] << 1)) <= delta_z_th;
 
-        flat_flag11 = ((dz_up<<1)<=dx_up)   & ((dz_down<<1)<=dx_down);
-        flat_flag12 = ((dz_up<<1)<=dx_up)   & ((dz_down2<<1)<=dx_down2);
-        flat_flag21 = ((dz_up2<<1)<=dx_up2) & ((dz_down<<1)<=dx_down);
-        flat_flag22 = ((dz_up2<<1)<=dx_up2) & ((dz_down2<<1)<=dx_down2);
-
-        angle_flag11 = dvabsdif(z0[3] + z0[1], (z1[2]<<1)) <= delta_z_th;
-        angle_flag12 = dvabsdif(z0[3] + z1[1], (z1[2]<<1)) <= delta_z_th;
-        angle_flag21 = dvabsdif(z1[3] + z0[1], (z1[2]<<1)) <= delta_z_th;
-        angle_flag22 = dvabsdif(z1[3] + z1[1], (z1[2]<<1)) <= delta_z_th;
-
+        // 第二回波标志组合
         flag1[0] = near_up_1 & near_down_1 & flat_flag11 & angle_flag11;
         flag1[1] = near_up_1 & near_down_2 & flat_flag12 & angle_flag12;
         flag1[2] = near_up_2 & near_down_1 & flat_flag21 & angle_flag21;
         flag1[3] = near_up_2 & near_down_2 & flat_flag22 & angle_flag22;
 
-        // groundFlagCalc(dist0[2], &dist0[1], z0[2], &z0[1], x0[2], &x0[1], &dist1[1], &z1[1], &x1[1], &flag0[0]);
-        // groundFlagCalc(dist1[2], &dist0[1], z1[2], &z0[1], x1[2], &x0[1], &dist1[1], &z1[1], &x1[1], &flag1[0]);
-
         roi_flag = (dist0[2] > 0 & dist0[2] <= dist_max_th & dvabsdif(z0[2], 0) <= z_th);
         roi_flag2 = (dist1[2] > 0 & dist1[2] <= dist_max_th & dvabsdif(z1[2], 0) <= z_th);
-
 
         gnd_mark0 = ((roi_flag & (flag0[0] | flag0[1] | flag0[2] | flag0[3])) | ground_fillflag1)
                     | (dvabsdif(z0[2], 0) < 20 & dist0[2] < 4000);

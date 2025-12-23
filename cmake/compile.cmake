@@ -23,7 +23,7 @@ else()  # Release or MinSizRel
 endif()
 
 set(SDK_API_TYPE SHARED)
-add_compile_options(-Wdeprecated-declarations)
+add_compile_options(-Wdeprecated-declarations -pthread)
 if(SUPPORT_FPIC)
     add_compile_options(-fPIC)
 else()

@@ -10,5 +10,5 @@
 
 //You can customize the VMEM buffer size. Default size is 256 bytes.
 #define VPU_PRINT_VMEM_BUFFER_SIZE 32
-#define STACK_SIZE 0x7500
+#define STACK_SIZE 0x8000
 #include <cupva_vpu.bcf>
