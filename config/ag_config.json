@@ -37,6 +37,7 @@
         "ENABLE_MIPI_CRC": true,
         "INNER_PARAM_PATH": "/osdata/satelite/lidar/",
         "LOG_CONFIG_FILE": "/applog/lidar/rs_lidar_sdk.log",
+        "PARSE_INNER_PARAM_BIN": true,
         "DELAY_STAT": true,
         "VPU_AUTH": true,
         "THREADS": [

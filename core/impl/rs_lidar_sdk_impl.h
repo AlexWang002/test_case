@@ -118,6 +118,7 @@ class RSLidarSdkImpl {
 
     LidarSdkCbks callbacks_;
     nlohmann::json json_data_;
+    bool parse_inner_param_bin_{true};
     bool alarm_status_{false};
 
     // 配置路径

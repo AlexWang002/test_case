@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.01.01] - 2025-12-18
+
+### Update
+- 增加内参bin文件解析开关 PARSE_INNER_PARAM_BIN ，默认打开（true）：
+  - true  开启：SDK会解析内参bin文件，获取内参数据。
+  - false 关闭：SDK会解析MIPI-Difop2, 获取内参数据。
+
 ## [3.01.00] - 2025-12-15
 
 ### Update

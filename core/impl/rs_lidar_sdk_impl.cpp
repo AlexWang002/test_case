@@ -269,10 +269,11 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
     config_path_ = mpark::get<std::string>(config_data[1]);
     log_config.log_file_path_ = mpark::get<std::string>(config_data[2]);
     delay_stat_switch_ = mpark::get<bool>(config_data[3]);
-    bool vpu_auth_ = mpark::get<bool>(config_data[4]);
-    thread::thread_params = mpark::get<std::vector<thread::ThreadConfig>>(config_data[5]);
+    bool vpu_auth = mpark::get<bool>(config_data[4]);
+    parse_inner_param_bin_ = mpark::get<bool>(config_data[5]);
+    thread::thread_params = mpark::get<std::vector<thread::ThreadConfig>>(config_data[6]);
 
-    if (vpu_auth_) {
+    if (vpu_auth) {
         const char *script_path = "sudo echo 0 > /sys/kernel/debug/pva0/vpu_app_authentication";
         system(script_path);
         LogInfo("VPU authentication enabled.");
@@ -1233,7 +1234,13 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             continue;
         }
         bool ret{false};
-        uint8_t* difop_data = part_data + kMsopSize;
+        uint8_t* difop_data{nullptr};
+
+        if (true == parse_inner_param_bin_) {
+            difop_data = reinterpret_cast<uint8_t*>(utils::difop2_bin_data.data());
+        } else {
+            difop_data = part_data + kMsopSize;
+        }
         ret = decoder_ptr_->processDifopPkt(difop_data, kDifopSize);
 
         if (!ret) {
@@ -1325,11 +1332,13 @@ bool RSLidarSdkImpl::loadConfiguration(const std::string& configPath) {
         LogInfo("read inner parameters from file: {} succeeded", bin_file_path);
     } else {
         LogError("read inner parameters from file: {} failed", bin_file_path);
+        parse_inner_param_bin_ = false;
     }
 
     if (true != crc32::verify_crc32(bin_file_path, json_file_path)) {
         LogError("verify crc32 failure");
         FaultManager64::getInstance().setFault(FaultBits::LidarInternalParamReadFault);
+        parse_inner_param_bin_ = false;
     } else {
         LogInfo("verify crc32 success");
         result = true;
