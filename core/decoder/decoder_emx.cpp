@@ -99,6 +99,10 @@ DecoderRSEMX::DecoderRSEMX(const RSDecoderParam& param) : Decoder(getConstParam(
  * \retval false: The packet decoding failed.
  */
 bool DecoderRSEMX::decodeDifopPkt(const uint8_t* packet, size_t size) {
+    if ((true == difop2_received_) && (true == angles_ready_)) {
+        return true;
+    }
+
     if (packet == nullptr) {
         LogError("[DecoderRSEMX::decodeDifopPkt] packet is nullptr");
         return false;
@@ -223,6 +227,7 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
     std::memcpy(&device_info_->reserved[7], &pkt.dtc, 3);
 
     std::unique_lock<std::mutex> lock(mtx_point_cloud_);
+    // packets sync_status is take from TimesyncStatus in DIFOP1 and keep consistent with that in device_info.
     point_cloud_->sync_status = device_info_->time_sync_status;
 
     return true;
@@ -356,7 +361,6 @@ void DecoderRSEMX::setPacketHeader(const RSEMXMsopPkt& pkt) {
     }
     point_cloud_->protocol_version = LIDAR_SDK_API_VER_MAJOR * 10000 + LIDAR_SDK_API_VER_MINOR * 100 + LIDAR_SDK_API_VER_PATCH;
     point_cloud_->return_mode = 0x01; // SDK默认输出为0x01最强回波
-    //point_cloud_->sync_status = device_info_->time_sync_status; // packets同步状态取DIFOP1中的TimesyncStatus，与device_info中保持一致
     point_cloud_->frame_sync = pkt.header.synchronized;
     point_cloud_->mirror_id = pkt.header.surface_id;
     point_cloud_->packet_num = EMX_PKT_SEQ_MAX;
