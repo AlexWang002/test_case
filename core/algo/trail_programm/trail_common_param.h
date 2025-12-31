@@ -33,6 +33,9 @@ typedef struct{
     int draw_near_cnt_th_h;
     int draw_near_cnt_th_v;
     int draw_dist_end;
+
+    int left_coef[11];
+    int right_coef[11];
 }TrailParam_t;
 
 #define DEFAULT_TRAIL_PARAM { \
@@ -46,7 +49,9 @@ typedef struct{
     .near_cnt_th_v = 5, \
     .draw_near_cnt_th_h = 1, \
     .draw_near_cnt_th_v = 6, \
-    .draw_dist_end = 1400 \
+    .draw_dist_end = 1400, \
+    .left_coef = {1,1,1,1,1,1,0,0,0,0,0}, \
+    .right_coef = {0,0,0,0,0,1,1,1,1,1,1} \
 }
 
 #endif

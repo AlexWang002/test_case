@@ -143,28 +143,20 @@ void agenConfigInit(StrayConfig_t *config, uint16_t *row_ids)
     INIT_AGEN2(dist_wave1_agen, dist_wave1_wrapper);
     config->dist_wave1 = extract_agen_cfg(dist_wave1_agen);
 
-    AgenWrapper att0_wrapper;
-    att0_wrapper.size = sizeof(uint16_t);
-    att0_wrapper.n1 = 3;
-    att0_wrapper.s1 = TILE_WIDTH;
-    att0_wrapper.n2 = TILE_WIDTH / vecw;
-    att0_wrapper.s2 = vecw;
-    att0_wrapper.n3 = TILE_HEIGHT;
-    att0_wrapper.s3 = TILE_WIDTH;
+    AgenWrapper att_wrapper;
+    att_wrapper.size = sizeof(uint16_t);
+    att_wrapper.n1 = 3;
+    att_wrapper.s1 = TILE_WIDTH;
+    att_wrapper.n2 = TILE_WIDTH / vecw;
+    att_wrapper.s2 = vecw;
+    att_wrapper.n3 = TILE_HEIGHT;
+    att_wrapper.s3 = TILE_WIDTH;
     agen att0_agen = init((dvushort *)NULL);
-    INIT_AGEN3(att0_agen, att0_wrapper);
+    INIT_AGEN3(att0_agen, att_wrapper);
     config->att0 = extract_agen_cfg(att0_agen);
 
-    AgenWrapper att1_wrapper;
-    att1_wrapper.size = sizeof(uint16_t);
-    att1_wrapper.n1 = 3;
-    att1_wrapper.s1 = TILE_WIDTH;
-    att1_wrapper.n2 = TILE_WIDTH / vecw;
-    att1_wrapper.s2 = vecw;
-    att1_wrapper.n3 = TILE_HEIGHT;
-    att1_wrapper.s3 = TILE_WIDTH;
     agen att1_agen = init((dvushort *)NULL);
-    INIT_AGEN3(att1_agen, att1_wrapper);
+    INIT_AGEN3(att1_agen, att_wrapper);
     config->att1 = extract_agen_cfg(att1_agen);
 
     AgenWrapper class_line_wrapper;
@@ -179,94 +171,46 @@ void agenConfigInit(StrayConfig_t *config, uint16_t *row_ids)
     INIT_AGEN3(class_line_agen, class_line_wrapper);
     config->class_line = extract_agen_cfg(class_line_agen);
 
-    AgenWrapper ground_height_wrapper;
-    ground_height_wrapper.size = sizeof(int16_t);
-    ground_height_wrapper.n1 = TILE_WIDTH / vecw;
-    ground_height_wrapper.s1 = vecw;
-    ground_height_wrapper.n2 = TILE_HEIGHT;
-    ground_height_wrapper.s2 = TILE_WIDTH;
+    AgenWrapper no_halo_wrapper;
+    no_halo_wrapper.size = sizeof(int16_t);
+    no_halo_wrapper.n1 = TILE_WIDTH / vecw;
+    no_halo_wrapper.s1 = vecw;
+    no_halo_wrapper.n2 = TILE_HEIGHT;
+    no_halo_wrapper.s2 = TILE_WIDTH;
     agen ground_height_agen = init((dvshort *)NULL);
-    INIT_AGEN2(ground_height_agen, ground_height_wrapper);
+    INIT_AGEN2(ground_height_agen, no_halo_wrapper);
     config->ground_height = extract_agen_cfg(ground_height_agen);
 
-    AgenWrapper refl_wave0_wrapper;
-    refl_wave0_wrapper.size = sizeof(uint16_t);
-    refl_wave0_wrapper.n1 = TILE_WIDTH / vecw;
-    refl_wave0_wrapper.s1 = vecw;
-    refl_wave0_wrapper.n2 = TILE_HEIGHT;
-    refl_wave0_wrapper.s2 = TILE_WIDTH;
     agen refl_wave0_agen = init((dvushort *)NULL);
-    INIT_AGEN2(refl_wave0_agen, refl_wave0_wrapper);
+    INIT_AGEN2(refl_wave0_agen, no_halo_wrapper);
     config->refl_wave0 = extract_agen_cfg(refl_wave0_agen);
 
-    AgenWrapper refl_wave1_wrapper;
-    refl_wave1_wrapper.size = sizeof(uint16_t);
-    refl_wave1_wrapper.n1 = TILE_WIDTH / vecw;
-    refl_wave1_wrapper.s1 = vecw;
-    refl_wave1_wrapper.n2 = TILE_HEIGHT;
-    refl_wave1_wrapper.s2 = TILE_WIDTH;
     agen refl_wave1_agen = init((dvushort *)NULL);
-    INIT_AGEN2(refl_wave1_agen, refl_wave1_wrapper);
+    INIT_AGEN2(refl_wave1_agen, no_halo_wrapper);
     config->refl_wave1 = extract_agen_cfg(refl_wave1_agen);
 
-    AgenWrapper grnd_wave0_wrapper;
-    grnd_wave0_wrapper.size = sizeof(uint16_t);
-    grnd_wave0_wrapper.n1 = TILE_WIDTH / vecw;
-    grnd_wave0_wrapper.s1 = vecw;
-    grnd_wave0_wrapper.n2 = TILE_HEIGHT;
-    grnd_wave0_wrapper.s2 = TILE_WIDTH;
     agen grnd_wave0_agen = init((dvushort *)NULL);
-    INIT_AGEN2(grnd_wave0_agen, grnd_wave0_wrapper);
+    INIT_AGEN2(grnd_wave0_agen, no_halo_wrapper);
     config->grnd_wave0 = extract_agen_cfg(grnd_wave0_agen);
 
-    AgenWrapper grnd_wave1_wrapper;
-    grnd_wave1_wrapper.size = sizeof(uint16_t);
-    grnd_wave1_wrapper.n1 = TILE_WIDTH / vecw;
-    grnd_wave1_wrapper.s1 = vecw;
-    grnd_wave1_wrapper.n2 = TILE_HEIGHT;
-    grnd_wave1_wrapper.s2 = TILE_WIDTH;
     agen grnd_wave1_agen = init((dvushort *)NULL);
-    INIT_AGEN2(grnd_wave1_agen, grnd_wave1_wrapper);
+    INIT_AGEN2(grnd_wave1_agen, no_halo_wrapper);
     config->grnd_wave1 = extract_agen_cfg(grnd_wave1_agen);
 
-    AgenWrapper high_wave0_wrapper;
-    high_wave0_wrapper.size = sizeof(int16_t);
-    high_wave0_wrapper.n1 = TILE_WIDTH / vecw;
-    high_wave0_wrapper.s1 = vecw;
-    high_wave0_wrapper.n2 = TILE_HEIGHT;
-    high_wave0_wrapper.s2 = TILE_WIDTH;
     agen high_wave0_agen = init((dvshort *)NULL);
-    INIT_AGEN2(high_wave0_agen, high_wave0_wrapper);
+    INIT_AGEN2(high_wave0_agen, no_halo_wrapper);
     config->high_wave0 = extract_agen_cfg(high_wave0_agen);
 
-    AgenWrapper high_wave1_wrapper;
-    high_wave1_wrapper.size = sizeof(int16_t);
-    high_wave1_wrapper.n1 = TILE_WIDTH / vecw;
-    high_wave1_wrapper.s1 = vecw;
-    high_wave1_wrapper.n2 = TILE_HEIGHT;
-    high_wave1_wrapper.s2 = TILE_WIDTH;
     agen high_wave1_agen = init((dvshort *)NULL);
-    INIT_AGEN2(high_wave1_agen, high_wave1_wrapper);
+    INIT_AGEN2(high_wave1_agen, no_halo_wrapper);
     config->high_wave1 = extract_agen_cfg(high_wave1_agen);
 
-    AgenWrapper stray_mask0_wrapper;
-    stray_mask0_wrapper.size = sizeof(uint16_t);
-    stray_mask0_wrapper.n1 = TILE_WIDTH / vecw;
-    stray_mask0_wrapper.s1 = vecw;
-    stray_mask0_wrapper.n2 = TILE_HEIGHT;
-    stray_mask0_wrapper.s2 = TILE_WIDTH;
     agen stray_mask0_agen = init((dvushort *)NULL);
-    INIT_AGEN2(stray_mask0_agen, stray_mask0_wrapper);
+    INIT_AGEN2(stray_mask0_agen, no_halo_wrapper);
     config->stray_mask0 = extract_agen_cfg(stray_mask0_agen);
 
-    AgenWrapper stray_mask1_wrapper;
-    stray_mask1_wrapper.size = sizeof(uint16_t);
-    stray_mask1_wrapper.n1 = TILE_WIDTH / vecw;
-    stray_mask1_wrapper.s1 = vecw;
-    stray_mask1_wrapper.n2 = TILE_HEIGHT;
-    stray_mask1_wrapper.s2 = TILE_WIDTH;
     agen stray_mask1_agen = init((dvushort *)NULL);
-    INIT_AGEN2(stray_mask1_agen, stray_mask1_wrapper);
+    INIT_AGEN2(stray_mask1_agen, no_halo_wrapper);
     config->stray_mask1 = extract_agen_cfg(stray_mask1_agen);
 }
 
@@ -468,10 +412,12 @@ void strayProc(StrayConfig_t *config, int tile_idx)
         dvshortx height_cur = dvshort_load(high_wave0_agen);
         dvshortx height_cur2 = dvshort_load(high_wave1_agen);
 
-        dvshortx class_down = dvushort_load(class_line_agen);
+        dvshortx class_down = dvushort_load(class_line_agen) & 0xFF;
         dvshortx class_raw = dvushort_load(class_line_agen);
-        dvshortx class_up = dvushort_load(class_line_agen);
+        dvshortx class_up = dvushort_load(class_line_agen) & 0xFF;
 
+        dvshortx cluster_blue = class_raw >> 8;
+        class_raw = class_raw & 0xFF;
         dvshortx ground_height = dvshort_load(ground_height_agen);
 
         ground_seg = dist_cur >> 9;
@@ -537,7 +483,7 @@ void strayProc(StrayConfig_t *config, int tile_idx)
         // 最终删除标记
         dvshortx stray_tag_strong_en = (stray_flag || mirror_flag) && (straight_del_en || column_del_en && !gnd_cur || frame_del_en && !gnd_cur); // 强杂散
         dvshortx stray_tag_weak_en = class_raw == 2 && ref_cur < ref_del_th && dvabsdif(dist_cur, rainwall_dist_vec) < 960; // 弱杂散
-        dvshortx stray_del_en =  (stray_tag_strong_en || stray_tag_weak_en) && !(connect_ground_flag && !connect_ceil_flag); // 非接地不接天的强杂散进行删除，弱杂散在高反模块再次判别
+        dvshortx stray_del_en =  (stray_tag_strong_en || stray_tag_weak_en) && (!(connect_ground_flag && !connect_ceil_flag) || (cluster_blue == 1)); // 非接地不接天的强杂散进行删除，弱杂散在高反模块再次判别
 
         // 第二回波选择逻辑
         dvshortx wave1_sel_base = (smlr_cur2 >= 1) && (crosstalk_cur2 == 0);

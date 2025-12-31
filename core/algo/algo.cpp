@@ -637,8 +637,8 @@ void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
             LogWarn("[stray] PVA task submitted {} times.", retry_cnt + 1);
         }
 
-        memcpy(stray_mask_out_frm0[0], (uint8_t *)stray_pva_buff.stray_mask0_h, VIEW_W * VIEW_H * sizeof(uint16_t));
-        memcpy(stray_mask_out_frm1[0], (uint8_t *)stray_pva_buff.stray_mask1_h, VIEW_W * VIEW_H * sizeof(uint16_t));
+        memcpy(stray_mask_out_frm0[0], &stray_pva_buff.stray_mask0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+        memcpy(stray_mask_out_frm1[0], &stray_pva_buff.stray_mask1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
     }
     else {
         for (int cc = 0; cc < VIEW_W; cc ++) {
@@ -823,6 +823,8 @@ void AlgoFunction::strayDelete(int col_idx, tstFrameBuffer* pstFrameBuffer) {
 
         // 聚类变量
         uint16_t class_line[VIEW_H] = {0};
+        uint16_t blue_line[VIEW_H] = {0};
+        uint16_t pva_line[VIEW_H] = {0};
 
         int class_row_st = 0;
         int class_row_ed = 0;
@@ -831,6 +833,16 @@ void AlgoFunction::strayDelete(int col_idx, tstFrameBuffer* pstFrameBuffer) {
         int class_stray_cnt = 0;
         int class_stray_row = 0;
         int class_stray_type = 0; //当前最新的杂散聚类块是否是与普通块相连
+        int class_cnt_last = 0; //上一个杂散聚类块点数
+        int class_dist_last = 0; //上一个杂散聚类块距离
+        int class_stray_cnt_last = 0; //上一个杂散聚类块杂散点个数
+
+        int normal_dist = 0;
+        int normal_row_st = -1;
+        int normal_row_ed = 0;
+        int normal_height_st = 0;
+        int normal_height_ed = 0;
+        int normal_bright = 0;
 
         int stray_chain_points_c = 0;
         int stray_chain_cnt_c = 0;
@@ -867,6 +879,8 @@ void AlgoFunction::strayDelete(int col_idx, tstFrameBuffer* pstFrameBuffer) {
         // =============== 前级信息计算 ===============
         uint16_t* dist0 = pstFrameBuffer->dist0[col_idx];
         uint16_t* dist1 = pstFrameBuffer->dist1[col_idx];
+        uint16_t* ref0 = pstFrameBuffer->ref0[col_idx];
+        uint16_t* ref1 = pstFrameBuffer->ref1[col_idx];
         uint16_t* att0 = pstFrameBuffer->att0[col_idx];
         uint16_t* att1 = pstFrameBuffer->att1[col_idx];
         int16_t* high0 = pstFrameBuffer->high0[col_idx];
@@ -876,6 +890,9 @@ void AlgoFunction::strayDelete(int col_idx, tstFrameBuffer* pstFrameBuffer) {
             // 获取当前行数据
             int dist_cur = dist0[row_idx];
             int dist_cur2 = dist1[row_idx];
+
+            int ref_cur = ref0[row_idx];
+            int ref_cur2 = ref1[row_idx];
 
             int row_idx_up = std::max(0, row_idx - 1);
             int dist_up = dist0[row_idx_up];
@@ -905,6 +922,41 @@ void AlgoFunction::strayDelete(int col_idx, tstFrameBuffer* pstFrameBuffer) {
                 }
             }
 
+            // ------ 列向距离处理 ------
+            int normal_save_flag = 0;
+            if(dist_cur > 0){
+                if(normal_dist == 0){
+                    normal_dist = dist_cur;
+                    normal_row_st = row_idx;
+                    normal_row_ed = row_idx;
+                    normal_height_st = height_cur;
+                    normal_height_ed = height_cur;
+                    normal_bright = ref_cur > 50;
+                } else if((abs(dist_cur - normal_dist) < 160) && (row_idx - normal_row_ed < 5)){
+                    normal_dist = dist_cur;
+                    normal_row_ed = row_idx;
+                    normal_height_ed = height_cur;
+                    if (ref_cur > 50) {
+                        normal_bright = 1;
+                    }
+                }else {
+                    normal_save_flag = 1;
+                }
+            }
+
+            if(normal_save_flag == 1 || row_idx == VIEW_H - 1){
+                if(normal_bright == 0 && normal_row_st != -1){
+                    for (int i = normal_row_st; i <= normal_row_ed; ++i) {
+                        blue_line[i] = 1;
+                    }
+                }
+                normal_dist = dist_cur;
+                normal_row_st = row_idx;
+                normal_row_ed = row_idx;
+                normal_height_st = height_cur;
+                normal_height_ed = height_cur;
+                normal_bright = 0;
+            }
             // ------ 聚类处理 ------
             int dist_th_classify_cur = (dist_cur < stray_Param.dist_node1) ?
                                         stray_Param.dist_th_classify[0] : stray_Param.dist_th_classify[1];
@@ -968,7 +1020,8 @@ void AlgoFunction::strayDelete(int col_idx, tstFrameBuffer* pstFrameBuffer) {
                 int chain_last_row_ed = 0;
                 // 杂散链统计
                 if(class_type && (class_stray_cnt * 4 >= class_row_ed - class_row_st)
-                    && (!(abs(((class_row_st + class_row_ed + 2)/2) - 120) < 15 && class_stray_cnt < 30))) {
+                    && (!((abs(((class_row_st + class_row_ed + 2)/2) - 120) < 15) && (class_stray_cnt < 30)
+                    && (class_cnt_last > 20) && (class_stray_cnt_last < 5) && (abs(class_dist - class_dist_last) < 400)))){
                     if (0 == stray_chain_cnt_c && class_stray_cnt > 3) {
                         stray_chain_dist_c = class_dist;
                         stray_chain_points_c = class_cnt;
@@ -1054,6 +1107,9 @@ void AlgoFunction::strayDelete(int col_idx, tstFrameBuffer* pstFrameBuffer) {
 
                 // 重置聚类变量
                 if (dist_cur > 1600) {
+                    class_cnt_last = class_cnt;
+                    class_dist_last = class_dist;
+                    class_stray_cnt_last = class_stray_cnt;
                     class_row_st = row_idx;
                     class_row_ed = row_idx;
                     class_cnt = 1;
@@ -1132,7 +1188,10 @@ void AlgoFunction::strayDelete(int col_idx, tstFrameBuffer* pstFrameBuffer) {
         stray_chain_row_ed[2] = stray_chain_row_ed_c;
         stray_chain_height[2] = stray_chain_ht_ed_c - stray_chain_ht_st_c; //当列最长的杂散链高度
 
-        memcpy(&stray_pva_buff.class_line_h[col_idx * VIEW_H], class_line, VIEW_H * sizeof(uint16_t));
+        for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
+            pva_line[row_idx] = (blue_line[row_idx] << 8) + class_line[row_idx];
+        }
+        memcpy(&stray_pva_buff.class_line_h[col_idx * VIEW_H], pva_line, VIEW_H * sizeof(uint16_t));
 
         stray_var_cnt += 1;
         stray_pva_buff.stray_var_h[stray_var_cnt ++] = ceil_stray_dist[0];
@@ -1429,7 +1488,6 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
     static int cnt{0};
 
     cnt = (cnt + 1) % 10;
-
     for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
         auto time_start = std::chrono::steady_clock::now();
         ret = upsample_main(exception_msg, status_code, submit_time, wait_time);
