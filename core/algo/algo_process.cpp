@@ -226,13 +226,12 @@ void CloudManager::algoProcess(int32_t task_id)
                                         const int attr0 = (trail != 0 || denoise != 1) ? 0 : Attrwave0[row_idx];
                                         const int attr1 = Attrwave1[row_idx];
 
-                                        Attrwave0[row_idx] = ((spray0) << 7) + (attr0 & 0x7E) + stray0;
-                                        Attrwave1[row_idx] = ((spray1) << 7) + (attr1 & 0x7E) + stray1;
-
-                                        const bool wave0_del_flag = stray0 || spray0 || trail || !denoise;
-                                        const bool wave1_sel_flag = !stray1 && !spray1 && !trail && denoise;
+                                        Attrwave0[row_idx] = (attr0 & 0x7E) + stray0;
+                                        Attrwave1[row_idx] = (attr1 & 0x7E) + stray1;
 
                                         if (algo_func_.algo_Param.DeleteOn) {
+                                            const bool wave0_del_flag = stray0 || spray0 || trail || !denoise;
+                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail && denoise;
                                             // 情况1: 两回波均无效点
                                             if (wave0_del_flag && !wave1_sel_flag) {
                                                 Distwave0[row_idx] = 0;
@@ -245,10 +244,27 @@ void CloudManager::algoProcess(int32_t task_id)
                                                 Refwave0[row_idx] = Refwave1[row_idx];
                                                 Attrwave0[row_idx] = Attrwave1[row_idx];
                                             }
-                                            Attrwave0[row_idx] &= 0xF7;
                                         } else {
-                                            // do nothing
+                                            const bool wave0_del_flag = stray0 || trail || !denoise;
+                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail && denoise;
+                                            // 情况1: 两回波均无效点
+                                            if (wave0_del_flag && !wave1_sel_flag) {
+                                                Distwave0[row_idx] = 0;
+                                                Refwave0[row_idx] = 0;
+                                                Attrwave0[row_idx] = 0;
+                                            }
+                                            // 情况2: 第一回波无效点，第二回波有效点
+                                            else if (wave0_del_flag && wave1_sel_flag) {
+                                                Distwave0[row_idx] = Distwave1[row_idx];
+                                                Refwave0[row_idx] = Refwave1[row_idx];
+                                                Attrwave0[row_idx] = Attrwave1[row_idx];
+                                            }
+                                            if(spray0 && !wave1_sel_flag)
+                                            {
+                                                Attrwave0[row_idx] = ((spray0) << 7) + (Attrwave0[row_idx] & 0x7F);
+                                            }
                                         }
+                                        Attrwave0[row_idx] &= 0xF7;
                                     }
                                 }
 
