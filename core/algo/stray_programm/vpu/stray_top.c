@@ -102,9 +102,9 @@ typedef struct {
 
 /**
  * \brief Initialize agen configuration
- * 
+ *
  * \param[in]    config   : agen configuration
- * \param[ib]    config   : row id array
+ * \param[in]    config   : row id array
  * \param[out]   config   : agen configuration
 */
 void agenConfigInit(StrayConfig_t *config, uint16_t *row_ids)
@@ -272,7 +272,7 @@ void agenConfigInit(StrayConfig_t *config, uint16_t *row_ids)
 
 /**
  * \brief Modify start address of agen
- * 
+ *
  * \param[in]   config   : agen configuration
  * \param[out]  config   : agen configuration
 */
@@ -326,7 +326,7 @@ void offsetUpdate()
 
 /**
  * \brief Stray-remove algo pva function
- * 
+ *
  * \param[in]  config   : agen configuration
  * \param[in]  tile_idx : tile id
 */
@@ -549,7 +549,7 @@ void strayProc(StrayConfig_t *config, int tile_idx)
                     (stray_chain_cnt1 < stray_cnt_th ||
                         dvabsdif(dist_cur2, stray_chain_dist1) > 240);
 
-        dvshortx wave1_sel_frame = ((rainwall_dist_vec > 80) &&
+        dvshortx wave1_sel_frame = ((rainwall_cnt_vec > 80) &&
                             (dist_cur2 > (rainwall_dist_vec + 200)) ||
                             (dist_cur2 < (rainwall_dist_vec - 960)))
                             || (rainwall_cnt_vec <= 80);
@@ -567,7 +567,7 @@ void strayProc(StrayConfig_t *config, int tile_idx)
 
 /**
  * \brief Initialize row id array
- * 
+ *
  * \param[in]  row_ids  : row id array
  * \param[out] row_ids  : row id array
 */

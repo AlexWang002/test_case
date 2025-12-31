@@ -46,7 +46,7 @@
 #include "sync_queue.h"
 
 #define ALGO_FRM_BUF_SIZE (1)
-#define ALGO_THREAD_NUM (2)
+#define ALGO_THREAD_NUM (1)
 #define ALGO_LOSS_PKT_CODE (-1)
 #define ALGO_VERSION_MAJOR 01
 #define ALGO_VERSION_MINOR 00
@@ -59,7 +59,6 @@ namespace robosense
 {
 namespace lidar
 {
-
 // using TimePoint = std::chrono::steady_clock::time_point;
 // extern SyncQueue<TimePoint> inputTimeQueue;
 // extern SyncQueue<TimePoint> inputTimeQueue1;
@@ -80,52 +79,30 @@ class CloudManager
 
     static constexpr int32_t kCalcTimeout_{100000};
     static constexpr int32_t kMaxCloudNum_{7600};
-    static constexpr int32_t algo_frm_buf_size_{3};
-    static constexpr int32_t algo_thread_num_{2};
-    static constexpr int32_t algo_loss_pkt_code{-1};
     std::mutex mtx_recv_;
-    std::mutex mtx_send_;
     std::mutex mtx_calc_;
     std::condition_variable cv_recv_;
-    std::condition_variable cv_send_;
     std::condition_variable cv_calc_;
     int32_t last_pkt_recv_{0};
 
     // 存储原始的点云
     RSEMXMsopPkt proc_clouds_[kMaxCloudNum_];
     std::atomic<int32_t> proc_cloud_idx_{0};
+    
     // 使用状态跟踪
-
     AlgoFunction::tstFrameBuffer frame_buffer_[ALGO_FRM_BUF_SIZE];
     std::atomic<int32_t> recv_buffer_idx_{0};
     std::atomic<int32_t> proc_buffer_idx_{0};
-    std::atomic<int32_t> cacl_done_[ALGO_THREAD_NUM];
-    std::array<std::atomic<int32_t>, ALGO_THREAD_NUM> algo_proc_idx_;
+    std::atomic<int32_t> cacl_done_;
 
     std::vector<std::thread> algo_handle_threads_;
-    std::thread handle_thread_;
     std::atomic<bool> to_exit_handle_{false};
     std::function<void(const uint8_t* pkt, size_t size)> cb_send_;
-
     AlgoFunction algo_func_;
-
-#ifdef ALGO_WRITE_FILE
-    std::ofstream dist_file_;
-    std::ofstream ref_file_;
-    bool write_file_{true};  // 是否写入文件
-#endif
-
-#ifdef ALGO_REINJ
-    std::ofstream processed_file_;
-    int inj_frame_cnt_{0};
-#endif
 
   private:
     void setThreadName(const std::string& kName);
     void assemblePkt(int32_t proc_col, AlgoFunction::tstFrameBuffer* frame_buffer, uint16_t* dist, uint8_t* ref, int32_t surface_id);
-#ifdef ALGO_WRITE_FILE
-    void writeFileFunc(uint16_t* dist, uint8_t* ref, int x);
-#endif
     void algoFinalProcess(void);
     void algoProcess(int32_t task_id);
     bool sendEnoughData(int32_t col);

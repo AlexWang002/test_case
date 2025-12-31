@@ -34,7 +34,7 @@
         }
     },
     "RobosenseLidar" : {
-        "ENABLE_MIPI_CRC": true,
+        "ENABLE_MIPI_CRC": false,
         "INNER_PARAM_PATH": "/osdata/satelite/lidar/",
         "LOG_CONFIG_FILE": "/applog/lidar/rs_lidar_sdk.log",
         "PARSE_INNER_PARAM_BIN": true,
@@ -43,33 +43,21 @@
         "THREADS": [
             {
                 "id": 1,
-                "policy": "SCHED_FIFO",
-                "priority": 40,
-                "cpu_affinity": [2]
+                "policy": "SCHED_RR",
+                "priority": 2,
+                "cpu_affinity": [0, 1, 2, 3, 8, 9, 10, 11]
             },
             {
                 "id": 2,
-                "policy": "SCHED_FIFO",
-                "priority": 40,
-                "cpu_affinity": [3]
+                "policy": "SCHED_RR",
+                "priority": 2,
+                "cpu_affinity": [0, 1, 2, 3, 8, 9, 10, 11]
             },
             {
                 "id": 3,
-                "policy": "SCHED_FIFO",
-                "priority": 35,
-                "cpu_affinity": [5]
-            },
-            {
-                "id": 4,
-                "policy": "SCHED_FIFO",
-                "priority": 35,
-                "cpu_affinity": [5]
-            },
-            {
-                "id": 5,
-                "policy": "SCHED_FIFO",
-                "priority": 35,
-                "cpu_affinity": [6]
+                "policy": "SCHED_RR",
+                "priority": 1,
+                "cpu_affinity": [0, 1, 2, 3, 8, 9, 10, 11]
             }
         ],
         "ALGORITHM": {
@@ -77,7 +65,7 @@
             "ENABLE_DENOISE": true,
             "ENABLE_STRAY": true,
             "ENABLE_SPRAY": true,
-            "ENABLE_DELETE": false
+            "ENABLE_DELETE": true
         }
     }
 }

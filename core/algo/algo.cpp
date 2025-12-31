@@ -435,8 +435,7 @@ void AlgoFunction::algoInit()
  */
 void AlgoFunction::algoFrameChange(void)
 {
-    rear3 = -1; //杂散1
-    rear4 = -1; //杂散2
+
 }
 
 /**
@@ -464,19 +463,19 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
         std::string exception_msg;
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
-        uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
+        uint32_t submit_time, wait_time;
 
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
             auto time_start = std::chrono::steady_clock::now();
-            ret = denoiseProcPva(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
+            ret = denoiseProcPva(exception_msg, status_code, submit_time, wait_time);
             auto time_end = std::chrono::steady_clock::now();
             auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
                     LogInfo("[algo1] {}us.", time_duration.count());
-                    LogInfo("[algo1] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
-                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
+                    LogInfo("[algo1] submit {}us, wait {}us.",
+                                    submit_time, wait_time);
                 }
 
                 break;
@@ -529,19 +528,19 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
         std::string exception_msg;
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
-        uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
+        uint32_t submit_time, wait_time;
 
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
             auto time_start = std::chrono::steady_clock::now();
-            ret = trail_main(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
+            ret = trail_main(exception_msg, status_code, submit_time, wait_time);
             auto time_end = std::chrono::steady_clock::now();
             auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
                     LogInfo("[algo2] {}us.", time_duration.count());
-                    LogInfo("[algo2] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
-                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
+                    LogInfo("[algo2] submit {}us, wait {}us.",
+                                    submit_time, wait_time);
                 }
 
                 break;
@@ -581,31 +580,8 @@ void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
     cnt = (cnt + 1) % 10;
 
     if (algo_Param.StrayRemoveOn) {
-        for (int col_idx = 0; col_idx < VIEW_W + max_data_size; col_idx ++) {
-            circularCalcIdx(rear4, buffer_size_stray);
-
-            int stray_col_in = col_idx - StrayInDelayCol;
-            if (stray_col_in >= 0 && stray_col_in < VIEW_W){
-                memcpy(dist_wave0_buffer4[rear4], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(dist_wave1_buffer4[rear4], pstFrameBuffer->dist1[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(grnd_wave0_buffer4[rear4], pstFrameBuffer->gnd_mark0[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(grnd_wave1_buffer4[rear4], pstFrameBuffer->gnd_mark1[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(high_wave0_buffer4[rear4], pstFrameBuffer->high0[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                memcpy(high_wave1_buffer4[rear4], pstFrameBuffer->high1[stray_col_in], sizeof(uint16_t) * VIEW_H);
-            }
-            else {
-                //超过最大列，帧间buffer补0
-                memset(dist_wave0_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-                memset(dist_wave1_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-                memset(grnd_wave0_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-                memset(grnd_wave1_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-                memset(high_wave0_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-                memset(high_wave1_buffer4[rear4], 0, sizeof(uint16_t) * VIEW_H);
-            }
-            int stray_col = stray_col_in - StrayDelayCol;
-            int stray_col_buffer = matlabMod(rear4 + 1 - StrayDelayCol - 1, buffer_size_stray);
-
-            gndHeightCalc(stray_col, stray_col_buffer);
+        for (int col_idx = 0; col_idx < VIEW_W; col_idx ++) {
+            gndHeightCalc(col_idx, pstFrameBuffer);
         }
 
         //拷贝计算好的标签及部分原始数据到pva host buffer
@@ -629,21 +605,21 @@ void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
         std::string exception_msg;
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
-        uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
+        uint32_t submit_time, wait_time;
 
         //提交杂散删除pva任务（若失败，则进行提交重试）
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
             auto time_start = std::chrono::steady_clock::now();
-            ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code, 
-                                stage1, stage2, stage3, stage4, submit_time, wait_time);
+            ret = strayProcPva(RainWall_in.cnt, RainWall_in.dist, exception_msg, status_code,
+                                submit_time, wait_time);
             auto time_end = std::chrono::steady_clock::now();
             auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
                     LogInfo("[algo4] {}us.", time_duration.count());
-                    LogInfo("[algo4] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
-                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
+                    LogInfo("[algo4] submit {}us, wait {}us.",
+                                    submit_time, wait_time);
                 }
                 break;
             }
@@ -683,7 +659,7 @@ void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
  * @param[in] stray_col_buffer stray buffer column index
  *                  Range: 0 - 2. Accuracy: 1.
  */
-void AlgoFunction::gndHeightCalc(int col_idx, int stray_col_buffer) {
+void AlgoFunction::gndHeightCalc(int col_idx, tstFrameBuffer* pstFrameBuffer) {
     if(col_idx < 0 || col_idx >= VIEW_W){
         return;
     }
@@ -704,16 +680,23 @@ void AlgoFunction::gndHeightCalc(int col_idx, int stray_col_buffer) {
         int gnd_dist_max = 0;
         int gnd_row_farest = 0;
 
+        uint16_t* dist0 = pstFrameBuffer->dist0[col_idx];
+        uint16_t* dist1 = pstFrameBuffer->dist1[col_idx];
+        uint16_t* grnd0 = pstFrameBuffer->gnd_mark0[col_idx];
+        uint16_t* grnd1 = pstFrameBuffer->gnd_mark1[col_idx];
+        int16_t* high0 = pstFrameBuffer->high0[col_idx];
+        int16_t* high1 = pstFrameBuffer->high1[col_idx];
+
         for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
             // 获取当前行数据
-            int dist_cur = dist_wave0_buffer4[stray_col_buffer][row_idx];
-            int dist_cur2 = dist_wave1_buffer4[stray_col_buffer][row_idx];
+            int dist_cur = dist0[row_idx];
+            int dist_cur2 = dist1[row_idx];
 
-            int gnd_cur = grnd_wave0_buffer4[stray_col_buffer][row_idx];
-            int gnd_cur2 = grnd_wave1_buffer4[stray_col_buffer][row_idx];
+            int gnd_cur = grnd0[row_idx];
+            int gnd_cur2 = grnd1[row_idx];
 
-            int height_cur = high_wave0_buffer4[stray_col_buffer][row_idx];
-            int height_cur2 = high_wave1_buffer4[stray_col_buffer][row_idx];
+            int height_cur = high0[row_idx];
+            int height_cur2 = high1[row_idx];
 
             uint16_t gnd_seg = dist_cur >> 9;
             if (gnd_seg >= 28) gnd_seg = 27;
@@ -791,7 +774,7 @@ void AlgoFunction::gndHeightCalc(int col_idx, int stray_col_buffer) {
  * @param[in] stray_col_buffer stray buffer column index
  *                  Range: 0 - 2. Accuracy: 1.
  */
-void AlgoFunction::strayDelete(int col_idx, int stray_col_buffer) {
+void AlgoFunction::strayDelete(int col_idx, tstFrameBuffer* pstFrameBuffer) {
     if(col_idx < 0 || col_idx >= VIEW_W){
         return;
     }
@@ -882,22 +865,29 @@ void AlgoFunction::strayDelete(int col_idx, int stray_col_buffer) {
         stray_chain_height[2] = 0;
 
         // =============== 前级信息计算 ===============
+        uint16_t* dist0 = pstFrameBuffer->dist0[col_idx];
+        uint16_t* dist1 = pstFrameBuffer->dist1[col_idx];
+        uint16_t* att0 = pstFrameBuffer->att0[col_idx];
+        uint16_t* att1 = pstFrameBuffer->att1[col_idx];
+        int16_t* high0 = pstFrameBuffer->high0[col_idx];
+        int16_t* high1 = pstFrameBuffer->high1[col_idx];
+
         for (int row_idx = 0; row_idx < VIEW_H; ++row_idx) {
             // 获取当前行数据
-            int dist_cur = dist_wave0_buffer3[stray_col_buffer][row_idx];
-            int dist_cur2 = dist_wave1_buffer3[stray_col_buffer][row_idx];
+            int dist_cur = dist0[row_idx];
+            int dist_cur2 = dist1[row_idx];
 
             int row_idx_up = std::max(0, row_idx - 1);
-            int dist_up = dist_wave0_buffer3[stray_col_buffer][row_idx_up];
-            int dist_up2 = dist_wave1_buffer3[stray_col_buffer][row_idx_up];
+            int dist_up = dist0[row_idx_up];
+            int dist_up2 = dist1[row_idx_up];
 
-            int crosstalk_cur = crtk_wave0_buffer3[stray_col_buffer][row_idx];
-            int crosstalk_cur2 = crtk_wave1_buffer3[stray_col_buffer][row_idx];
-            int crosstalk_up = crtk_wave0_buffer3[stray_col_buffer][row_idx_up];
-            int crosstalk_up2 = crtk_wave1_buffer3[stray_col_buffer][row_idx_up];
+            int crosstalk_cur = att0[row_idx] & 0x1;
+            int crosstalk_cur2 = att1[row_idx] & 0x1;
+            int crosstalk_up = att0[row_idx_up] & 0x1;
+            int crosstalk_up2 = att1[row_idx_up] & 0x1;
 
-            int height_cur = high_wave0_buffer3[stray_col_buffer][row_idx];
-            int height_cur2 = high_wave1_buffer3[stray_col_buffer][row_idx];
+            int height_cur = high0[row_idx];
+            int height_cur2 = high1[row_idx];
 
             bool save_flag_col = false;
 
@@ -1172,17 +1162,19 @@ void AlgoFunction::strayDelete(int col_idx, int stray_col_buffer) {
  *                  Range: 0 - 759. Accuracy: 1.
  */
 
-void AlgoFunction::sprayRemoveCpu(tstFrameBuffer* pstFrameBuffer, int32_t col_idx)
+void AlgoFunction::sprayRemoveCpu(int32_t col_idx, tstFrameBuffer* pstFrameBuffer)
 {
+    uint16_t* dist_cur0 = pstFrameBuffer->dist0[col_idx];
+    uint16_t* dist_cur1 = pstFrameBuffer->dist1[col_idx];
     for (int row_idx = 0; row_idx < VIEW_H; row_idx++){
         // 第一回波数据
-        int cur_dist_1 = pstFrameBuffer->dist0[col_idx][row_idx];
-        int cur_dist_2 = pstFrameBuffer->dist1[col_idx][row_idx];
+        int cur_dist_1 = dist_cur0[row_idx];
+        int cur_dist_2 = dist_cur1[row_idx];
 
         /******************接地保护*******************/
         int zone_idx = row_idx / 12;
-        if (row_idx % 12 == 0) //12个通道一个采样
-        {
+        //12个通道一个采样
+        if (row_idx % 12 == 0) {
             spray_Param.dist_cap_zone[zone_idx][0] = cur_dist_1;
             spray_Param.dist_cap_zone[zone_idx][1] = cur_dist_2;
 
@@ -1191,24 +1183,20 @@ void AlgoFunction::sprayRemoveCpu(tstFrameBuffer* pstFrameBuffer, int32_t col_id
                 ((std::abs(spray_Param.dist_cap_zone[zone_idx][0] - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix &&
                 spray_Param.dist_cap_zone[zone_idx - 1][0]) ||
                 (std::abs(spray_Param.dist_cap_zone[zone_idx][0] - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix &&
-                spray_Param.dist_cap_zone[zone_idx - 1][1])))
-            {
+                spray_Param.dist_cap_zone[zone_idx - 1][1]))) {
                 spray_Param.ground_cap_zone[zone_idx][0] = 1;
             }
-            else
-            {
+            else {
                 spray_Param.ground_cap_zone[zone_idx][0] = 0;
             }
 
             //接地判别(第二回波)
             if (zone_idx > 0 && spray_Param.ground_cap_zone[zone_idx - 1][1] &&
                 ((std::abs(spray_Param.dist_cap_zone[zone_idx][1] - spray_Param.dist_cap_zone[zone_idx - 1][0]) <= spray_Param.dist_diff_thr_fix && spray_Param.dist_cap_zone[zone_idx - 1][0]) ||
-                (std::abs(spray_Param.dist_cap_zone[zone_idx][1] - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.dist_cap_zone[zone_idx - 1][1])))
-            {
+                (std::abs(spray_Param.dist_cap_zone[zone_idx][1] - spray_Param.dist_cap_zone[zone_idx - 1][1]) <= spray_Param.dist_diff_thr_fix && spray_Param.dist_cap_zone[zone_idx - 1][1]))){
                 spray_Param.ground_cap_zone[zone_idx][1] = 1;
             }
-            else
-            {
+            else {
                 spray_Param.ground_cap_zone[zone_idx][1] = 0;
             }
         }
@@ -1286,20 +1274,20 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
         std::string exception_msg;
         int32_t status_code;
         int ret = 0, retry_cnt = 0;
-        uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
+        uint32_t submit_time, wait_time;
 
         //提交spray remove pva任务
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
             auto time_start2 = std::chrono::steady_clock::now();
-            ret = sprayRemovePva(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
+            ret = sprayRemovePva(exception_msg, status_code, submit_time, wait_time);
             auto time_end2 = std::chrono::steady_clock::now();
             auto time_duration2 = std::chrono::duration_cast<std::chrono::microseconds>(time_end2 - time_start2);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
                     LogInfo("[algo5.1] {}us.", time_duration2.count());
-                    LogInfo("[algo5.1] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
-                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
+                    LogInfo("[algo5.1] submit {}us, wait {}us.",
+                                    submit_time, wait_time);
                 }
 
                 break;
@@ -1321,15 +1309,15 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
         //提交rain enhance pva任务
         for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
             auto time_start3 = std::chrono::steady_clock::now();
-            ret = rainEnhancePva(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
+            ret = rainEnhancePva(exception_msg, status_code, submit_time, wait_time);
             auto time_end3 = std::chrono::steady_clock::now();
             auto time_duration3 = std::chrono::duration_cast<std::chrono::microseconds>(time_end3 - time_start3);
 
             if (ret == 0) {
                 if (this->algo_delay_switch_ && cnt == 0) {
                     LogInfo("[algo5.2] {}us.", time_duration3.count());
-                    LogInfo("[algo5.2] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
-                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
+                    LogInfo("[algo5.2] submit {}us, wait {}us.",
+                                    submit_time, wait_time);
                 }
                 break;
             }
@@ -1391,19 +1379,19 @@ void AlgoFunction::highcalcExec(tstFrameBuffer* pstFrameBuffer)
     std::string exception_msg;
     int32_t status_code;
     int ret = 0, retry_cnt = 0;
-    uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
+    uint32_t submit_time, wait_time;
 
     for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
         auto time_start = std::chrono::steady_clock::now();
-        ret = highcalcPva(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
+        ret = highcalcPva(exception_msg, status_code, submit_time, wait_time);
         auto time_end = std::chrono::steady_clock::now();
         auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
         if (ret == 0) {
             if (this->algo_delay_switch_ && cnt == 0) {
                 LogInfo("[algo3] {}us.", time_duration.count());
-                LogInfo("[algo3] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
-                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
+                LogInfo("[algo3] submit {}us, wait {}us.",
+                                    submit_time, wait_time);
             }
 
             break;
@@ -1437,22 +1425,22 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
     std::string exception_msg;
     int32_t status_code;
     int ret = 0, retry_cnt = 0;
-    uint32_t stage1, stage2, stage3, stage4, submit_time, wait_time;
+    uint32_t submit_time, wait_time;
     static int cnt{0};
 
     cnt = (cnt + 1) % 10;
 
     for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
         auto time_start = std::chrono::steady_clock::now();
-        ret = upsample_main(exception_msg, status_code, stage1, stage2, stage3, stage4, submit_time, wait_time);
+        ret = upsample_main(exception_msg, status_code, submit_time, wait_time);
         auto time_end = std::chrono::steady_clock::now();
         auto time_duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start);
 
         if (ret == 0) {
             if (this->algo_delay_switch_ && cnt == 0) {
                 LogInfo("[algo6] {}us.", time_duration.count());
-                LogInfo("[algo6] stage1 {}us, stage2 {}us, stage3 {}us, stage4 {}us, submit {}us, wait {}us.", 
-                                    stage1, stage2, stage3, stage4, submit_time, wait_time);
+                LogInfo("[algo6] submit {}us, wait {}us.",
+                                    submit_time, wait_time);
             }
 
             break;
@@ -1485,140 +1473,94 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
  * @return int process column of point cloud
  *                  Range: 0 - 759. Accuracy: 1.
  */
-int AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer, int task_id)
+void AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer)
 {
-    int proc_col = -1;
-    switch (task_id)
-    {
-        case GROUND_FIT:
-        {
-            static bool first{true};
+    static bool first{true};
 
-            if (first) {
-                pid_t tid = gettid();
-                utils::addThread(tid, "Ground_Fit");
-                first = false;
-                strayBufferAlloc();
-            }
+    if (first) {
+        first = false;
+        strayBufferAlloc();
+    }
 
-            if(col_idx < 0 || col_idx >= VIEW_W) {
-                return proc_col;
-            }
+    if(col_idx < 0 || col_idx >= VIEW_W) {
+        return;
+    }
 
-            int surface_id = pstFrameBuffer->surface_id.load();
-            int real_col;
-            int org_high0;
-            int org_high1;
-            int fit_ground_high0;
-            int fit_ground_high1;
-            const float a = fit_Params.a;
-            const float b = fit_Params.b;
-            const float c = fit_Params.c;
-            uint16_t* dist0 = &pstFrameBuffer->dist0[col_idx][0];
-            uint16_t* dist1 = &pstFrameBuffer->dist1[col_idx][0];
-            int16_t* high0 = &pstFrameBuffer->high0[col_idx][0];
-            int16_t* high1 = &pstFrameBuffer->high1[col_idx][0];
-            uint16_t* proj_dist0 = &pstFrameBuffer->proj_dist0[col_idx][0];
-            uint16_t* proj_dist1 = &pstFrameBuffer->proj_dist1[col_idx][0];
+    int surface_id = pstFrameBuffer->surface_id.load();
+    int real_col;
+    int org_high0;
+    int org_high1;
+    int fit_ground_high0;
+    int fit_ground_high1;
+    const float a = fit_Params.a;
+    const float b = fit_Params.b;
+    const float c = fit_Params.c;
+    uint16_t* dist0 = &pstFrameBuffer->dist0[col_idx][0];
+    uint16_t* dist1 = &pstFrameBuffer->dist1[col_idx][0];
+    int16_t* high0 = &pstFrameBuffer->high0[col_idx][0];
+    int16_t* high1 = &pstFrameBuffer->high1[col_idx][0];
+    uint16_t* proj_dist0 = &pstFrameBuffer->proj_dist0[col_idx][0];
+    uint16_t* proj_dist1 = &pstFrameBuffer->proj_dist1[col_idx][0];
 
-            if(0 == surface_id) {
-                real_col = (col_idx << 1);
-            } else {
-                real_col = UP_VIEW_W - (col_idx << 1) - 1;
-            }
+    if(0 == surface_id) {
+        real_col = (col_idx << 1);
+    } else {
+        real_col = UP_VIEW_W - (col_idx << 1) - 1;
+    }
 
-            for (int i = 0; i < VIEW_H; ++i) {
-                int dist_val0 = dist0[i];
-                int dist_val1 = dist1[i];
-                int Ix_val = Ix_in[i][real_col];
-                int Iy_val = Iy_in[i][real_col];
-                int Iz_val = Iz_in[i][real_col];
+    for (int i = 0; i < VIEW_H; ++i) {
+        int dist_val0 = dist0[i];
+        int dist_val1 = dist1[i];
+        int Ix_val = Ix_in[i][real_col];
+        int Iy_val = Iy_in[i][real_col];
+        int Iz_val = Iz_in[i][real_col];
 
-                org_high0 = (dist_val0 * Iz_val) >> 15;
-                org_high1 = (dist_val1 * Iz_val) >> 15;
-                fit_ground_high0 = std::floor((float)dist_val0 *
-                    (a * Ix_val / 32768.0 + b * Iy_val / 32768.0) + c);
-                fit_ground_high1 = std::floor((float)dist_val1 *
-                    (a * Ix_val / 32768.0 + b * Iy_val / 32768.0) + c);
-                high0[i] = org_high0 - fit_ground_high0;
-                high1[i] = org_high1 - fit_ground_high1;
-                proj_dist0[i] = (dist_val0 * cosd_pitch_lut[i]) >> 15;
-                proj_dist1[i] = (dist_val1 * cosd_pitch_lut[i]) >> 15;
-            }
+        org_high0 = (dist_val0 * Iz_val) >> 15;
+        org_high1 = (dist_val1 * Iz_val) >> 15;
+        fit_ground_high0 = std::floor((float)dist_val0 *
+            (a * Ix_val / 32768.0 + b * Iy_val / 32768.0) + c);
+        fit_ground_high1 = std::floor((float)dist_val1 *
+            (a * Ix_val / 32768.0 + b * Iy_val / 32768.0) + c);
+        high0[i] = org_high0 - fit_ground_high0;
+        high1[i] = org_high1 - fit_ground_high1;
+        proj_dist0[i] = (dist_val0 * cosd_pitch_lut[i]) >> 15;
+        proj_dist1[i] = (dist_val1 * cosd_pitch_lut[i]) >> 15;
+    }
 
-            //杂散删除杂散标签预处理
-            if (algo_Param.StrayRemoveOn) {
-                circularCalcIdx(rear3, buffer_size_stray);
+    //杂散删除杂散标签预处理
+    if (algo_Param.StrayRemoveOn) {
+        //杂散删除 初始化输出
+        if(0 == col_idx){
+            memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
+            RainWall_out = {0, 0, 0};
+        }
 
-                int stray_col_in = col_idx - StrayInDelayCol;
-                if (stray_col_in >= 0 && stray_col_in < VIEW_W){
-                    memcpy(dist_wave0_buffer3[rear3], pstFrameBuffer->dist0[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                    memcpy(dist_wave1_buffer3[rear3], pstFrameBuffer->dist1[stray_col_in], sizeof(uint16_t) * VIEW_H);
-                    memcpy(high_wave0_buffer3[rear3], pstFrameBuffer->high0[stray_col_in], sizeof(int16_t) * VIEW_H);
-                    memcpy(high_wave1_buffer3[rear3], pstFrameBuffer->high1[stray_col_in], sizeof(int16_t) * VIEW_H);
-                    for(int i = 0; i < VIEW_H; ++i){
-                        uint16_t att0 = pstFrameBuffer->att0[stray_col_in][i];
-                        uint16_t att1 = pstFrameBuffer->att1[stray_col_in][i];
-                        crtk_wave0_buffer3[rear3][i] = att0 & 0x01;
-                        crtk_wave1_buffer3[rear3][i] = att1 & 0x01;
-                    }
-                }
-                else {
-                    //超过最大列，帧间buffer补0
-                    memset(dist_wave0_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-                    memset(dist_wave1_buffer3[rear3], 0, sizeof(uint16_t) * VIEW_H);
-                    memset(high_wave0_buffer3[rear3], 0, sizeof(int16_t) * VIEW_H);
-                    memset(high_wave1_buffer3[rear3], 0, sizeof(int16_t) * VIEW_H);
-                    memset(crtk_wave0_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                    memset(crtk_wave1_buffer3[rear3], 0, sizeof(uint8_t) * VIEW_H);
-                }
-                int stray_col = stray_col_in - StrayDelayCol;
-                int stray_col_buffer = matlabMod(rear3 + 1 - StrayDelayCol - 1, buffer_size_stray);
-                int stray_col_neib_buf[3];
-                for (int i = 0; i < 3; i++) {
-                    stray_col_neib_buf[i] = matlabMod((stray_col_buffer + 1 - 1 + i) - 1, buffer_size_stray);
-                }
-                int stray_mark_out0[VIEW_H] = { 0 };
-                int stray_mark_out1[VIEW_H] = { 0 };
+        //在CPU端计算杂散相关的标签
+        strayDelete(col_idx, pstFrameBuffer);
+    }
 
-                //杂散删除 初始化输出
-                if(0 == col_idx){
-                    memcpy(&RainWall_in, &RainWall_out, sizeof(RainWall_out));
-                    RainWall_out = {0, 0, 0};
-                }
+    if (algo_Param.SprayRemoveOn) {
+        sprayRemoveCpu(col_idx, pstFrameBuffer);
+    }
 
-                //在CPU端计算杂散相关的标签
-                strayDelete(stray_col, stray_col_buffer);
-            }
+    // 地面拟合
+    if((col_idx % gnd_step) == 0){
+        uint16_t dist_line[VIEW_H];
+        uint16_t col_pos = col_idx / gnd_step;
+        memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
 
-            if (algo_Param.SprayRemoveOn) {
-                sprayRemoveCpu(pstFrameBuffer, col_idx);
-            }
-
-            // 地面拟合
-            if((col_idx % gnd_step) == 0){
-                uint16_t dist_line[VIEW_H];
-                uint16_t col_pos = col_idx / gnd_step;
-                memcpy(dist_line, pstFrameBuffer->dist0[col_idx], sizeof(uint16_t) * VIEW_H);
-
-                for(int row = 0; row < VIEW_H; ++row){
-                    int idx = row * GND_VIEW_W + col_pos;
-                    dist_wave0_buffer6[idx] = dist_line[row];
-                    int dist = dist_line[row];
-                    X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
-                    Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
-                    Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
-                }
-                if(col_idx == (VIEW_W - gnd_step)){
-                    selectGroundFitFunc(best_model_fit);
-                }
-            }
-        }break;
-        default:
-        break;
-    };
-
-    return proc_col;
+        for(int row = 0; row < VIEW_H; ++row){
+            int idx = row * GND_VIEW_W + col_pos;
+            dist_wave0_buffer6[idx] = dist_line[row];
+            int dist = dist_line[row];
+            X_buffer6[idx] = dist * Ix_in[row][real_col] / 32768.0f;
+            Y_buffer6[idx] = dist * Iy_in[row][real_col] / 32768.0f;
+            Z_buffer6[idx] = dist * Iz_in[row][real_col] / 32768.0f;
+        }
+        if(col_idx == (VIEW_W - gnd_step)){
+            selectGroundFitFunc(best_model_fit);
+        }
+    }
 }
 
 }   // namespace lidar

@@ -65,6 +65,110 @@ Stream upsample_stream;
 namespace {
     InsertParam_t Up_param = DEFAULT_UP_PARAM;
 }
+
+Executable& getUpsampleExec() {
+    static Executable upsample_exec = Executable::Create(
+        PVA_EXECUTABLE_DATA(upsample_dev),
+        PVA_EXECUTABLE_SIZE(upsample_dev)
+    );
+    return upsample_exec;
+}
+
+CmdProgram& getUpsampleProg() {
+    static CmdProgram upsample_prog = CmdProgram::Create(getUpsampleExec());
+    return upsample_prog;
+}
+
+// Executable upsample_exec = Executable::Create(PVA_EXECUTABLE_DATA(upsample_dev),
+//                                         PVA_EXECUTABLE_SIZE(upsample_dev));
+
+// CmdProgram upsample_prog = CmdProgram::Create(upsample_exec);
+
+int pvaUpsampleCompile()
+{
+    try
+    {
+        CmdProgram& upsample_prog = getUpsampleProg();
+        upsample_prog["algorithmParams"].set((int *)&Up_param, sizeof(InsertParam_t));
+
+        RasterDataFlow &InputDistDataFlow    = upsample_prog.addDataFlowHead<RasterDataFlow>();
+        auto InputDistDataFlowHandler        = upsample_prog["InputDistDataFlowHandler"];
+        uint16_t *inputDistBufferVMEM        = upsample_prog["inputDistBufferVMEM"].ptr<uint16_t>();
+        InputDistDataFlow.handler(InputDistDataFlowHandler)
+            .src(DistDownIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(inputDistBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT)
+            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
+
+        RasterDataFlow &InputDistRawDataFlow = upsample_prog.addDataFlowHead<RasterDataFlow>();
+        auto InputDistRawDataFlowHandler     = upsample_prog["InputDistRawDataFlowHandler"];
+        uint16_t *inputDistRawBufferVMEM     = upsample_prog["inputDistRawBufferVMEM"].ptr<uint16_t>();
+        InputDistRawDataFlow.handler(InputDistRawDataFlowHandler)
+            .src(DistRawIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(inputDistRawBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT);
+
+        RasterDataFlow &InputRefDataFlow     = upsample_prog.addDataFlowHead<RasterDataFlow>();
+        auto InputRefDataFlowHandler         = upsample_prog["InputRefDataFlowHandler"];
+        uint16_t *inputRefBufferVMEM         = upsample_prog["inputRefBufferVMEM"].ptr<uint16_t>();
+        InputRefDataFlow.handler(InputRefDataFlowHandler)
+            .src(RefDownIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(inputRefBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT)
+            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
+
+        RasterDataFlow &InputRefRawDataFlow  = upsample_prog.addDataFlowHead<RasterDataFlow>();
+        auto InputRefRawDataFlowHandler      = upsample_prog["InputRefRawDataFlowHandler"];
+        uint16_t *inputRefRawBufferVMEM      = upsample_prog["inputRefRawBufferVMEM"].ptr<uint16_t>();
+        InputRefRawDataFlow.handler(InputRefRawDataFlowHandler)
+            .src(RefRawIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(inputRefRawBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT);
+
+        RasterDataFlow &InputAttrDataFlow    = upsample_prog.addDataFlowHead<RasterDataFlow>();
+        auto InputAttrDataFlowHandler        = upsample_prog["InputAttrDataFlowHandler"];
+        uint16_t *inputAttrBufferVMEM        = upsample_prog["inputAttrBufferVMEM"].ptr<uint16_t>();
+        InputAttrDataFlow.handler(InputAttrDataFlowHandler)
+            .src(AttrIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(inputAttrBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT)
+            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
+
+        RasterDataFlow &OutputDistUpDataFlow = upsample_prog.addDataFlowHead<RasterDataFlow>();
+        auto OutputDistUpDataFlowHandler     = upsample_prog["OutputDistUpDataFlowHandler"];
+        uint16_t *outputDistUpBufferVMEM     = upsample_prog["outputDistUpBufferVMEM"].ptr<uint16_t>();
+        OutputDistUpDataFlow.handler(OutputDistUpDataFlowHandler)
+            .dst(DistOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(outputDistUpBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT);
+
+        RasterDataFlow &OutputRefUpDataFlow  = upsample_prog.addDataFlowHead<RasterDataFlow>();
+        auto OutputRefUpDataFlowHandler      = upsample_prog["OutputRefUpDataFlowHandler"];
+        uint16_t *outputRefUpBufferVMEM      = upsample_prog["outputRefUpBufferVMEM"].ptr<uint16_t>();
+        OutputRefUpDataFlow.handler(OutputRefUpDataFlowHandler)
+            .dst(RefOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(outputRefUpBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT);
+
+        RasterDataFlow &OutputAttrUpDataFlow = upsample_prog.addDataFlowHead<RasterDataFlow>();
+        auto OutputAttrDataFlowHandler       = upsample_prog["OutputAttrDataFlowHandler"];
+        uint16_t *outputAttrBufferVMEM       = upsample_prog["outputAttrBufferVMEM"].ptr<uint16_t>();
+        OutputAttrUpDataFlow.handler(OutputAttrDataFlowHandler)
+            .dst(AttrOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
+            .tileBuffer(outputAttrBufferVMEM)
+            .tile(VIEW_WIDTH, TILE_HEIGHT);
+
+        upsample_prog.compileDataFlows();
+    }
+    catch (cupva::Exception const &e)
+    {
+        std::cout << "Caught a cuPVA exception with message: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+
+}
+
 /**
  * \brief Allocate memory for upsample processing data structures
 */
@@ -94,6 +198,8 @@ void upsampleDataAlloc()
     AttrOutUp_d = (uint16_t *)mem::Alloc(VIEW_HEIGHT * VIEW_WIDTH * sizeof(uint16_t));
     AttrOutUp_h = (uint16_t *)mem::GetHostPointer(AttrOutUp_d);
     upsample_stream = Stream::Create(PVA0, VPU1);
+
+    pvaUpsampleCompile();
 }
 
 /**
@@ -120,115 +226,28 @@ void upsampleDataFree()
  * \param[in] status_code: column index of the buffer
  *                 Range: 0-2. Accuracy: 1.
 */
-int upsample_main(std::string& exception_msg, int32_t& status_code, 
-    uint32_t& stage1, uint32_t& stage2, uint32_t& stage3, uint32_t& stage4,
+int upsample_main(std::string& exception_msg, int32_t& status_code,
     uint32_t& submit_time, uint32_t& wait_time)
 {
     try
     {
-        auto time1 = std::chrono::steady_clock::now();
-
-        Executable exec = Executable::Create(PVA_EXECUTABLE_DATA(upsample_dev),
-                                             PVA_EXECUTABLE_SIZE(upsample_dev));
-
-        CmdProgram prog = CmdProgram::Create(exec);
-
-        auto time2 = std::chrono::steady_clock::now();
-
-        prog["algorithmParams"].set((int *)&Up_param, sizeof(InsertParam_t));
-
-        RasterDataFlow &InputDistDataFlow    = prog.addDataFlowHead<RasterDataFlow>();
-        auto InputDistDataFlowHandler        = prog["InputDistDataFlowHandler"];
-        uint16_t *inputDistBufferVMEM        = prog["inputDistBufferVMEM"].ptr<uint16_t>();
-        InputDistDataFlow.handler(InputDistDataFlowHandler)
-            .src(DistDownIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(inputDistBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT)
-            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
-
-        RasterDataFlow &InputDistRawDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto InputDistRawDataFlowHandler     = prog["InputDistRawDataFlowHandler"];
-        uint16_t *inputDistRawBufferVMEM     = prog["inputDistRawBufferVMEM"].ptr<uint16_t>();
-        InputDistRawDataFlow.handler(InputDistRawDataFlowHandler)
-            .src(DistRawIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(inputDistRawBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT);
-
-        RasterDataFlow &InputRefDataFlow     = prog.addDataFlowHead<RasterDataFlow>();
-        auto InputRefDataFlowHandler         = prog["InputRefDataFlowHandler"];
-        uint16_t *inputRefBufferVMEM         = prog["inputRefBufferVMEM"].ptr<uint16_t>();
-        InputRefDataFlow.handler(InputRefDataFlowHandler)
-            .src(RefDownIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(inputRefBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT)
-            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
-
-        RasterDataFlow &InputRefRawDataFlow  = prog.addDataFlowHead<RasterDataFlow>();
-        auto InputRefRawDataFlowHandler      = prog["InputRefRawDataFlowHandler"];
-        uint16_t *inputRefRawBufferVMEM      = prog["inputRefRawBufferVMEM"].ptr<uint16_t>();
-        InputRefRawDataFlow.handler(InputRefRawDataFlowHandler)
-            .src(RefRawIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(inputRefRawBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT);
-
-        RasterDataFlow &InputAttrDataFlow    = prog.addDataFlowHead<RasterDataFlow>();
-        auto InputAttrDataFlowHandler        = prog["InputAttrDataFlowHandler"];
-        uint16_t *inputAttrBufferVMEM        = prog["inputAttrBufferVMEM"].ptr<uint16_t>();
-        InputAttrDataFlow.handler(InputAttrDataFlowHandler)
-            .src(AttrIn_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(inputAttrBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT)
-            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
-
-        RasterDataFlow &OutputDistUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto OutputDistUpDataFlowHandler     = prog["OutputDistUpDataFlowHandler"];
-        uint16_t *outputDistUpBufferVMEM     = prog["outputDistUpBufferVMEM"].ptr<uint16_t>();
-        OutputDistUpDataFlow.handler(OutputDistUpDataFlowHandler)
-            .dst(DistOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(outputDistUpBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT);
-
-        RasterDataFlow &OutputRefUpDataFlow  = prog.addDataFlowHead<RasterDataFlow>();
-        auto OutputRefUpDataFlowHandler      = prog["OutputRefUpDataFlowHandler"];
-        uint16_t *outputRefUpBufferVMEM      = prog["outputRefUpBufferVMEM"].ptr<uint16_t>();
-        OutputRefUpDataFlow.handler(OutputRefUpDataFlowHandler)
-            .dst(RefOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(outputRefUpBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT);
-
-        RasterDataFlow &OutputAttrUpDataFlow = prog.addDataFlowHead<RasterDataFlow>();
-        auto OutputAttrDataFlowHandler       = prog["OutputAttrDataFlowHandler"];
-        uint16_t *outputAttrBufferVMEM       = prog["outputAttrBufferVMEM"].ptr<uint16_t>();
-        OutputAttrUpDataFlow.handler(OutputAttrDataFlowHandler)
-            .dst(AttrOutUp_d, VIEW_WIDTH, VIEW_HEIGHT, VIEW_WIDTH)
-            .tileBuffer(outputAttrBufferVMEM)
-            .tile(VIEW_WIDTH, TILE_HEIGHT);
-
-        auto time3 = std::chrono::steady_clock::now();
-        
-        prog.compileDataFlows();
-
-        auto time4 = std::chrono::steady_clock::now();
+        CmdProgram& upsample_prog = getUpsampleProg();
 
         SyncObj sync = SyncObj::Create();
         Fence fence{sync};
         CmdRequestFences rf{fence};
         CmdStatus status[2];
-        
+
         auto time5 = std::chrono::steady_clock::now();
 
-        upsample_stream.submit({&prog, &rf}, status);
-        
+        upsample_stream.submit({&upsample_prog, &rf}, status);
+
         auto time6 = std::chrono::steady_clock::now();
 
         fence.wait(); // upsample task timeout: 3.5ms
-        
+
         auto time7 = std::chrono::steady_clock::now();
 
-        stage1 = std::chrono::duration_cast<std::chrono::microseconds>(time2 - time1).count();
-        stage2 = std::chrono::duration_cast<std::chrono::microseconds>(time3 - time2).count();
-        stage3 = std::chrono::duration_cast<std::chrono::microseconds>(time4 - time3).count();
-        stage4 = std::chrono::duration_cast<std::chrono::microseconds>(time5 - time4).count();
         submit_time = std::chrono::duration_cast<std::chrono::microseconds>(time6 - time5).count();
         wait_time = std::chrono::duration_cast<std::chrono::microseconds>(time7 - time6).count();
 

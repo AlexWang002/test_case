@@ -31,11 +31,11 @@ VMEM(A, uint16_t, inputDistBufferVMEM0,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
 VMEM(A, uint16_t, inputDistBufferVMEM1,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
-VMEM(A, uint16_t, inputHighBufferVMEM0,
+VMEM(B, uint16_t, inputHighBufferVMEM0,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
 VMEM(B, uint16_t, inputHighBufferVMEM1,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
-VMEM(B, uint16_t, inputProjDistBufferVMEM0,
+VMEM(C, uint16_t, inputProjDistBufferVMEM0,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
 VMEM(C, uint16_t, inputProjDistBufferVMEM1,
     RDF_DOUBLE(uint16_t, TILE_WIDTH, TILE_HEIGHT, KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT));
@@ -291,13 +291,13 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
         dvshortx near_down_2 = (dist1[2] > 0) & (dist0[3] - dist1[2] > 0) & (dist0[3] - dist1[2] <= dist_diff_th);
 
         // 平面判断
-        dvshortx flat_flag11 = ((dvabsdif(z0[4], z0[3]) << 1) <= dvabsdif(x0[4], x0[3])) & 
+        dvshortx flat_flag11 = ((dvabsdif(z0[4], z0[3]) << 1) <= dvabsdif(x0[4], x0[3])) &
                                 ((dvabsdif(z0[2], z0[3]) << 1) <= dvabsdif(x0[2], x0[3]));
-        dvshortx flat_flag12 = ((dvabsdif(z0[4], z0[3]) << 1) <= dvabsdif(x0[4], x0[3])) & 
+        dvshortx flat_flag12 = ((dvabsdif(z0[4], z0[3]) << 1) <= dvabsdif(x0[4], x0[3])) &
                                 ((dvabsdif(z1[2], z0[3]) << 1) <= dvabsdif(x1[2], x0[3]));
-        dvshortx flat_flag21 = ((dvabsdif(z1[4], z0[3]) << 1) <= dvabsdif(x1[4], x0[3])) & 
+        dvshortx flat_flag21 = ((dvabsdif(z1[4], z0[3]) << 1) <= dvabsdif(x1[4], x0[3])) &
                                 ((dvabsdif(z0[2], z0[3]) << 1) <= dvabsdif(x0[2], x0[3]));
-        dvshortx flat_flag22 = ((dvabsdif(z1[4], z0[3]) << 1) <= dvabsdif(x1[4], x0[3])) & 
+        dvshortx flat_flag22 = ((dvabsdif(z1[4], z0[3]) << 1) <= dvabsdif(x1[4], x0[3])) &
                                 ((dvabsdif(z1[2], z0[3]) << 1) <= dvabsdif(x1[2], x0[3]));
 
         // 角度判断
@@ -316,13 +316,13 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
         near_down_1 = (dist0[2] > 0) & (dist1[3] - dist0[2] > 0) & (dist1[3] - dist0[2] <= dist_diff_th);
         near_down_2 = (dist1[2] > 0) & (dist1[3] - dist1[2] > 0) & (dist1[3] - dist1[2] <= dist_diff_th);
         // 平面判断
-        flat_flag11 = ((dvabsdif(z0[4], z1[3]) << 1) <= dvabsdif(x0[4], x1[3])) & 
+        flat_flag11 = ((dvabsdif(z0[4], z1[3]) << 1) <= dvabsdif(x0[4], x1[3])) &
                        ((dvabsdif(z0[2], z1[3]) << 1) <= dvabsdif(x0[2], x1[3]));
-        flat_flag12 = ((dvabsdif(z0[4], z1[3]) << 1) <= dvabsdif(x0[4], x1[3])) & 
+        flat_flag12 = ((dvabsdif(z0[4], z1[3]) << 1) <= dvabsdif(x0[4], x1[3])) &
                        ((dvabsdif(z1[2], z1[3]) << 1) <= dvabsdif(x1[2], x1[3]));
-        flat_flag21 = ((dvabsdif(z1[4], z1[3]) << 1) <= dvabsdif(x1[4], x1[3])) & 
+        flat_flag21 = ((dvabsdif(z1[4], z1[3]) << 1) <= dvabsdif(x1[4], x1[3])) &
                        ((dvabsdif(z0[2], z1[3]) << 1) <= dvabsdif(x0[2], x1[3]));
-        flat_flag22 = ((dvabsdif(z1[4], z1[3]) << 1) <= dvabsdif(x1[4], x1[3])) & 
+        flat_flag22 = ((dvabsdif(z1[4], z1[3]) << 1) <= dvabsdif(x1[4], x1[3])) &
                        ((dvabsdif(z1[2], z1[3]) << 1) <= dvabsdif(x1[2], x1[3]));
         // 角度判断
         angle_flag11 = dvabsdif(z0[4] + z0[2], (z1[3] << 1)) <= delta_z_th;
@@ -350,13 +350,13 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
         near_down_2 = (dist1[0] > 0) & (dist0[1] - dist1[0] > 0) & (dist0[1] - dist1[0] <= dist_diff_th);
 
         // 平面判断
-        flat_flag11 = ((dvabsdif(z0[2], z0[1]) << 1) <= dvabsdif(x0[2], x0[1])) & 
+        flat_flag11 = ((dvabsdif(z0[2], z0[1]) << 1) <= dvabsdif(x0[2], x0[1])) &
                        ((dvabsdif(z0[0], z0[1]) << 1) <= dvabsdif(x0[0], x0[1]));
-        flat_flag12 = ((dvabsdif(z0[2], z0[1]) << 1) <= dvabsdif(x0[2], x0[1])) & 
+        flat_flag12 = ((dvabsdif(z0[2], z0[1]) << 1) <= dvabsdif(x0[2], x0[1])) &
                        ((dvabsdif(z1[0], z0[1]) << 1) <= dvabsdif(x1[0], x0[1]));
-        flat_flag21 = ((dvabsdif(z1[2], z0[1]) << 1) <= dvabsdif(x1[2], x0[1])) & 
+        flat_flag21 = ((dvabsdif(z1[2], z0[1]) << 1) <= dvabsdif(x1[2], x0[1])) &
                        ((dvabsdif(z0[0], z0[1]) << 1) <= dvabsdif(x0[0], x0[1]));
-        flat_flag22 = ((dvabsdif(z1[2], z0[1]) << 1) <= dvabsdif(x1[2], x0[1])) & 
+        flat_flag22 = ((dvabsdif(z1[2], z0[1]) << 1) <= dvabsdif(x1[2], x0[1])) &
                        ((dvabsdif(z1[0], z0[1]) << 1) <= dvabsdif(x1[0], x0[1]));
 
         // 角度判断
@@ -381,13 +381,13 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
         near_down_2 = (dist1[0] > 0) & (dist1[1] - dist1[0] > 0) & (dist1[1] - dist1[0] <= dist_diff_th);
 
         // 平面判断
-        flat_flag11 = ((dvabsdif(z0[2], z1[1]) << 1) <= dvabsdif(x0[2], x1[1])) & 
+        flat_flag11 = ((dvabsdif(z0[2], z1[1]) << 1) <= dvabsdif(x0[2], x1[1])) &
                        ((dvabsdif(z0[0], z1[1]) << 1) <= dvabsdif(x0[0], x1[1]));
-        flat_flag12 = ((dvabsdif(z0[2], z1[1]) << 1) <= dvabsdif(x0[2], x1[1])) & 
+        flat_flag12 = ((dvabsdif(z0[2], z1[1]) << 1) <= dvabsdif(x0[2], x1[1])) &
                        ((dvabsdif(z1[0], z1[1]) << 1) <= dvabsdif(x1[0], x1[1]));
-        flat_flag21 = ((dvabsdif(z1[2], z1[1]) << 1) <= dvabsdif(x1[2], x1[1])) & 
+        flat_flag21 = ((dvabsdif(z1[2], z1[1]) << 1) <= dvabsdif(x1[2], x1[1])) &
                        ((dvabsdif(z0[0], z1[1]) << 1) <= dvabsdif(x0[0], x1[1]));
-        flat_flag22 = ((dvabsdif(z1[2], z1[1]) << 1) <= dvabsdif(x1[2], x1[1])) & 
+        flat_flag22 = ((dvabsdif(z1[2], z1[1]) << 1) <= dvabsdif(x1[2], x1[1])) &
                        ((dvabsdif(z1[0], z1[1]) << 1) <= dvabsdif(x1[0], x1[1]));
 
         // 角度判断
@@ -417,13 +417,13 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
         near_down_2 = (dist1[1] > 0) & (dist0[2] - dist1[1] > 0) & (dist0[2] - dist1[1] <= dist_diff_th);
 
         // 平面判断
-        flat_flag11 = ((dvabsdif(z0[3], z0[2]) << 1) <= dvabsdif(x0[3], x0[2])) & 
+        flat_flag11 = ((dvabsdif(z0[3], z0[2]) << 1) <= dvabsdif(x0[3], x0[2])) &
                    ((dvabsdif(z0[1], z0[2]) << 1) <= dvabsdif(x0[1], x0[2]));
-        flat_flag12 = ((dvabsdif(z0[3], z0[2]) << 1) <= dvabsdif(x0[3], x0[2])) & 
+        flat_flag12 = ((dvabsdif(z0[3], z0[2]) << 1) <= dvabsdif(x0[3], x0[2])) &
                    ((dvabsdif(z1[1], z0[2]) << 1) <= dvabsdif(x1[1], x0[2]));
-        flat_flag21 = ((dvabsdif(z1[3], z0[2]) << 1) <= dvabsdif(x1[3], x0[2])) & 
+        flat_flag21 = ((dvabsdif(z1[3], z0[2]) << 1) <= dvabsdif(x1[3], x0[2])) &
                    ((dvabsdif(z0[1], z0[2]) << 1) <= dvabsdif(x0[1], x0[2]));
-        flat_flag22 = ((dvabsdif(z1[3], z0[2]) << 1) <= dvabsdif(x1[3], x0[2])) & 
+        flat_flag22 = ((dvabsdif(z1[3], z0[2]) << 1) <= dvabsdif(x1[3], x0[2])) &
                    ((dvabsdif(z1[1], z0[2]) << 1) <= dvabsdif(x1[1], x0[2]));
 
         // 角度判断
@@ -446,13 +446,13 @@ void highcalcRemoveExec(HighcalcConfig_t *config) {
         near_down_2 = (dist1[1] > 0) & (dist1[2] - dist1[1] > 0) & (dist1[2] - dist1[1] <= dist_diff_th);
 
         // 平面判断
-        flat_flag11 = ((dvabsdif(z0[3], z1[2]) << 1) <= dvabsdif(x0[3], x1[2])) & 
+        flat_flag11 = ((dvabsdif(z0[3], z1[2]) << 1) <= dvabsdif(x0[3], x1[2])) &
                     ((dvabsdif(z0[1], z1[2]) << 1) <= dvabsdif(x0[1], x1[2]));
-        flat_flag12 = ((dvabsdif(z0[3], z1[2]) << 1) <= dvabsdif(x0[3], x1[2])) & 
+        flat_flag12 = ((dvabsdif(z0[3], z1[2]) << 1) <= dvabsdif(x0[3], x1[2])) &
                     ((dvabsdif(z1[1], z1[2]) << 1) <= dvabsdif(x1[1], x1[2]));
-        flat_flag21 = ((dvabsdif(z1[3], z1[2]) << 1) <= dvabsdif(x1[3], x1[2])) & 
+        flat_flag21 = ((dvabsdif(z1[3], z1[2]) << 1) <= dvabsdif(x1[3], x1[2])) &
                     ((dvabsdif(z0[1], z1[2]) << 1) <= dvabsdif(x0[1], x1[2]));
-        flat_flag22 = ((dvabsdif(z1[3], z1[2]) << 1) <= dvabsdif(x1[3], x1[2])) & 
+        flat_flag22 = ((dvabsdif(z1[3], z1[2]) << 1) <= dvabsdif(x1[3], x1[2])) &
                     ((dvabsdif(z1[1], z1[2]) << 1) <= dvabsdif(x1[1], x1[2]));
 
         // 角度判断

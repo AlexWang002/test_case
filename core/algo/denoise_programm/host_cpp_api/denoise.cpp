@@ -51,6 +51,60 @@ namespace {
     NoiseParam_t NoiseParams = DEFAULT_DENOISE_PARAM;
 }
 
+// Executable denoise_exec = Executable::Create(PVA_EXECUTABLE_DATA(denoise_dev),
+//                                         PVA_EXECUTABLE_SIZE(denoise_dev));
+
+// CmdProgram denoise_prog = CmdProgram::Create(denoise_exec);
+
+Executable& getDenoiseExec() {
+    static Executable denoise_exec = Executable::Create(
+        PVA_EXECUTABLE_DATA(denoise_dev),
+        PVA_EXECUTABLE_SIZE(denoise_dev)
+    );
+    return denoise_exec;
+}
+
+CmdProgram& getDenoiseProg() {
+    static CmdProgram denoise_prog = CmdProgram::Create(getDenoiseExec());
+    return denoise_prog;
+}
+
+int pvaDenoiseCompile()
+{
+    try
+    {
+        CmdProgram& denoise_prog = getDenoiseProg();
+        denoise_prog["algorithmParams"].set((int *)&NoiseParams, sizeof(NoiseParam_t));
+
+        RasterDataFlow &DistDataflow = denoise_prog.addDataFlowHead<RasterDataFlow>();
+        auto DistHandler             = denoise_prog["DistHandler"];
+        uint16_t *DistBuffer         = denoise_prog["DistBuffer"].ptr<uint16_t>();
+
+        DistDataflow.handler(DistHandler)
+                            .src(denoise_dist_buffer_d, TILE_WIDTH, VIEW_HEIGHT, TILE_WIDTH)
+                            .tileBuffer(DistBuffer)
+                            .tile(TILE_WIDTH, TILE_HEIGHT)
+                            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
+
+        RasterDataFlow &MaskDataflow = denoise_prog.addDataFlowHead<RasterDataFlow>();
+        auto MaskHandler             = denoise_prog["MaskHandler"];
+        uint16_t *MaskBuffer         = denoise_prog["MaskBuffer"].ptr<uint16_t>();
+
+        MaskDataflow.handler(MaskHandler)
+                            .dst(denoise_mask_buffer_d, TILE_WIDTH, VIEW_HEIGHT, TILE_WIDTH)
+                            .tileBuffer(MaskBuffer)
+                            .tile(TILE_WIDTH, TILE_HEIGHT);
+
+        denoise_prog.compileDataFlows();
+    }
+    catch (cupva::Exception const &e)
+    {
+        std::cout << "Caught a cuPVA exception with message: " << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+
 /**
  * \brief Alloc memory for denoise processing data structures
 */
@@ -65,6 +119,8 @@ int denoiseDataAlloc()
         denoise_mask_buffer_h = (uint16_t *)mem::GetHostPointer(denoise_mask_buffer_d);
 
         denoise_stream = Stream::Create(PVA0, VPU1);
+
+        pvaDenoiseCompile();
     }
     catch (cupva::Exception const &e)
     {
@@ -101,67 +157,28 @@ int denoiseDataFree()
  * \param[in] status_code: column index of the buffer
  *                 Range: 0-2. Accuracy: 1.
 */
-int denoiseProcPva(std::string& exception_msg, int32_t& status_code, 
-    uint32_t& stage1, uint32_t& stage2, uint32_t& stage3, uint32_t& stage4,
+int denoiseProcPva(std::string& exception_msg, int32_t& status_code,
     uint32_t& submit_time, uint32_t& wait_time)
 {
     try
     {
-        auto time1 = std::chrono::steady_clock::now();
-
-        Executable exec = Executable::Create(PVA_EXECUTABLE_DATA(denoise_dev),
-                                             PVA_EXECUTABLE_SIZE(denoise_dev));
-
-        CmdProgram prog = CmdProgram::Create(exec);
-
-        auto time2 = std::chrono::steady_clock::now();
-
-        prog["algorithmParams"].set((int *)&NoiseParams, sizeof(NoiseParam_t));
-
-        RasterDataFlow &DistDataflow = prog.addDataFlowHead<RasterDataFlow>();
-        auto DistHandler             = prog["DistHandler"];
-        uint16_t *DistBuffer         = prog["DistBuffer"].ptr<uint16_t>();
-
-        DistDataflow.handler(DistHandler)
-                            .src(denoise_dist_buffer_d, TILE_WIDTH, VIEW_HEIGHT, TILE_WIDTH)
-                            .tileBuffer(DistBuffer)
-                            .tile(TILE_WIDTH, TILE_HEIGHT)
-                            .halo(KERNEL_RADIUS_WIDTH, KERNEL_RADIUS_HEIGHT);
-
-        RasterDataFlow &MaskDataflow = prog.addDataFlowHead<RasterDataFlow>();
-        auto MaskHandler             = prog["MaskHandler"];
-        uint16_t *MaskBuffer         = prog["MaskBuffer"].ptr<uint16_t>();
-
-        MaskDataflow.handler(MaskHandler)
-                            .dst(denoise_mask_buffer_d, TILE_WIDTH, VIEW_HEIGHT, TILE_WIDTH)
-                            .tileBuffer(MaskBuffer)
-                            .tile(TILE_WIDTH, TILE_HEIGHT);
-        
-        auto time3 = std::chrono::steady_clock::now();
-
-        prog.compileDataFlows();
-
-        auto time4 = std::chrono::steady_clock::now();
+        CmdProgram& denoise_prog = getDenoiseProg();
 
         SyncObj sync = SyncObj::Create();
         Fence fence{sync};
         CmdRequestFences rf{fence};
         CmdStatus status[2];
-        
+
         auto time5 = std::chrono::steady_clock::now();
-        
-        denoise_stream.submit({&prog, &rf}, status);
-        
+
+        denoise_stream.submit({&denoise_prog, &rf}, status);
+
         auto time6 = std::chrono::steady_clock::now();
-        
+
         fence.wait(); // denoise task timeout: 2.5 ms
-        
+
         auto time7 = std::chrono::steady_clock::now();
 
-        stage1 = std::chrono::duration_cast<std::chrono::microseconds>(time2 - time1).count();
-        stage2 = std::chrono::duration_cast<std::chrono::microseconds>(time3 - time2).count();
-        stage3 = std::chrono::duration_cast<std::chrono::microseconds>(time4 - time3).count();
-        stage4 = std::chrono::duration_cast<std::chrono::microseconds>(time5 - time4).count();
         submit_time = std::chrono::duration_cast<std::chrono::microseconds>(time6 - time5).count();
         wait_time = std::chrono::duration_cast<std::chrono::microseconds>(time7 - time6).count();
 
