@@ -989,6 +989,16 @@ int main(int argc, char* argv[]) {
             lidar_interface->deInit();
             return -1;
         }
+        uint8_t data[2] {0};
+        uint16_t data_len {0};
+        uint8_t nrc {0xFFU};
+
+        lidar_interface->readDid(0x1112U, data, &data_len, &nrc);
+        std::cout << std::hex << std::setw(4) << "data: 0x" << *(uint16_t*)data
+                  << std::dec << ", dec: " << *(uint16_t*)data
+                  << ", data_len: " << data_len << ", nrc: " << (uint16_t)nrc
+                  << std::endl;
+
         while (true) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }

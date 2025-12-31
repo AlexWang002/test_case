@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <netinet/in.h>
 #include <sys/syscall.h>
 
 /******************************************************************************/
@@ -222,13 +223,6 @@ RSLidarSdkImpl::~RSLidarSdkImpl() {
  * \return The version of the Lidar SDK.
  */
 const char* RSLidarSdkImpl::getLidarSdkVersion() {
-    LogInfo("*********************************");
-    LogInfo("Description of this version:");
-    // LogInfo("1.delete MIPI sync queue");
-    // LogInfo("2.delete msop packet loss detect");
-    // LogInfo("3.change the MSOP[] to MSOP*[]");
-    // LogInfo("4.delete cpu cache flush");
-    LogInfo("*********************************");
     return kRSLidarSdkVersionStr.c_str();
 }
 
@@ -708,7 +702,7 @@ LidarSdkErrorCode RSLidarSdkImpl::writeDid(uint16_t did, uint8_t* data, uint16_t
  * \retval LidarSdkErrorCode::LIDAR_SDK_FAILD: Did reading failed.
  */
 LidarSdkErrorCode RSLidarSdkImpl::readDid(uint16_t did, uint8_t* data, uint16_t* dataLen, uint8_t* nrc) {
-    static const uint16_t READ_SDK_VERSION_DID = 0x1112U;
+    static const uint16_t kReadSdkVersionDID = 0x1112U;
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!is_started_.load(std::memory_order_seq_cst)) {
@@ -722,11 +716,19 @@ LidarSdkErrorCode RSLidarSdkImpl::readDid(uint16_t did, uint8_t* data, uint16_t*
     }
 
     // 实现DID读取逻辑
-    if (READ_SDK_VERSION_DID == did) {
-        (void)std::memcpy(data, &kSdkVersionEncoded, sizeof(kSdkVersionEncoded));
-        *dataLen = sizeof(kSdkVersionEncoded);
+    if (kReadSdkVersionDID == did) {
+        if (kSdkVersionEncoded > 0xFFFFU) {
+            LogError("[ReadDID] SDK version is 0x{:x}, more than 2 bytes", kSdkVersionEncoded);
+        } else {
+            LogInfo("[ReadDID] SDK version is 0x{:x}", kSdkVersionEncoded);
+        }
+        uint16_t sdk_version = htons(static_cast<uint16_t>(kSdkVersionEncoded));
+
+        (void)std::memcpy(data, &sdk_version, sizeof(sdk_version));
+        *dataLen = sizeof(sdk_version);
         *nrc = static_cast<uint8_t>(POSITIVE);
     } else {
+        LogError("Unknow DID number: 0x{:x}", did);
         *dataLen = 0;
         *nrc = static_cast<uint8_t>(REQUEST_SEQUENCE_ERROR);
     }
