@@ -118,6 +118,13 @@ void CloudManager::start(void)
 
     LogInfo("Algo process start! Version:{}.{}.{}",std::to_string(ALGO_VERSION_MAJOR),
         std::to_string(ALGO_VERSION_MINOR) ,std::to_string(ALGO_VERSION_PATCH));
+#ifdef ALGO_REINJ
+    if (!processed_file_.is_open()) {
+        processed_file_.open("process_point_cloud.bin",
+                                std::ios::binary | std::ios::out | std::ios::app);
+        printf("process_point_cloud is opened for write \n");
+    }
+#endif
 }
 
 /**
@@ -136,7 +143,12 @@ bool CloudManager::stop(void)
             thread.join();
         }
     }
-
+#ifdef ALGO_REINJ
+    if (processed_file_.is_open()) {
+        processed_file_.close();
+        printf("process_point_cloud is closed \n");
+    }
+#endif
     return true;
 }
 
@@ -223,15 +235,21 @@ void CloudManager::algoProcess(int32_t task_id)
                                         const bool stray1 = stray_mask_out1[row_idx];
                                         const bool spray0 = spray_mask_out0[row_idx];
                                         const bool spray1 = spray_mask_out1[row_idx];
-                                        const int attr0 = (trail != 0 || denoise != 1) ? 0 : Attrwave0[row_idx];
+                                        const int attr0 = Attrwave0[row_idx];
                                         const int attr1 = Attrwave1[row_idx];
 
                                         Attrwave0[row_idx] = (attr0 & 0x7E) + stray0;
                                         Attrwave1[row_idx] = (attr1 & 0x7E) + stray1;
 
+                                        if(!denoise)
+                                        {
+                                            Distwave0[row_idx] = 0;
+                                            Refwave0[row_idx] = 0;
+                                        }
+
                                         if (algo_func_.algo_Param.DeleteOn) {
-                                            const bool wave0_del_flag = stray0 || spray0 || trail || !denoise;
-                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail && denoise;
+                                            const bool wave0_del_flag = stray0 || spray0 || trail;
+                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail;
                                             // 情况1: 两回波均无效点
                                             if (wave0_del_flag && !wave1_sel_flag) {
                                                 Distwave0[row_idx] = 0;
@@ -245,8 +263,8 @@ void CloudManager::algoProcess(int32_t task_id)
                                                 Attrwave0[row_idx] = Attrwave1[row_idx];
                                             }
                                         } else {
-                                            const bool wave0_del_flag = stray0 || trail || !denoise;
-                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail && denoise;
+                                            const bool wave0_del_flag = stray0 || trail;
+                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail;
                                             // 情况1: 两回波均无效点
                                             if (wave0_del_flag && !wave1_sel_flag) {
                                                 Distwave0[row_idx] = 0;
@@ -284,6 +302,31 @@ void CloudManager::algoProcess(int32_t task_id)
                                 memset(&RefOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
                                 memset(&AttrOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
 
+                                auto assemblePkt = [this](auto* cloud_p,
+                                                    const uint16_t* dist_p,
+                                                    const uint16_t* refl_p,
+                                                    const uint16_t* attr_p) {
+                                    
+                                #ifdef ALGO_REINJ
+                                    for (size_t i = 0; i < 192; ++i) {
+                                        cloud_p->pixels[i].raws[0].peak = (dist_p[i]);
+                                        cloud_p->pixels[i].raws[0].width = refl_p[i];
+                                        cloud_p->pixels[i].raws[1].peak = attr_p[i];
+                                    }
+                                    if (inj_frame_cnt_ < 10) {
+                                        if (processed_file_.is_open()) {
+                                            processed_file_.write(reinterpret_cast<const char*>(cloud_p), sizeof(RSEMXMsopPkt));
+                                        }
+                                    }
+                                #else
+                                    for (size_t i = 0; i < 192; ++i) {
+                                        cloud_p->pixels[i].waves[0].radius = htons(dist_p[i]);
+                                        cloud_p->pixels[i].waves[0].intensity = refl_p[i];
+                                        cloud_p->pixels[i].waves[0].attribute = attr_p[i];
+                                    }
+                                #endif
+                                };
+
                                 for (int32_t col = 0; col < algo_func_.VIEW_W; ++col) {
                                     int32_t surface_id = frame_buffer->surface_id.load();
                                     /** 拷贝上采样后的数据到dist和ref中 */
@@ -293,17 +336,9 @@ void CloudManager::algoProcess(int32_t task_id)
                                             int32_t index = frame_buffer->cloud_id[col * 2 + j];
                                             auto& cloud = proc_clouds_[index];
                                             if(j == 0){
-                                                for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                                    cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
-                                                    cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
-                                                    cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
-                                                }
+                                                assemblePkt(&cloud, dist_wave0[col], refl_wave0[col], attr_wave0[col]);
                                             } else {
-                                                for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                                    cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
-                                                    cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
-                                                    cloud.pixels[i].waves[0].attribute = AttrOutUp_h[offset + i];
-                                                }
+                                                assemblePkt(&cloud, &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
                                             }
                                             cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                                         }
@@ -311,57 +346,35 @@ void CloudManager::algoProcess(int32_t task_id)
                                         if(col == 0){
                                             int32_t index = frame_buffer->cloud_id[col];
                                             auto& cloud = proc_clouds_[index];
-                                            for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                                cloud.pixels[i].waves[0].radius = 0;
-                                                cloud.pixels[i].waves[0].intensity = 0;
-                                                cloud.pixels[i].waves[0].attribute = 0;
-                                            }
+                                            static const uint16_t zero_dist[algo_func_.VIEW_H] = {0};
+                                            static const uint16_t zero_refl[algo_func_.VIEW_H] = {0};
+                                            static const uint16_t zero_attr[algo_func_.VIEW_H] = {0};
+                                            assemblePkt(&cloud, zero_dist, zero_refl, zero_attr);
                                             cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
 
                                             for(int32_t j = 0; j < 2; ++j) {
                                                 int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
                                                 auto& cloud = proc_clouds_[index];
                                                 if(j == 0){
-                                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                                        cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
-                                                        cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
-                                                        cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
-                                                    }
+                                                    assemblePkt(&cloud, dist_wave0[col], refl_wave0[col], attr_wave0[col]);
                                                 } else {
-                                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                                        cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
-                                                        cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
-                                                        cloud.pixels[i].waves[0].attribute = AttrOutUp_h[offset + i];
-                                                    }
+                                                    assemblePkt(&cloud, &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
                                                 }
                                                 cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                                             }
                                         }else if(col == algo_func_.VIEW_W - 1){
                                             int32_t index = frame_buffer->cloud_id[2 * col + 1];
                                             auto& cloud = proc_clouds_[index];
-                                            int LastOffset = col * algo_func_.VIEW_H;
-                                            for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                                cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
-                                                cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
-                                                cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
-                                            }
+                                            assemblePkt(&cloud, dist_wave0[col], refl_wave0[col], attr_wave0[col]);
                                             cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                                         } else{
                                             for(int32_t j = 0; j < 2; ++j) {
                                                 int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
                                                 auto& cloud = proc_clouds_[index];
                                                 if(j == 0){
-                                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                                        cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
-                                                        cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
-                                                        cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
-                                                    }
+                                                    assemblePkt(&cloud, dist_wave0[col], refl_wave0[col], attr_wave0[col]);
                                                 } else {
-                                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                                        cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
-                                                        cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
-                                                        cloud.pixels[i].waves[0].attribute = AttrOutUp_h[offset + i];
-                                                    }
+                                                    assemblePkt(&cloud, &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
                                                 }
                                                 cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                                             }

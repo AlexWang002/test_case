@@ -35,6 +35,7 @@
 #include <condition_variable>
 #include <pthread.h>
 #include <sched.h>
+#include <fstream>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -51,7 +52,7 @@
 #define ALGO_VERSION_MAJOR 01
 #define ALGO_VERSION_MINOR 00
 #define ALGO_VERSION_PATCH 16
-
+#define ALGO_REINJ
 /******************************************************************************/
 /*                  Using namespace, type or template alias                   */
 /******************************************************************************/
@@ -99,6 +100,10 @@ class CloudManager
     std::atomic<bool> to_exit_handle_{false};
     std::function<void(const uint8_t* pkt, size_t size)> cb_send_;
     AlgoFunction algo_func_;
+#ifdef ALGO_REINJ
+    std::ofstream processed_file_;
+    int inj_frame_cnt_{0};
+#endif
 
   private:
     void setThreadName(const std::string& kName);
