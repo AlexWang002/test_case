@@ -65,7 +65,7 @@
             "ENABLE_DENOISE": true,
             "ENABLE_STRAY": true,
             "ENABLE_SPRAY": true,
-            "ENABLE_DELETE": true
+            "ENABLE_SPRAY_DELETE": true
         }
     }
 }

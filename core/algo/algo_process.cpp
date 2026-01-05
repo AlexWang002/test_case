@@ -247,7 +247,7 @@ void CloudManager::algoProcess(int32_t task_id)
                                             Refwave0[row_idx] = 0;
                                         }
 
-                                        if (algo_func_.algo_Param.DeleteOn) {
+                                        if (algo_func_.algo_Param.SprayDeleteOn) {
                                             const bool wave0_del_flag = stray0 || spray0 || trail;
                                             const bool wave1_sel_flag = !stray1 && !spray1 && !trail;
                                             // 情况1: 两回波均无效点
@@ -272,17 +272,17 @@ void CloudManager::algoProcess(int32_t task_id)
                                                 Attrwave0[row_idx] = 0;
                                             }
                                             // 情况2: 第一回波无效点，第二回波有效点
-                                            else if (wave0_del_flag && wave1_sel_flag) {
+                                            else if ((wave0_del_flag || spray0) && wave1_sel_flag) {
                                                 Distwave0[row_idx] = Distwave1[row_idx];
                                                 Refwave0[row_idx] = Refwave1[row_idx];
-                                                Attrwave0[row_idx] = Attrwave1[row_idx];
+                                                Attrwave0[row_idx] = Attrwave1[row_idx] & 0x7F;
                                             }
                                             if(spray0 && !wave1_sel_flag)
                                             {
                                                 Attrwave0[row_idx] = ((spray0) << 7) + (Attrwave0[row_idx] & 0x7F);
                                             }
                                         }
-                                        Attrwave0[row_idx] &= 0xF7;
+                                        Attrwave0[row_idx] &= 0x91;
                                     }
                                 }
 
@@ -306,7 +306,7 @@ void CloudManager::algoProcess(int32_t task_id)
                                                     const uint16_t* dist_p,
                                                     const uint16_t* refl_p,
                                                     const uint16_t* attr_p) {
-                                    
+
                                 #ifdef ALGO_REINJ
                                     for (size_t i = 0; i < 192; ++i) {
                                         cloud_p->pixels[i].raws[0].peak = (dist_p[i]);

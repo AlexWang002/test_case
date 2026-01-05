@@ -415,7 +415,7 @@ void AlgoFunction::algoInit()
         algo_Param.DenoiseOn = json_reader::algo_switch.enable_denoise;
         algo_Param.StrayRemoveOn = json_reader::algo_switch.enable_stray;
         algo_Param.SprayRemoveOn = json_reader::algo_switch.enable_spray;
-        algo_Param.DeleteOn = json_reader::algo_switch.enable_delete;
+        algo_Param.SprayDeleteOn = json_reader::algo_switch.enable_delete;
     } else {
         LogWarn(__FILE__, __LINE__, __func__, "Algorithm switch read from json file FAILED, Using default switch.");
     }
