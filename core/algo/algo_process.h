@@ -52,7 +52,7 @@
 #define ALGO_VERSION_MAJOR 01
 #define ALGO_VERSION_MINOR 00
 #define ALGO_VERSION_PATCH 16
-#define ALGO_REINJ
+
 /******************************************************************************/
 /*                  Using namespace, type or template alias                   */
 /******************************************************************************/
@@ -89,8 +89,8 @@ class CloudManager
     // 存储原始的点云
     RSEMXMsopPkt proc_clouds_[kMaxCloudNum_];
     std::atomic<int32_t> proc_cloud_idx_{0};
-    
     // 使用状态跟踪
+
     AlgoFunction::tstFrameBuffer frame_buffer_[ALGO_FRM_BUF_SIZE];
     std::atomic<int32_t> recv_buffer_idx_{0};
     std::atomic<int32_t> proc_buffer_idx_{0};

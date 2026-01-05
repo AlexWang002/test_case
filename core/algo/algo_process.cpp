@@ -164,7 +164,7 @@ void CloudManager::algoProcess(int32_t task_id)
         pid_t tid = gettid();
         utils::addThread(tid, "algorithm");
         /*线程启动时在DRAM中为pva申请算法所需内存*/
-        static bool first{true};
+        thread_local bool first{true};
         if (first) {
             first = false;
             upsampleDataAlloc();
@@ -418,7 +418,6 @@ void CloudManager::algoProcess(int32_t task_id)
         FaultManager8::getInstance().setFault(FaultBits8::LidarThreadCrash);
     }
 }
-
 
 /**
  * \brief Receive point cloud data packets and process.

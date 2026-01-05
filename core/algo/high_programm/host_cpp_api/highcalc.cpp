@@ -70,7 +70,7 @@ namespace
 // CmdProgram highcalc_prog = CmdProgram::Create(highcalc_exec);
 
 Executable& getHighcalcExec() {
-    static Executable highcalc_exec = Executable::Create(
+    thread_local Executable highcalc_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(highcalc_dev),
         PVA_EXECUTABLE_SIZE(highcalc_dev)
     );
@@ -78,7 +78,7 @@ Executable& getHighcalcExec() {
 }
 
 CmdProgram& getHighcalcProg() {
-    static CmdProgram highcalc_prog = CmdProgram::Create(getHighcalcExec());
+    thread_local CmdProgram highcalc_prog = CmdProgram::Create(getHighcalcExec());
     return highcalc_prog;
 }
 

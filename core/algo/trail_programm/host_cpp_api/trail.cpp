@@ -56,7 +56,7 @@ namespace
 }
 
 Executable& getTrailExec() {
-    static Executable trail_exec = Executable::Create(
+    thread_local Executable trail_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(trail_dev),
         PVA_EXECUTABLE_SIZE(trail_dev)
     );
@@ -64,7 +64,7 @@ Executable& getTrailExec() {
 }
 
 CmdProgram& getTrailProg() {
-    static CmdProgram trail_prog = CmdProgram::Create(getTrailExec());
+    thread_local CmdProgram trail_prog = CmdProgram::Create(getTrailExec());
     return trail_prog;
 }
 

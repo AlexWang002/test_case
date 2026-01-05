@@ -45,7 +45,7 @@ Stream stray_stream;
 // CmdProgram stray_prog = CmdProgram::Create(stray_exec);
 
 Executable& getStrayExec() {
-    static Executable stray_exec = Executable::Create(
+    thread_local Executable stray_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(stray_dev),
         PVA_EXECUTABLE_SIZE(stray_dev)
     );
@@ -53,7 +53,7 @@ Executable& getStrayExec() {
 }
 
 CmdProgram& getStrayProg() {
-    static CmdProgram stray_prog = CmdProgram::Create(getStrayExec());
+    thread_local CmdProgram stray_prog = CmdProgram::Create(getStrayExec());
     return stray_prog;
 }
 

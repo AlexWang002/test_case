@@ -446,7 +446,7 @@ void AlgoFunction::algoFrameChange(void)
  */
 void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
 {
-    static bool first{true};
+    thread_local bool first{true};
     if (first) {
         first = false;
         denoiseDataAlloc();
@@ -513,7 +513,7 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
  */
 void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
 {
-    static bool first{true};
+    thread_local bool first{true};
     if (first) {
         first = false;
         TrailDataAlloc();
@@ -576,7 +576,7 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
  */
 void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
 {
-    static int cnt{0};
+    thread_local int cnt{0};
     cnt = (cnt + 1) % 10;
 
     if (algo_Param.StrayRemoveOn) {
@@ -1298,14 +1298,14 @@ void AlgoFunction::sprayRemoveCpu(int32_t col_idx, tstFrameBuffer* pstFrameBuffe
 
 void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
 {
-    static bool first{true};
+    thread_local bool first{true};
     if (first) {
         first = false;
         sprayDataAlloc();
     }
 
-    static int mark0_cnt{0}, mark1_cnt{0};
-    static int cnt{0};
+    thread_local int mark0_cnt{0}, mark1_cnt{0};
+    thread_local int cnt{0};
     cnt = (cnt + 1) % 10;
 
     if (algo_Param.SprayRemoveOn) {
@@ -1419,13 +1419,13 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
  */
 void AlgoFunction::highcalcExec(tstFrameBuffer* pstFrameBuffer)
 {
-    static bool first{true};
+    thread_local bool first{true};
     if (first) {
         first = false;
         highcalcDataAlloc();
     }
 
-    static int cnt{0};
+    thread_local int cnt{0};
     cnt = (cnt + 1) % 10;
 
     memcpy((uint8_t *)h_dist_in0_h, (uint8_t *)pstFrameBuffer->dist0[0], VIEW_H * VIEW_W * sizeof(uint16_t));
@@ -1533,7 +1533,7 @@ void AlgoFunction::upsampleExec(tstFrameBuffer* pstFrameBuffer)
  */
 void AlgoFunction::pcAlgoMainFunc(int col_idx, tstFrameBuffer* pstFrameBuffer)
 {
-    static bool first{true};
+    thread_local bool first{true};
 
     if (first) {
         first = false;

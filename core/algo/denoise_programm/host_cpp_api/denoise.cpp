@@ -57,7 +57,7 @@ namespace {
 // CmdProgram denoise_prog = CmdProgram::Create(denoise_exec);
 
 Executable& getDenoiseExec() {
-    static Executable denoise_exec = Executable::Create(
+    thread_local Executable denoise_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(denoise_dev),
         PVA_EXECUTABLE_SIZE(denoise_dev)
     );
@@ -65,7 +65,7 @@ Executable& getDenoiseExec() {
 }
 
 CmdProgram& getDenoiseProg() {
-    static CmdProgram denoise_prog = CmdProgram::Create(getDenoiseExec());
+    thread_local CmdProgram denoise_prog = CmdProgram::Create(getDenoiseExec());
     return denoise_prog;
 }
 
