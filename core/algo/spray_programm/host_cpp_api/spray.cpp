@@ -91,7 +91,7 @@ namespace
 // CmdProgram enhance_prog = CmdProgram::Create(enhance_exec);
 
 Executable& getSprayExec() {
-    static Executable spray_exec = Executable::Create(
+    thread_local Executable spray_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(spray_dev),
         PVA_EXECUTABLE_SIZE(spray_dev)
     );
@@ -99,12 +99,12 @@ Executable& getSprayExec() {
 }
 
 CmdProgram& getSprayProg() {
-    static CmdProgram spray_prog = CmdProgram::Create(getSprayExec());
+    thread_local CmdProgram spray_prog = CmdProgram::Create(getSprayExec());
     return spray_prog;
 }
 
 Executable& getEnhanceExec() {
-    static Executable enhance_exec = Executable::Create(
+    thread_local Executable enhance_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(enhance_dev),
         PVA_EXECUTABLE_SIZE(enhance_dev)
     );
@@ -112,7 +112,7 @@ Executable& getEnhanceExec() {
 }
 
 CmdProgram& getEnhanceProg() {
-    static CmdProgram enhance_prog = CmdProgram::Create(getEnhanceExec());
+    thread_local CmdProgram enhance_prog = CmdProgram::Create(getEnhanceExec());
     return enhance_prog;
 }
 

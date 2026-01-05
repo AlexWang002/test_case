@@ -67,7 +67,7 @@ namespace {
 }
 
 Executable& getUpsampleExec() {
-    static Executable upsample_exec = Executable::Create(
+    thread_local Executable upsample_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(upsample_dev),
         PVA_EXECUTABLE_SIZE(upsample_dev)
     );
@@ -75,7 +75,7 @@ Executable& getUpsampleExec() {
 }
 
 CmdProgram& getUpsampleProg() {
-    static CmdProgram upsample_prog = CmdProgram::Create(getUpsampleExec());
+    thread_local CmdProgram upsample_prog = CmdProgram::Create(getUpsampleExec());
     return upsample_prog;
 }
 
