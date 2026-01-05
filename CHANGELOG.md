@@ -10,6 +10,7 @@
 - 优化雨雾算法
 - 算法线程减少为1个，降低cpu负载
 - 更新json文件线程配置
+- json文件ENABLE_DELETE字段改为ENABLE_SPRAY_DELETE字段
 - 降低receiveCloud互斥锁使用频率
 
 ### Fix
