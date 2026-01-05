@@ -178,7 +178,7 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
             LogDebug("Obstruction detected, starting timer");
         } else {
             // 持续检测到遮挡，检查是否达到500ms
-            auto duration = utils::timeInterval(now, obstruct_start_time_);
+            auto duration = utils::timeInterval(obstruct_start_time_, now);
 
             if (duration >= obstruct_report_time_) {
                 LogWarn("Lidar Obstruction Fault persisted for 500ms, win_block_status:{}",
