@@ -237,9 +237,9 @@ void CloudManager::algoProcess(int32_t task_id)
                                         const bool spray1 = spray_mask_out1[row_idx];
                                         const int attr0 = Attrwave0[row_idx];
                                         const int attr1 = Attrwave1[row_idx];
-
-                                        Attrwave0[row_idx] = (attr0 & 0x7E) + stray0;
-                                        Attrwave1[row_idx] = (attr1 & 0x7E) + stray1;
+                                        
+                                        Attrwave0[row_idx] = (spray0 << 7) + (attr0 & 0x7E) + stray0;
+                                        Attrwave1[row_idx] = (spray1 << 7) + (attr1 & 0x7E) + stray1;
 
                                         if(!denoise)
                                         {
@@ -264,7 +264,8 @@ void CloudManager::algoProcess(int32_t task_id)
                                             }
                                         } else {
                                             const bool wave0_del_flag = stray0 || trail;
-                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail;
+                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail && (Distwave1[row_idx] != 0);
+
                                             // 情况1: 两回波均无效点
                                             if (wave0_del_flag && !wave1_sel_flag) {
                                                 Distwave0[row_idx] = 0;
@@ -275,22 +276,34 @@ void CloudManager::algoProcess(int32_t task_id)
                                             else if ((wave0_del_flag || spray0) && wave1_sel_flag) {
                                                 Distwave0[row_idx] = Distwave1[row_idx];
                                                 Refwave0[row_idx] = Refwave1[row_idx];
-                                                Attrwave0[row_idx] = Attrwave1[row_idx] & 0x7F;
+                                                Attrwave0[row_idx] = Attrwave1[row_idx];
                                             }
                                             if(spray0 && !wave1_sel_flag)
                                             {
-                                                Attrwave0[row_idx] = ((spray0) << 7) + (Attrwave0[row_idx] & 0x7F);
+                                                Attrwave0[row_idx] = ((spray0) << 7) + (Attrwave0[row_idx] & 0x7E) + stray0;
                                             }
                                         }
                                         Attrwave0[row_idx] &= 0x91;
                                     }
                                 }
-
-                                memcpy(DistDownIn_h, dist_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                                memcpy(DistRawIn_h, frame_buffer->dist0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                                memcpy(RefDownIn_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                                memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                                memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                
+                                int32_t surface_id = frame_buffer->surface_id.load();
+                                if(surface_id == 0)
+                                {
+                                    memcpy(DistDownIn_h, dist_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(DistRawIn_h, frame_buffer->dist0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(RefDownIn_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                }
+                                else
+                                {
+                                    memcpy(DistDownIn_h, dist_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(DistRawIn_h, frame_buffer->dist0_raw[1], sizeof(uint16_t) * (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H);
+                                    memcpy(RefDownIn_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(RefRawIn_h, frame_buffer->ref0_raw[1], sizeof(uint16_t) * (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H);
+                                    memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                }
                                 auto time_end1 = std::chrono::steady_clock::now();
                                 auto time_duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time_end1 - time_start1);
 
@@ -328,7 +341,7 @@ void CloudManager::algoProcess(int32_t task_id)
                                 };
 
                                 for (int32_t col = 0; col < algo_func_.VIEW_W; ++col) {
-                                    int32_t surface_id = frame_buffer->surface_id.load();
+                                    surface_id = frame_buffer->surface_id.load();
                                     /** 拷贝上采样后的数据到dist和ref中 */
                                     int offset = col * algo_func_.VIEW_H;
                                     if (0 == surface_id) {
