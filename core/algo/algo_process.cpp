@@ -381,6 +381,12 @@ void CloudManager::algoProcess(int32_t task_id)
                                         }
                                     }
                                 }
+                                #ifdef ALGO_REINJ
+                                if (inj_frame_cnt_ < 10) {                                
+                                    inj_frame_cnt_++;
+                                    printf("-----------------write frame = %d\n", inj_frame_cnt_);
+                                }
+                                #endif
                             }
                         }
 
