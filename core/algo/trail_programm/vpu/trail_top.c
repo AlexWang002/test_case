@@ -446,9 +446,9 @@ void trail_cond_draw_exec(TrailParam_t *trail_Param, DrawConfig_t *config)
             dvshortx dif_mid_distC    = mid_dist - center_dist;
             dvshortx dif_bottom_distC = bottom_dist - center_dist;
 
-            dvshortx dif_up_distC_abs     = dvmux(~up_pred, 65535, dvabsdif(up_dist, center_dist));
-            dvshortx dif_mid_distC_abs    = dvmux(~mid_pred, 65535, dvabsdif(mid_dist, center_dist));
-            dvshortx dif_bottom_distC_abs = dvmux(~bottom_pred, 65535, dvabsdif(bottom_dist, center_dist));
+            dvshortx dif_up_distC_abs     = dvmux(!up_pred, 65535, dvabsdif(up_dist, center_dist));
+            dvshortx dif_mid_distC_abs    = dvmux(!mid_pred, 65535, dvabsdif(mid_dist, center_dist));
+            dvshortx dif_bottom_distC_abs = dvmux(!bottom_pred, 65535, dvabsdif(bottom_dist, center_dist));
 
             dvshortx draw_bd_mask = (mid_pred) & (dif_mid_distC_abs > trail_Param->Draw_D_H);
             dvshortx near_mask = dif_mid_distC_abs < 100;
