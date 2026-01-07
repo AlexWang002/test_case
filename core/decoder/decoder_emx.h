@@ -169,13 +169,16 @@ class DecoderRSEMX : public Decoder {
     explicit DecoderRSEMX(const RSDecoderParam& param);
     virtual ~DecoderRSEMX() {};
 
-    virtual bool decodeMsopPkt(const uint8_t* pkt, size_t size) override;
+    virtual bool decodeMsopPkt(const uint8_t* packet_header, size_t size, 
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p) override;
     virtual bool decodeDifopPkt(const uint8_t* pkt, size_t size) override;
     virtual bool decodeDeviceInfoPkt(const uint8_t* pkt, size_t size) override;
     // bool decodeSdkMsopPkt(const uint8_t* packet, size_t size);
 
   private:
-    void setPacketHeader(const RSEMXMsopPkt& pkt);
+    void setPacketHeader(const RSEMXMsopHeader& header);
     void setPointCloudInfo(const RSEMXMsopPkt& pkt);
     std::array<int32_t, EMX_PIXELS_PER_COLUMN> yaw_offset_;
     std::array<int32_t, EMX_PIXELS_PER_COLUMN> pitch_angle_;

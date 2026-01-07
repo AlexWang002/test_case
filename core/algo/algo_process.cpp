@@ -85,7 +85,10 @@ void CloudManager::setThreadName(const std::string& kName)
  * \param[in] kCbSend : Msop send function
  *                Range: 0 - 2^32-1. Accuracy: 1.
  */
-void CloudManager::regCallback(const std::function<void(const uint8_t* pkt, size_t size)>& kCbSend)
+void CloudManager::regCallback(const std::function<void(const uint8_t* pkt, size_t size,
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p)>& kCbSend)
 {
     cb_send_ = kCbSend;
 }
@@ -315,31 +318,6 @@ void CloudManager::algoProcess(int32_t task_id)
                                 memset(&RefOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
                                 memset(&AttrOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
 
-                                auto assemblePkt = [this](auto* cloud_p,
-                                                    const uint16_t* dist_p,
-                                                    const uint16_t* refl_p,
-                                                    const uint16_t* attr_p) {
-
-                                #ifdef ALGO_REINJ
-                                    for (size_t i = 0; i < 192; ++i) {
-                                        cloud_p->pixels[i].raws[0].peak = (dist_p[i]);
-                                        cloud_p->pixels[i].raws[0].width = refl_p[i];
-                                        cloud_p->pixels[i].raws[1].peak = attr_p[i];
-                                    }
-                                    if (inj_frame_cnt_ < 10) {
-                                        if (processed_file_.is_open()) {
-                                            processed_file_.write(reinterpret_cast<const char*>(cloud_p), sizeof(RSEMXMsopPkt));
-                                        }
-                                    }
-                                #else
-                                    for (size_t i = 0; i < 192; ++i) {
-                                        cloud_p->pixels[i].waves[0].radius = htons(dist_p[i]);
-                                        cloud_p->pixels[i].waves[0].intensity = refl_p[i];
-                                        cloud_p->pixels[i].waves[0].attribute = attr_p[i];
-                                    }
-                                #endif
-                                };
-
                                 for (int32_t col = 0; col < algo_func_.VIEW_W; ++col) {
                                     surface_id = frame_buffer->surface_id.load();
                                     /** 拷贝上采样后的数据到dist和ref中 */
@@ -347,49 +325,52 @@ void CloudManager::algoProcess(int32_t task_id)
                                     if (0 == surface_id) {
                                         for(int32_t j = 0; j < 2; ++j) {
                                             int32_t index = frame_buffer->cloud_id[col * 2 + j];
-                                            auto& cloud = proc_clouds_[index];
+                                            auto& cloud_header = proc_clouds_[index];
                                             if(j == 0){
-                                                assemblePkt(&cloud, dist_wave0[col], refl_wave0[col], attr_wave0[col]);
+                                                cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                            dist_wave0[col], refl_wave0[col], attr_wave0[col]);
                                             } else {
-                                                assemblePkt(&cloud, &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
+                                                cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader),
+                                                            &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
                                             }
-                                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                                         }
                                     } else {
                                         if(col == 0){
                                             int32_t index = frame_buffer->cloud_id[col];
-                                            auto& cloud = proc_clouds_[index];
+                                            auto& cloud_header = proc_clouds_[index];
                                             static const uint16_t zero_dist[algo_func_.VIEW_H] = {0};
                                             static const uint16_t zero_refl[algo_func_.VIEW_H] = {0};
                                             static const uint16_t zero_attr[algo_func_.VIEW_H] = {0};
-                                            assemblePkt(&cloud, zero_dist, zero_refl, zero_attr);
-                                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
+                                            cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                        zero_dist, zero_refl, zero_attr);
 
                                             for(int32_t j = 0; j < 2; ++j) {
                                                 int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
-                                                auto& cloud = proc_clouds_[index];
+                                                auto& cloud_header = proc_clouds_[index];
                                                 if(j == 0){
-                                                    assemblePkt(&cloud, dist_wave0[col], refl_wave0[col], attr_wave0[col]);
+                                                    cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                                dist_wave0[col], refl_wave0[col], attr_wave0[col]);
                                                 } else {
-                                                    assemblePkt(&cloud, &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
+                                                    cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                                &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
                                                 }
-                                                cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                                             }
                                         }else if(col == algo_func_.VIEW_W - 1){
                                             int32_t index = frame_buffer->cloud_id[2 * col + 1];
-                                            auto& cloud = proc_clouds_[index];
-                                            assemblePkt(&cloud, dist_wave0[col], refl_wave0[col], attr_wave0[col]);
-                                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
+                                            auto& cloud_header = proc_clouds_[index];
+                                            cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                        dist_wave0[col], refl_wave0[col], attr_wave0[col]);
                                         } else{
                                             for(int32_t j = 0; j < 2; ++j) {
                                                 int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
-                                                auto& cloud = proc_clouds_[index];
+                                                auto& cloud_header = proc_clouds_[index];
                                                 if(j == 0){
-                                                    assemblePkt(&cloud, dist_wave0[col], refl_wave0[col], attr_wave0[col]);
+                                                    cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                                dist_wave0[col], refl_wave0[col], attr_wave0[col]);
                                                 } else {
-                                                    assemblePkt(&cloud, &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
+                                                    cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                                &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
                                                 }
-                                                cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
                                             }
                                         }
                                     }
@@ -536,7 +517,7 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
         do {
             new_val = (old_val + 1) % kMaxCloudNum_;
         } while (!proc_cloud_idx_.compare_exchange_weak(old_val, new_val));
-        proc_clouds_[proc_cloud_idx] = kRawData; // 将新的点云对象存储到正在处理的点云集合中
+        proc_clouds_[proc_cloud_idx] = kRawData.header; // 将新的点云对象存储到正在处理的点云集合中
         frame_buffer->cloud_id[pkt_cnt] = proc_cloud_idx;
 
         int32_t upsample_col = pkt_cnt >> 1;

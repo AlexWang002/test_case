@@ -87,7 +87,7 @@ class CloudManager
     int32_t last_pkt_recv_{0};
 
     // 存储原始的点云
-    RSEMXMsopPkt proc_clouds_[kMaxCloudNum_];
+    RSEMXMsopHeader proc_clouds_[kMaxCloudNum_];
     std::atomic<int32_t> proc_cloud_idx_{0};
     // 使用状态跟踪
 
@@ -98,7 +98,10 @@ class CloudManager
 
     std::vector<std::thread> algo_handle_threads_;
     std::atomic<bool> to_exit_handle_{false};
-    std::function<void(const uint8_t* pkt, size_t size)> cb_send_;
+    std::function<void(const uint8_t* pkt, size_t size, 
+                        const uint16_t* dist_p,
+                        const uint16_t* refl_p,
+                        const uint16_t* attr_p)> cb_send_;
     AlgoFunction algo_func_;
 #ifdef ALGO_REINJ
     std::ofstream processed_file_;
@@ -119,7 +122,10 @@ class CloudManager
     void start(void);
     bool stop(void);
     void receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size);
-    void regCallback(const std::function<void(const uint8_t* pkt, size_t size)>& kCbSend);
+    void regCallback(const std::function<void(const uint8_t* pkt, size_t size,
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p)>& kCbSend);
 
 };
 

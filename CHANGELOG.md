@@ -12,6 +12,7 @@
 - 更新json文件线程配置
 - json文件ENABLE_DELETE字段改为ENABLE_SPRAY_DELETE字段
 - 降低receiveCloud互斥锁使用频率
+- 减少数据拷贝次数
 
 ### Fix
 

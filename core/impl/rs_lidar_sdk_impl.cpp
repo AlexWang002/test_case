@@ -310,7 +310,10 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
     decoder_ptr_->regCallback(std::bind(&RSLidarSdkImpl::splitFrame, this, std::placeholders::_1));
     cloud_manager_ptr_ = std::make_shared<CloudManager>();
     cloud_manager_ptr_->regCallback(
-        std::bind(&RSLidarSdkImpl::putMsop, this, std::placeholders::_1, std::placeholders::_2));
+        std::bind(&RSLidarSdkImpl::putMsop, this, std::placeholders::_1, std::placeholders::_2,
+                                                std::placeholders::_3,
+                                                std::placeholders::_4,
+                                                std::placeholders::_5));
     pointcloud_fps_counter_ptr_.reset(new FPSCounter("PointCloud", 10));
     device_info_fps_counter_ptr_.reset(new FPSCounter("DeviceInfo", 60));
     is_initialized_.store(true, std::memory_order_seq_cst);
@@ -888,8 +891,11 @@ void RSLidarSdkImpl::clearLidarSdkCallbacks() {
  * \param[in] data The pointer to the MSOP data.
  * \param[in] size The size of the MSOP data.
  */
-void RSLidarSdkImpl::putMsop(const uint8_t* data, uint32_t size) {
-    decoder_ptr_->processMsopPkt(data, size);
+void RSLidarSdkImpl::putMsop(const uint8_t* data, uint32_t size,
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p) {
+    decoder_ptr_->processMsopPkt(data, size, dist_p, refl_p, attr_p);
 }
 
 /**
