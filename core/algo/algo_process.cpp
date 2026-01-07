@@ -280,7 +280,7 @@ void CloudManager::algoProcess(int32_t task_id)
                                             }
                                             if(spray0 && !wave1_sel_flag)
                                             {
-                                                Attrwave0[row_idx] = ((spray0) << 7) + (Attrwave0[row_idx] & 0x7E) + stray0;
+                                                Attrwave0[row_idx] = ((spray0) << 7) + (Attrwave0[row_idx] & 0x7E);
                                             }
                                         }
                                         Attrwave0[row_idx] &= 0x91;
