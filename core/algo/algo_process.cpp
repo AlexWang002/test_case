@@ -81,8 +81,8 @@ void CloudManager::setThreadName(const std::string& kName)
 }
 
 /**
- * \brief  Msop send callback function.
- * \param[in] kCbSend : Msop send function
+ * \brief  Msop header send callback function.
+ * \param[in] kCbSend : Msop header send function
  *                Range: 0 - 2^32-1. Accuracy: 1.
  */
 void CloudManager::regCallback(const std::function<void(const uint8_t* pkt, size_t size,
@@ -180,7 +180,6 @@ void CloudManager::algoProcess(int32_t task_id)
                 AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
 
                 auto resetAndSwitchFrame = [&]() {
-                    algo_func_.algoFrameChange();
                     frame_buffer->recv_idx.store(0);
                     int32_t old_val = proc_buffer_idx_.load();
                     int32_t new_val;

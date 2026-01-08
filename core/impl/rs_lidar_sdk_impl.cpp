@@ -888,8 +888,11 @@ void RSLidarSdkImpl::clearLidarSdkCallbacks() {
 
 /**
  * \brief Put the MSOP data into the queue.
- * \param[in] data The pointer to the MSOP data.
- * \param[in] size The size of the MSOP data.
+ * \param[in] data The pointer to the MSOP data's header.
+ * \param[in] size The size of the MSOP data's header.
+ * \param[in] dist_p The algo processed distance.
+ * \param[in] refl_p The algo processed reflection.
+ * \param[in] attr_p The algo processed attribute label.
  */
 void RSLidarSdkImpl::putMsop(const uint8_t* data, uint32_t size,
                                 const uint16_t* dist_p,

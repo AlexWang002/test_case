@@ -235,8 +235,11 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
 
 /**
  * \brief Decode the MSOP packet.
- * \param[in] packet The packet data.
- * \param[in] size The packet size.
+ * \param[in] packet_header The packet header data.
+ * \param[in] size The packet header size.
+ * \param[in] dist_p The algo processed distance.
+ * \param[in] refl_p The algo processed reflection.
+ * \param[in] attr_p The algo processed attribute label.
  * \return The packet is decoded successfully.
  * \retval true: The packet decoding succeeded.
  * \retval false: The packet decoding failed.
@@ -335,7 +338,7 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet_header, size_t size,
 /******************************************************************************/
 /**
  * \brief Set the point cloud info.
- * \param[in] pkt The msop packet.
+ * \param[in] header The msop packet's header.
  */
 void DecoderRSEMX::setPacketHeader(const RSEMXMsopHeader& header) {
     if (nullptr == point_cloud_) {

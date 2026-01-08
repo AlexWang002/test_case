@@ -55,6 +55,11 @@ namespace
     TrailParam_t TrailParams = DEFAULT_TRAIL_PARAM;
 }
 
+/**
+ * \brief Get an Executable object instance
+ *
+ * \return An Executable object instance
+ */
 Executable& getTrailExec() {
     thread_local Executable trail_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(trail_dev),
@@ -63,15 +68,23 @@ Executable& getTrailExec() {
     return trail_exec;
 }
 
+/**
+ * \brief Get an CmdProgram object instance
+ *
+ * \return An CmdProgram object instance
+ */
 CmdProgram& getTrailProg() {
     thread_local CmdProgram trail_prog = CmdProgram::Create(getTrailExec());
     return trail_prog;
 }
 
-// Executable trail_exec = Executable::Create(PVA_EXECUTABLE_DATA(trail_dev),
-//                                         PVA_EXECUTABLE_SIZE(trail_dev));
-// CmdProgram trail_prog = CmdProgram::Create(trail_exec);
-
+/**
+ * \brief Compile the pva dataflow
+ *
+ * \return Error code
+ * \retval 0: Dataflow compiled successed
+ * \retval 1: Caught a cuPVA exceptions
+ */
 int pvaTrailCompile()
 {
     try

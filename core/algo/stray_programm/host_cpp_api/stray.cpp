@@ -38,12 +38,11 @@ PVA_DECLARE_EXECUTABLE(stray_dev)
 StrayPvaBuffer stray_pva_buff;
 Stream stray_stream;
 
-//构建可执行文件
-// Executable stray_exec = Executable::Create(PVA_EXECUTABLE_DATA(stray_dev),
-//                                         PVA_EXECUTABLE_SIZE(stray_dev));
-
-// CmdProgram stray_prog = CmdProgram::Create(stray_exec);
-
+/**
+ * \brief Get an Executable object instance
+ *
+ * \return An Executable object instance
+ */
 Executable& getStrayExec() {
     thread_local Executable stray_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(stray_dev),
@@ -52,11 +51,23 @@ Executable& getStrayExec() {
     return stray_exec;
 }
 
+/**
+ * \brief Get an CmdProgram object instance
+ *
+ * \return An CmdProgram object instance
+ */
 CmdProgram& getStrayProg() {
     thread_local CmdProgram stray_prog = CmdProgram::Create(getStrayExec());
     return stray_prog;
 }
 
+/**
+ * \brief Compile the pva dataflow
+ *
+ * \return Error code
+ * \retval 0: Dataflow compiled successed
+ * \retval 1: Caught a cuPVA exceptions
+ */
 int pvaStrayCompile()
 {
     try
@@ -148,8 +159,6 @@ int pvaStrayCompile()
                             .tile(TILE_WIDTH, TILE_HEIGHT);
 
         stray_prog.compileDataFlows();
-
-        //SetVPUPrintBufferSize(64 * 1024);
     }
     catch (cupva::Exception const &e)
     {

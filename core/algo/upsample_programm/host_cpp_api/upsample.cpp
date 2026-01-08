@@ -66,6 +66,11 @@ namespace {
     InsertParam_t Up_param = DEFAULT_UP_PARAM;
 }
 
+/**
+ * \brief Get an Executable object instance
+ *
+ * \return An Executable object instance
+ */
 Executable& getUpsampleExec() {
     thread_local Executable upsample_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(upsample_dev),
@@ -74,16 +79,23 @@ Executable& getUpsampleExec() {
     return upsample_exec;
 }
 
+/**
+ * \brief Get an CmdProgram object instance
+ *
+ * \return An CmdProgram object instance
+ */
 CmdProgram& getUpsampleProg() {
     thread_local CmdProgram upsample_prog = CmdProgram::Create(getUpsampleExec());
     return upsample_prog;
 }
 
-// Executable upsample_exec = Executable::Create(PVA_EXECUTABLE_DATA(upsample_dev),
-//                                         PVA_EXECUTABLE_SIZE(upsample_dev));
-
-// CmdProgram upsample_prog = CmdProgram::Create(upsample_exec);
-
+/**
+ * \brief Compile the pva dataflow
+ *
+ * \return Error code
+ * \retval 0: Dataflow compiled successed
+ * \retval 1: Caught a cuPVA exceptions
+ */
 int pvaUpsampleCompile()
 {
     try

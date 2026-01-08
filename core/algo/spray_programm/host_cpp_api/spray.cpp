@@ -80,16 +80,11 @@ namespace
     SprayParam_t SprayParams = DEFAULT_SPRAY_PARAM;
 }
 
-// Executable spray_exec = Executable::Create(PVA_EXECUTABLE_DATA(spray_dev),
-//                                         PVA_EXECUTABLE_SIZE(spray_dev));
-
-// CmdProgram spray_prog = CmdProgram::Create(spray_exec);
-
-// Executable enhance_exec = Executable::Create(PVA_EXECUTABLE_DATA(enhance_dev),
-//                                         PVA_EXECUTABLE_SIZE(enhance_dev));
-
-// CmdProgram enhance_prog = CmdProgram::Create(enhance_exec);
-
+/**
+ * \brief Get an Executable object instance
+ *
+ * \return An Executable object instance
+ */
 Executable& getSprayExec() {
     thread_local Executable spray_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(spray_dev),
@@ -98,11 +93,21 @@ Executable& getSprayExec() {
     return spray_exec;
 }
 
+/**
+ * \brief Get an CmdProgram object instance
+ *
+ * \return An CmdProgram object instance
+ */
 CmdProgram& getSprayProg() {
     thread_local CmdProgram spray_prog = CmdProgram::Create(getSprayExec());
     return spray_prog;
 }
 
+/**
+ * \brief Get an Executable object instance
+ *
+ * \return An Executable object instance
+ */
 Executable& getEnhanceExec() {
     thread_local Executable enhance_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(enhance_dev),
@@ -111,12 +116,23 @@ Executable& getEnhanceExec() {
     return enhance_exec;
 }
 
+/**
+ * \brief Get an CmdProgram object instance
+ *
+ * \return An CmdProgram object instance
+ */
 CmdProgram& getEnhanceProg() {
     thread_local CmdProgram enhance_prog = CmdProgram::Create(getEnhanceExec());
     return enhance_prog;
 }
 
-
+/**
+ * \brief Compile the pva dataflow
+ *
+ * \return Error code
+ * \retval 0: Dataflow compiled successed
+ * \retval 1: Caught a cuPVA exceptions
+ */
 int pvaSprayCompile()
 {
     try
@@ -221,6 +237,13 @@ int pvaSprayCompile()
     return 0;
 }
 
+/**
+ * \brief Compile the pva dataflow
+ *
+ * \return Error code
+ * \retval 0: Dataflow compiled successed
+ * \retval 1: Caught a cuPVA exceptions
+ */
 int pvaEnhanceCompile()
 {
     try

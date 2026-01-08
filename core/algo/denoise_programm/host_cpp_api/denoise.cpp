@@ -51,11 +51,11 @@ namespace {
     NoiseParam_t NoiseParams = DEFAULT_DENOISE_PARAM;
 }
 
-// Executable denoise_exec = Executable::Create(PVA_EXECUTABLE_DATA(denoise_dev),
-//                                         PVA_EXECUTABLE_SIZE(denoise_dev));
-
-// CmdProgram denoise_prog = CmdProgram::Create(denoise_exec);
-
+/**
+ * \brief Get an Executable object instance
+ *
+ * \return An Executable object instance
+ */
 Executable& getDenoiseExec() {
     thread_local Executable denoise_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(denoise_dev),
@@ -64,11 +64,23 @@ Executable& getDenoiseExec() {
     return denoise_exec;
 }
 
+/**
+ * \brief Get an CmdProgram object instance
+ *
+ * \return An CmdProgram object instance
+ */
 CmdProgram& getDenoiseProg() {
     thread_local CmdProgram denoise_prog = CmdProgram::Create(getDenoiseExec());
     return denoise_prog;
 }
 
+/**
+ * \brief Compile the pva dataflow
+ *
+ * \return Error code
+ * \retval 0: Dataflow compiled successed
+ * \retval 1: Caught a cuPVA exceptions
+ */
 int pvaDenoiseCompile()
 {
     try

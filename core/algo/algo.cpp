@@ -431,14 +431,6 @@ void AlgoFunction::algoInit()
 }
 
 /**
- * \brief  Algorithm frame change
- */
-void AlgoFunction::algoFrameChange(void)
-{
-
-}
-
-/**
  * \brief  Denoise algorithm main process in pva
  *
  * \param[in] pstFrameBuffer: frame buffer
@@ -452,7 +444,7 @@ void AlgoFunction::denoiseExec(tstFrameBuffer* pstFrameBuffer)
         denoiseDataAlloc();
     }
 
-    static int cnt{0};
+    thread_local int cnt{0};
 
     cnt = (cnt + 1) % 10;
 
@@ -519,7 +511,7 @@ void AlgoFunction::trailExec(tstFrameBuffer* pstFrameBuffer)
         TrailDataAlloc();
     }
 
-    static int cnt{0};
+    thread_local int cnt{0};
     cnt = (cnt + 1) % 10;
 
     if (algo_Param.TrailRemoveOn) {

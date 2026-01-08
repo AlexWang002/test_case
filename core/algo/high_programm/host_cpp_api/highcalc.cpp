@@ -64,11 +64,11 @@ namespace
     HighcalcParam_t HighcalcParams = DEFAULT_HIGH_PARAM;
 }
 
-// Executable highcalc_exec = Executable::Create(PVA_EXECUTABLE_DATA(highcalc_dev),
-//                                         PVA_EXECUTABLE_SIZE(highcalc_dev));
-
-// CmdProgram highcalc_prog = CmdProgram::Create(highcalc_exec);
-
+/**
+ * \brief Get an Executable object instance
+ *
+ * \return An Executable object instance
+ */
 Executable& getHighcalcExec() {
     thread_local Executable highcalc_exec = Executable::Create(
         PVA_EXECUTABLE_DATA(highcalc_dev),
@@ -77,11 +77,23 @@ Executable& getHighcalcExec() {
     return highcalc_exec;
 }
 
+/**
+ * \brief Get an CmdProgram object instance
+ *
+ * \return An CmdProgram object instance
+ */
 CmdProgram& getHighcalcProg() {
     thread_local CmdProgram highcalc_prog = CmdProgram::Create(getHighcalcExec());
     return highcalc_prog;
 }
 
+/**
+ * \brief Compile the pva dataflow
+ *
+ * \return Error code
+ * \retval 0: Dataflow compiled successed
+ * \retval 1: Caught a cuPVA exceptions
+ */
 int pvaHighcalcCompile()
 {
     try
