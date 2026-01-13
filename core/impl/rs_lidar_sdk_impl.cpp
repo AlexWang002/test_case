@@ -247,7 +247,7 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
     config_path_ = "./";
 #endif
     log_config.max_file_size_mb_ = 6;
-    log_config.max_files_ = 3;
+    log_config.max_files_ = 6;
 
     std::vector<json_reader::DataVariant> config_data = json_reader::parseJsonFile(configPath);
 
@@ -563,6 +563,7 @@ LidarSdkErrorCode RSLidarSdkImpl::setCalibrationEnable(const bool enabled) {
 LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void* ptrAdc) {
     auto start_time = std::chrono::steady_clock::now();
     std::lock_guard<std::mutex> lock(mutex_);
+    static uint32_t last_seq{0U};
 
     if (!is_initialized_.load(std::memory_order_seq_cst)) {
         LogError("LidarSdk is not initialized");
@@ -616,6 +617,10 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
                    static_cast<uint32_t>(mipi_frame->data[28] << 16) |
                    static_cast<uint32_t>(mipi_frame->data[29] <<  8) |
                    static_cast<uint32_t>(mipi_frame->data[30]);
+    LogInfo("[injectAdc] inject time: {}, seq: {}, last_seq: {}, index: {}", utils::unixTimestamp(start_time), seq,
+                last_seq, mipi_frame->index);
+    last_seq = seq;
+
     if (delay_stat_switch_) {
         auto time_interval = utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001;
         if (time_interval > 1.5) {
