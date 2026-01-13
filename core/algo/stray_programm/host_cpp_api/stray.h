@@ -71,8 +71,7 @@ extern StrayPvaBuffer stray_pva_buff;
 
 extern int strayBufferAlloc();
 extern int strayBufferRelease();
-extern int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg, int32_t& status_code, 
-    uint32_t& stage1, uint32_t& stage2, uint32_t& stage3, uint32_t& stage4,
+extern int strayProcPva(int rainwall_cnt, int rainwall_dist, std::string& exception_msg, int32_t& status_code,
     uint32_t& submit_time, uint32_t& wait_time);
 
 /******************************************************************************/

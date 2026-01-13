@@ -56,11 +56,9 @@ extern uint16_t *FinalOut1_h;
 /******************************************************************************/
 /*                Declaration of exported function prototypes                 */
 /******************************************************************************/
-extern int sprayRemovePva(std::string& exception_msg, int32_t& status_code, 
-    uint32_t& stage1, uint32_t& stage2, uint32_t& stage3, uint32_t& stage4,
+extern int sprayRemovePva(std::string& exception_msg, int32_t& status_code,
     uint32_t& submit_time, uint32_t& wait_time);
-extern int rainEnhancePva(std::string& exception_msg, int32_t& status_code, 
-    uint32_t& stage1, uint32_t& stage2, uint32_t& stage3, uint32_t& stage4,
+extern int rainEnhancePva(std::string& exception_msg, int32_t& status_code,
     uint32_t& submit_time, uint32_t& wait_time);
 extern void sprayDataAlloc();
 extern void sprayDataFree();

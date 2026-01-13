@@ -81,88 +81,14 @@ void CloudManager::setThreadName(const std::string& kName)
 }
 
 /**
- * \brief  Submit processed blocks.
- * \param[in] proc_col : processing column
- *                Range: -2^31 - 2^31-1. Accuracy: 1.
- * \param[in] frame_buffer : frame buffer
- *                Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] dist : current column distance data
- *                Range: 0 - 2^16-1. Accuracy: 1.
- * \param[in] ref : current column reflection data
- *                Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] surface_id : channel index
- *                Range: 0-1. Accuracy: 1.
- */
-void CloudManager::assemblePkt(int32_t proc_col,
-                            AlgoFunction::tstFrameBuffer* frame_buffer,
-                            uint16_t* dist, uint8_t* ref, int32_t surface_id) {
-    if ((proc_col < 0) || proc_col >= algo_func_.UP_VIEW_W) {
-        LogDebug("ALGO: proc_col is invalid {}", proc_col);
-        return;
-    }
-
-    if (dist == nullptr || ref == nullptr || frame_buffer == nullptr) {
-        LogError("[CloudManager::assemblePkt] dist | ref | frame_buffer is nullptr");
-        return;
-    }
-
-    int32_t index = frame_buffer->cloud_id[proc_col];
-
-    if ((index < 0) || (index >= kMaxCloudNum_)) {
-        LogDebug("ALGO: send packet index out of range{}", index);
-        return;
-    };
-
-    auto& cloud = proc_clouds_[index];
-#ifdef ALGO_REINJ
-    // 更新处理结果
-    if (((0 == surface_id) && ((proc_col & 0x1) == 0))
-        || ((1 == surface_id) && ((proc_col & 0x1) != 0))) {
-        for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-            cloud.pixels[i].raws[0].peak = (dist[i]);
-            cloud.pixels[i].raws[0].width = ref[i];
-        }
-    } else {
-        for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-            cloud.pixels[i].raws[0].peak = (dist[i + algo_func_.VIEW_H]);
-            cloud.pixels[i].raws[0].width = ref[i + algo_func_.VIEW_H];
-        }
-    }
-    if (inj_frame_cnt_ < 10) {
-        if (processed_file_.is_open()) {
-            processed_file_.write(reinterpret_cast<const char*>(&cloud), sizeof(RSEMXMsopPkt));
-        }
-    }
-
-    if (proc_col == (algo_func_.UP_VIEW_W - 1)) {
-        inj_frame_cnt_++;
-        printf("write frame = %d\n", inj_frame_cnt_);
-    }
-#else
-    // 更新处理结果
-    if (((0 == surface_id) && ((proc_col & 0x1) == 0))
-        || ((1 == surface_id) && ((proc_col & 0x1) != 0))) {
-        for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-            cloud.pixels[i].waves[0].radius = htons(dist[i]);
-            cloud.pixels[i].waves[0].intensity = ref[i];
-        }
-    } else {
-        for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-            cloud.pixels[i].waves[0].radius = htons(dist[i + algo_func_.VIEW_H]);
-            cloud.pixels[i].waves[0].intensity = ref[i + algo_func_.VIEW_H];
-        }
-    }
-#endif
-
-    cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
-}
-
-/**
- * \brief  Msop send callback function.
- * \param[in] kCbSend : Msop send function
+ * \brief  Msop header send callback function.
+ * \param[in] kCbSend : Msop header send function
  *                Range: 0 - 2^32-1. Accuracy: 1.
  */
-void CloudManager::regCallback(const std::function<void(const uint8_t* pkt, size_t size)>& kCbSend)
+void CloudManager::regCallback(const std::function<void(const uint8_t* pkt, size_t size,
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p)>& kCbSend)
 {
     cb_send_ = kCbSend;
 }
@@ -176,26 +102,16 @@ void CloudManager::start(void)
 
     algo_func_.algo_delay_switch_ = this->process_delay_switch_;
 
-    for (auto& idx : algo_proc_idx_) {
-        idx.store(0);
-    }
+    cacl_done_.store(0);
     for (uint32_t i = 0; i < ALGO_THREAD_NUM; ++i) {
-        cacl_done_[i].store(0);
         thread::ThreadConfig config;
-        if (thread::thread_params.size() > i+3)
-            config = thread::thread_params[i+3];
+        if (thread::thread_params.size() > i+2)
+        config = thread::thread_params[i+2];
         algo_handle_threads_.emplace_back(createConfiguredStdThread(config, [this, i] {
             setThreadName("RS-AlgoProc-" + std::to_string(i));
             this->algoProcess(i);
         }));
     }
-    thread::ThreadConfig config;
-    if (thread::thread_params.size() > 2)
-        config = thread::thread_params[2];
-    handle_thread_ = createConfiguredStdThread(config, [this] {
-        setThreadName("RS-FinalProc");
-        this->algoFinalProcess();
-    });
 
     algo_func_.algoInit();
 
@@ -205,7 +121,6 @@ void CloudManager::start(void)
 
     LogInfo("Algo process start! Version:{}.{}.{}",std::to_string(ALGO_VERSION_MAJOR),
         std::to_string(ALGO_VERSION_MINOR) ,std::to_string(ALGO_VERSION_PATCH));
-
 #ifdef ALGO_REINJ
     if (!processed_file_.is_open()) {
         processed_file_.open("process_point_cloud.bin",
@@ -231,7 +146,6 @@ bool CloudManager::stop(void)
             thread.join();
         }
     }
-    handle_thread_.join();
 #ifdef ALGO_REINJ
     if (processed_file_.is_open()) {
         processed_file_.close();
@@ -240,264 +154,6 @@ bool CloudManager::stop(void)
 #endif
     return true;
 }
-
-#ifdef ALGO_WRITE_FILE
-/**
- * \brief  Write distance and reflection into file.
- * \param[in] dist : current row distance data
- *                Range: 0 - 2^32-1. Accuracy: 1.
- * \param[in] ref : current row reflection data
- *                Range: 0-255. Accuracy: 1.
- * \param[in] x: row index
- *               Range: 0-759. Accuracy: 1.
- */
-void CloudManager::writeFileFunc(uint16_t* dist, uint8_t* ref, int x)
-{
-    if (write_file_) {
-        if (dist_file_.is_open() && ref_file_.is_open()) {
-            for (int i = 0; i < algo_func_.VIEW_H; ++i) {
-                dist_file_ << dist[i + (x * algo_func_.VIEW_H)] << " ";
-                ref_file_ << static_cast<int>(ref[i + (x * algo_func_.VIEW_H)]) << " ";
-            }
-            dist_file_ << std::endl;
-            ref_file_ << std::endl;
-        }
-    }
-}
-#endif
-
-/**
- * \brief  Algorithm delete point and package msop.
- */
-void CloudManager::algoFinalProcess(void)
-{
-    pid_t tid = gettid();
-    utils::addThread(tid, "algoFinalProcess");
-    /** 申请上采样变量内存空间 */
-    upsampleDataAlloc();
-    static int cnt{0};
-
-    try {
-        while (false == to_exit_handle_.load()) {
-            uint16_t dist[algo_func_.VIEW_H * 2]{0};
-            uint8_t ref[algo_func_.VIEW_H * 2]{0};
-            AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
-            std::chrono::microseconds total_time = (std::chrono::microseconds)0;
-            auto resetAndSwitchFrame = [&]() {
-                algo_func_.algoFrameChange();
-                frame_buffer->recv_idx.store(0);
-                for (auto& idx : algo_proc_idx_) {
-                    idx.store(0);
-                }
-                int32_t old_val = proc_buffer_idx_.load();
-                int32_t new_val;
-                do {
-                    new_val = (old_val + 1) % ALGO_FRM_BUF_SIZE;
-                } while (!proc_buffer_idx_.compare_exchange_weak(old_val, new_val));
-
-                std::lock_guard<std::mutex> lock(mtx_calc_);
-                for (int32_t i = 0; i < ALGO_THREAD_NUM; ++i) {
-                    cacl_done_[i].store(0);
-                }
-                cv_calc_.notify_all();
-            };
-
-            if (sendEnoughData(algo_func_.VIEW_W - 1)) {
-                algo_func_.highcalcExec(frame_buffer);
-
-                algo_func_.strayDeleteExec(frame_buffer);
-
-                algo_func_.sprayRemoveExec(frame_buffer);
-
-                memcpy(dist_wave0, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(dist_wave1, frame_buffer->dist1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);//加入双回波数据
-                memcpy(refl_wave0, frame_buffer->ref0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(refl_wave1, frame_buffer->ref1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(attr_wave0, frame_buffer->att0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(attr_wave1, frame_buffer->att1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                for (int col_idx = 0; col_idx < algo_func_.VIEW_W; col_idx++)
-                {
-                    // 获取掩码指针
-                    uint16_t* trail_mask_out = algo_func_.trail_mask_out_frm[col_idx];
-                    uint16_t* denoise_mask_out = algo_func_.denoise_mask_out_frm[col_idx];
-                    uint16_t* stray_mask_out0 = algo_func_.stray_mask_out_frm0[col_idx];
-                    uint16_t* stray_mask_out1 = algo_func_.stray_mask_out_frm1[col_idx];
-                    uint16_t* spray_mask_out0 = algo_func_.spray_mark_out_frm0[col_idx];
-                    uint16_t* spray_mask_out1 = algo_func_.spray_mark_out_frm1[col_idx];
-                    uint16_t* Distwave0 = dist_wave0[col_idx];
-                    uint16_t* Distwave1 = dist_wave1[col_idx];
-                    uint16_t* Refwave0 = refl_wave0[col_idx];
-                    uint16_t* Refwave1 = refl_wave1[col_idx];
-                    uint16_t* Attrwave0 = attr_wave0[col_idx];
-                    uint16_t* Attrwave1 = attr_wave1[col_idx];
-                    for (int row_idx = 0; row_idx < algo_func_.VIEW_H; row_idx++){
-                        const bool trail = trail_mask_out[row_idx];
-                        const bool denoise = denoise_mask_out[row_idx];
-                        const bool stray0 = stray_mask_out0[row_idx];
-                        const bool stray1 = stray_mask_out1[row_idx];
-                        const bool spray0 = spray_mask_out0[row_idx];
-                        const bool spray1 = spray_mask_out1[row_idx];
-                        const int attr0 = (trail != 0 || denoise != 1) ? 0 : Attrwave0[row_idx];
-                        const int attr1 = Attrwave1[row_idx];
-
-                        Attrwave0[row_idx] = ((spray0) << 7) + (attr0 & 0x7E) + stray0;
-                        Attrwave1[row_idx] = ((spray1) << 7) + (attr1 & 0x7E) + stray1;
-
-                        const bool wave0_del_flag = stray0 || spray0 || trail || !denoise;
-                        const bool wave1_sel_flag = !stray1 && !spray1 && !trail && denoise;
-
-                        if (algo_func_.algo_Param.DeleteOn) {
-                            // 情况1: 两回波均无效点
-                            if (wave0_del_flag && !wave1_sel_flag) {
-                                Distwave0[row_idx] = 0;
-                                Refwave0[row_idx] = 0;
-                                Attrwave0[row_idx] = 0;
-                            }
-                            // 情况2: 第一回波无效点，第二回波有效点
-                            else if (wave0_del_flag && wave1_sel_flag) {
-                                Distwave0[row_idx] = Distwave1[row_idx];
-                                Refwave0[row_idx] = Refwave1[row_idx];
-                                Attrwave0[row_idx] = Attrwave1[row_idx];
-                            }
-                            Attrwave0[row_idx] &= 0xF7;
-                        } else {
-                            // do nothing
-                        }
-                    }
-                }
-                /** Data initialization */
-                memcpy(DistDownIn_h, dist_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(DistRawIn_h, frame_buffer->dist0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(RefDownIn_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-                memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
-
-                algo_func_.upsampleExec(frame_buffer);
-
-                /** 最后一列置0 */
-                uint32_t start_idx = (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H;
-                memset(&DistOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
-                memset(&RefOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
-                memset(&AttrOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
-
-                for (int32_t col = 0; col < algo_func_.VIEW_W; ++col) {
-                    int32_t surface_id = frame_buffer->surface_id.load();
-                    /** 拷贝上采样后的数据到dist和ref中 */
-                    int offset = col * algo_func_.VIEW_H;
-                    if (0 == surface_id) {
-                        for(int32_t j = 0; j < 2; ++j) {
-                            int32_t index = frame_buffer->cloud_id[col * 2 + j];
-                            auto& cloud = proc_clouds_[index];
-                            if(j == 0){
-                                for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                    cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
-                                    cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
-                                    cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
-                                }
-                            } else {
-                                for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                    cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
-                                    cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
-                                    cloud.pixels[i].waves[0].attribute = AttrOutUp_h[offset + i];
-                                }
-                            }
-                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
-                        }
-                    } else {
-                        if(col == 0){
-                            int32_t index = frame_buffer->cloud_id[col];
-                            auto& cloud = proc_clouds_[index];
-                            for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                cloud.pixels[i].waves[0].radius = 0;
-                                cloud.pixels[i].waves[0].intensity = 0;
-                                cloud.pixels[i].waves[0].attribute = 0;
-                            }
-                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
-
-                            for(int32_t j = 0; j < 2; ++j) {
-                                int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
-                                auto& cloud = proc_clouds_[index];
-                                if(j == 0){
-                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                        cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
-                                        cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
-                                        cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
-                                    }
-                                } else {
-                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                        cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
-                                        cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
-                                        cloud.pixels[i].waves[0].attribute = AttrOutUp_h[offset + i];
-                                    }
-                                }
-                                cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
-                            }
-                        }else if(col == algo_func_.VIEW_W - 1){
-                            int32_t index = frame_buffer->cloud_id[2 * col + 1];
-                            auto& cloud = proc_clouds_[index];
-                            int LastOffset = col * algo_func_.VIEW_H;
-                            for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
-                                cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
-                                cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
-                            }
-                            cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
-                        } else{
-                            for(int32_t j = 0; j < 2; ++j) {
-                                int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
-                                auto& cloud = proc_clouds_[index];
-                                if(j == 0){
-                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                        cloud.pixels[i].waves[0].radius = htons(dist_wave0[col][i]);
-                                        cloud.pixels[i].waves[0].intensity = refl_wave0[col][i];
-                                        cloud.pixels[i].waves[0].attribute = attr_wave0[col][i];
-                                    }
-                                } else {
-                                    for (size_t i = 0; i < algo_func_.VIEW_H; ++i) {
-                                        cloud.pixels[i].waves[0].radius = htons(DistOutUp_h[offset + i]);
-                                        cloud.pixels[i].waves[0].intensity = RefOutUp_h[offset + i];
-                                        cloud.pixels[i].waves[0].attribute = AttrOutUp_h[offset + i];
-                                    }
-                                }
-                                cb_send_(reinterpret_cast<uint8_t*>(&cloud), sizeof(RSEMXMsopPkt));
-                            }
-                        }
-                    }
-                    if (algo_func_.VIEW_W - 1 == col) {
-                        resetAndSwitchFrame();
-                    }
-                }
-            } else {
-                //发生丢包之后，先清0当前帧数据，然后切换到下一帧
-                frame_buffer->frame_droped.store(false);
-                resetAndSwitchFrame();
-            }
-
-        #ifdef ALGO_WRITE_FILE
-            if (write_file_) {
-                write_file_ = false;
-            }
-            if (dist_file_.is_open() && ref_file_.is_open()) {
-                dist_file_.close();
-                ref_file_.close();
-            }
-        #endif
-
-            if (total_time.count() > kCalcTimeout_) {
-                LogError("ERROR: algoProcess calc time out :{} thread:{}", total_time.count(), ALGO_THREAD_NUM);
-            }
-        }
-        upsampleDataFree();
-        highcalcDataFree();
-        strayBufferRelease();
-        sprayDataFree();
-    }
-    catch (const std::exception& kE) {
-        LogError("ERROR: algoProcess thread:{}, crashed:{}", ALGO_THREAD_NUM, kE.what());
-        FaultManager8::getInstance().setFault(FaultBits8::LidarThreadCrash);
-    }
-}
-
 
 /**
  * \brief  Algorithm point cloud process.
@@ -508,67 +164,253 @@ void CloudManager::algoProcess(int32_t task_id)
 {
     //std::this_thread::sleep_for(std::chrono::milliseconds(800));
     try {
-        if (task_id == 0) {
-            pid_t tid = gettid();
-            utils::addThread(tid, "algorithm");
-            /*线程启动时在DRAM中为pva申请算法所需内存*/
-            // denoiseDataAlloc();
-            // TrailDataAlloc();
+        pid_t tid = gettid();
+        utils::addThread(tid, "algorithm");
+        /*线程启动时在DRAM中为pva申请算法所需内存*/
+        thread_local bool first{true};
+        if (first) {
+            first = false;
+            upsampleDataAlloc();
         }
 
         while (false == to_exit_handle_.load()) {
             std::chrono::microseconds total_time = (std::chrono::microseconds)0;
-            if (cacl_done_[task_id].load() == 0) {
+            if (cacl_done_.load() == 0) {
                 bool isLostPkt = false;
                 AlgoFunction::tstFrameBuffer* frame_buffer = &frame_buffer_[proc_buffer_idx_.load()];
-                for (int32_t col = 0; col < algo_func_.VIEW_W + algo_func_.max_data_size; ++col) {
-                    if (recvEnoughData(col, frame_buffer)) {
+
+                auto resetAndSwitchFrame = [&]() {
+                    frame_buffer->recv_idx.store(0);
+                    int32_t old_val = proc_buffer_idx_.load();
+                    int32_t new_val;
+                    do {
+                        new_val = (old_val + 1) % ALGO_FRM_BUF_SIZE;
+                    } while (!proc_buffer_idx_.compare_exchange_weak(old_val, new_val));
+                };
+
+                for (int32_t cc = 9; cc < algo_func_.VIEW_W; cc += 10) {
+                    if (recvEnoughData(cc, frame_buffer)) {
                         auto start = std::chrono::steady_clock::now();
-                        /*PVA以整帧为单位执行denoise算法*/
-                        if(task_id == 0){
-                            if(col == algo_func_.VIEW_W + algo_func_.max_data_size - 1){
+
+                        /*CPU流式处理一次性处理10列点云*/
+                        for (int32_t col = cc - 9; col <= cc; col ++) {
+                            algo_func_.pcAlgoMainFunc(col, frame_buffer);
+                            /*PVA以整帧为单位执行点云算法*/
+                            if(col == algo_func_.VIEW_W - 1){
                                 algo_func_.denoiseExec(frame_buffer);
 
                                 algo_func_.trailExec(frame_buffer);
+
+                                algo_func_.highcalcExec(frame_buffer);
+
+                                algo_func_.strayDeleteExec(frame_buffer);
+
+                                algo_func_.sprayRemoveExec(frame_buffer);
+
+                                auto time_start1 = std::chrono::steady_clock::now();
+                                memcpy(dist_wave0, frame_buffer->dist0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                memcpy(dist_wave1, frame_buffer->dist1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);//加入双回波数据
+                                memcpy(refl_wave0, frame_buffer->ref0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                memcpy(refl_wave1, frame_buffer->ref1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                memcpy(attr_wave0, frame_buffer->att0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                memcpy(attr_wave1, frame_buffer->att1, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+
+                                for (int col_idx = 0; col_idx < algo_func_.VIEW_W; col_idx++)
+                                {
+                                    // 获取掩码指针
+                                    uint16_t* trail_mask_out = algo_func_.trail_mask_out_frm[col_idx];
+                                    uint16_t* denoise_mask_out = algo_func_.denoise_mask_out_frm[col_idx];
+                                    uint16_t* stray_mask_out0 = algo_func_.stray_mask_out_frm0[col_idx];
+                                    uint16_t* stray_mask_out1 = algo_func_.stray_mask_out_frm1[col_idx];
+                                    uint16_t* spray_mask_out0 = algo_func_.spray_mark_out_frm0[col_idx];
+                                    uint16_t* spray_mask_out1 = algo_func_.spray_mark_out_frm1[col_idx];
+                                    uint16_t* Distwave0 = dist_wave0[col_idx];
+                                    uint16_t* Distwave1 = dist_wave1[col_idx];
+                                    uint16_t* Refwave0 = refl_wave0[col_idx];
+                                    uint16_t* Refwave1 = refl_wave1[col_idx];
+                                    uint16_t* Attrwave0 = attr_wave0[col_idx];
+                                    uint16_t* Attrwave1 = attr_wave1[col_idx];
+                                    for (int row_idx = 0; row_idx < algo_func_.VIEW_H; row_idx++){
+                                        const bool trail = trail_mask_out[row_idx];
+                                        const bool denoise = denoise_mask_out[row_idx];
+                                        const bool stray0 = stray_mask_out0[row_idx];
+                                        const bool stray1 = stray_mask_out1[row_idx];
+                                        const bool spray0 = spray_mask_out0[row_idx];
+                                        const bool spray1 = spray_mask_out1[row_idx];
+                                        const int attr0 = Attrwave0[row_idx];
+                                        const int attr1 = Attrwave1[row_idx];
+                                        
+                                        Attrwave0[row_idx] = (spray0 << 7) + (attr0 & 0x7E) + stray0;
+                                        Attrwave1[row_idx] = (spray1 << 7) + (attr1 & 0x7E) + stray1;
+
+                                        if(!denoise)
+                                        {
+                                            Distwave0[row_idx] = 0;
+                                            Refwave0[row_idx] = 0;
+                                        }
+
+                                        if (algo_func_.algo_Param.SprayDeleteOn) {
+                                            const bool wave0_del_flag = stray0 || spray0 || trail;
+                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail;
+                                            // 情况1: 两回波均无效点
+                                            if (wave0_del_flag && !wave1_sel_flag) {
+                                                Distwave0[row_idx] = 0;
+                                                Refwave0[row_idx] = 0;
+                                                Attrwave0[row_idx] = 0;
+                                            }
+                                            // 情况2: 第一回波无效点，第二回波有效点
+                                            else if (wave0_del_flag && wave1_sel_flag) {
+                                                Distwave0[row_idx] = Distwave1[row_idx];
+                                                Refwave0[row_idx] = Refwave1[row_idx];
+                                                Attrwave0[row_idx] = Attrwave1[row_idx];
+                                            }
+                                        } else {
+                                            const bool wave0_del_flag = stray0 || trail;
+                                            const bool wave1_sel_flag = !stray1 && !spray1 && !trail && (Distwave1[row_idx] != 0);
+
+                                            // 情况1: 两回波均无效点
+                                            if (wave0_del_flag && !wave1_sel_flag) {
+                                                Distwave0[row_idx] = 0;
+                                                Refwave0[row_idx] = 0;
+                                                Attrwave0[row_idx] = 0;
+                                            }
+                                            // 情况2: 第一回波无效点，第二回波有效点
+                                            else if ((wave0_del_flag || spray0) && wave1_sel_flag) {
+                                                Distwave0[row_idx] = Distwave1[row_idx];
+                                                Refwave0[row_idx] = Refwave1[row_idx];
+                                                Attrwave0[row_idx] = Attrwave1[row_idx];
+                                            }
+                                            if(spray0 && !wave1_sel_flag)
+                                            {
+                                                Attrwave0[row_idx] = ((spray0) << 7) + (Attrwave0[row_idx] & 0x7E);
+                                            }
+                                        }
+                                        Attrwave0[row_idx] &= 0x91;
+                                    }
+                                }
+                                
+                                int32_t surface_id = frame_buffer->surface_id.load();
+                                if(surface_id == 0)
+                                {
+                                    memcpy(DistDownIn_h, dist_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(DistRawIn_h, frame_buffer->dist0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(RefDownIn_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(RefRawIn_h, frame_buffer->ref0_raw, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                }
+                                else
+                                {
+                                    memcpy(DistDownIn_h, dist_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(DistRawIn_h, frame_buffer->dist0_raw[1], sizeof(uint16_t) * (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H);
+                                    memcpy(RefDownIn_h, refl_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                    memcpy(RefRawIn_h, frame_buffer->ref0_raw[1], sizeof(uint16_t) * (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H);
+                                    memcpy(AttrIn_h, attr_wave0, sizeof(uint16_t) * algo_func_.VIEW_W * algo_func_.VIEW_H);
+                                }
+                                auto time_end1 = std::chrono::steady_clock::now();
+                                auto time_duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time_end1 - time_start1);
+
+                                algo_func_.upsampleExec(frame_buffer);
+
+                                /** 最后一列置0 */
+                                uint32_t start_idx = (algo_func_.VIEW_W - 1) * algo_func_.VIEW_H;
+                                memset(&DistOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
+                                memset(&RefOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
+                                memset(&AttrOutUp_h[start_idx], 0, algo_func_.VIEW_H * sizeof(uint16_t));
+
+                                for (int32_t col = 0; col < algo_func_.VIEW_W; ++col) {
+                                    surface_id = frame_buffer->surface_id.load();
+                                    /** 拷贝上采样后的数据到dist和ref中 */
+                                    int offset = col * algo_func_.VIEW_H;
+                                    if (0 == surface_id) {
+                                        for(int32_t j = 0; j < 2; ++j) {
+                                            int32_t index = frame_buffer->cloud_id[col * 2 + j];
+                                            auto& cloud_header = proc_clouds_[index];
+                                            if(j == 0){
+                                                cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                            dist_wave0[col], refl_wave0[col], attr_wave0[col]);
+                                            } else {
+                                                cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader),
+                                                            &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
+                                            }
+                                        }
+                                    } else {
+                                        if(col == 0){
+                                            int32_t index = frame_buffer->cloud_id[col];
+                                            auto& cloud_header = proc_clouds_[index];
+                                            static const uint16_t zero_dist[algo_func_.VIEW_H] = {0};
+                                            static const uint16_t zero_refl[algo_func_.VIEW_H] = {0};
+                                            static const uint16_t zero_attr[algo_func_.VIEW_H] = {0};
+                                            cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                        zero_dist, zero_refl, zero_attr);
+
+                                            for(int32_t j = 0; j < 2; ++j) {
+                                                int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
+                                                auto& cloud_header = proc_clouds_[index];
+                                                if(j == 0){
+                                                    cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                                dist_wave0[col], refl_wave0[col], attr_wave0[col]);
+                                                } else {
+                                                    cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                                &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
+                                                }
+                                            }
+                                        }else if(col == algo_func_.VIEW_W - 1){
+                                            int32_t index = frame_buffer->cloud_id[2 * col + 1];
+                                            auto& cloud_header = proc_clouds_[index];
+                                            cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                        dist_wave0[col], refl_wave0[col], attr_wave0[col]);
+                                        } else{
+                                            for(int32_t j = 0; j < 2; ++j) {
+                                                int32_t index = frame_buffer->cloud_id[2 * col + j + 1];
+                                                auto& cloud_header = proc_clouds_[index];
+                                                if(j == 0){
+                                                    cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                                dist_wave0[col], refl_wave0[col], attr_wave0[col]);
+                                                } else {
+                                                    cb_send_(reinterpret_cast<uint8_t*>(&cloud_header), sizeof(RSEMXMsopHeader), 
+                                                                &DistOutUp_h[offset], &RefOutUp_h[offset], &AttrOutUp_h[offset]);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                #ifdef ALGO_REINJ
+                                if (inj_frame_cnt_ < 10) {                                
+                                    inj_frame_cnt_++;
+                                    printf("-----------------write frame = %d\n", inj_frame_cnt_);
+                                }
+                                #endif
                             }
                         }
-                        else{
-                            algo_func_.pcAlgoMainFunc(col, frame_buffer, task_id);
-                        }
+
                         auto end = std::chrono::steady_clock::now();
                         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
                         total_time += duration;
                     } else {
-                        isLostPkt = true;
+                        frame_buffer->frame_droped.store(false);
                         break;
                     }
                 }
+                cacl_done_.store(1);
+                resetAndSwitchFrame();
 
                 if (total_time.count() > kCalcTimeout_) {
                     LogError("ERROR: algoProcess calc time out :{} thread:{}", total_time.count(), task_id);
                 }
-                cacl_done_[task_id].store(1);
-                if (isLostPkt) {
-                    updateAlgoIdx(ALGO_LOSS_PKT_CODE - 1, task_id);
-                } else {
-                    updateAlgoIdx(algo_func_.VIEW_W - 1, task_id);
-                }
             } else {
                 std::unique_lock<std::mutex> lock(mtx_calc_);
-                bool res = cv_calc_.wait_for(lock, std::chrono::milliseconds(2000), [&] {
-                    return (cacl_done_[task_id].load() == 0 || to_exit_handle_.load());
+                bool res = cv_calc_.wait_for(lock, std::chrono::milliseconds(200), [&] {
+                    return (cacl_done_.load() == 0 || to_exit_handle_.load());
                 });
-
-                if (!res) {
-                    LogError("ERROR: algoProcess thread:{}, cv_calc_ wait timeout", task_id);
-                }
             }
         }
-        if (task_id == 0) {
-            /** memory release */
-            denoiseDataFree();
-            TrailDataFree();
-        }
+        /** memory release */
+        denoiseDataFree();
+        TrailDataFree();
+        upsampleDataFree();
+        highcalcDataFree();
+        strayBufferRelease();
+        sprayDataFree();
     }
     catch (const std::exception& kE) {
         LogError("ERROR: algoProcess thread:{}, crashed:{}", task_id, kE.what());
@@ -647,21 +489,6 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
         }
         last_pkt_recv_ = pkt_cnt;
 
-        // int32_t current_proc_idx = proc_buffer_idx_.load();
-        // int32_t recv_buf_idx = recv_buffer_idx_.load();
-        // // 计算环形缓冲区中的距离
-        // int32_t distance = 0;
-        // if (recv_buf_idx >= current_proc_idx) {
-        //     distance = recv_buf_idx - current_proc_idx;
-        // } else {
-        //     distance = (ALGO_FRM_BUF_SIZE - current_proc_idx) + recv_buf_idx;
-        // }
-        // // 如果接收超前处理超过1帧，丢弃当前数据包
-        // if (distance >= 2) {
-        //     //LogWarn("ALGO: Recv buffer ahead of proc buffer by {} frames, dropping packet", distance);
-        //     return;
-        // }
-
         frame_buffer = &frame_buffer_[recv_buffer_idx_.load()];  //重新定向到当前帧的帧缓冲区
 
         uint8_t surface_id_pkt = kRawData.header.surface_id;
@@ -678,9 +505,9 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
             cv_recv_.notify_all();
             return;
         } else if(0 == pkt_cnt) {
-            FaultManager64::getInstance().overflow_position_ &=  0x3;
-            if(FaultManager64::getInstance().hasFault(FaultBits::LidarPointCloudBufferOverflowFault) && ((FaultManager64::getInstance().overflow_position_ & 0x7) == 0))
-            {
+            FaultManager64::getInstance().overflow_position_ &= 0x3;
+            if(FaultManager64::getInstance().hasFault(FaultBits::LidarPointCloudBufferOverflowFault)
+                && ((FaultManager64::getInstance().overflow_position_ & 0x7) == 0)) {
                 FaultManager64::getInstance().clearFault(FaultBits::LidarPointCloudBufferOverflowFault);
             }
         }
@@ -689,7 +516,7 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
         do {
             new_val = (old_val + 1) % kMaxCloudNum_;
         } while (!proc_cloud_idx_.compare_exchange_weak(old_val, new_val));
-        proc_clouds_[proc_cloud_idx] = kRawData; // 将新的点云对象存储到正在处理的点云集合中
+        proc_clouds_[proc_cloud_idx] = kRawData.header; // 将新的点云对象存储到正在处理的点云集合中
         frame_buffer->cloud_id[pkt_cnt] = proc_cloud_idx;
 
         int32_t upsample_col = pkt_cnt >> 1;
@@ -729,60 +556,22 @@ void CloudManager::receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size
         }
 
         if ((pkt_cnt & 0x1) == 1) {
-            frame_buffer->recv_idx.store(upsample_col + 1);
+            if (0x1 == pkt_cnt) { // 点云完成第一列处理
+                cacl_done_.store(0);
+                std::lock_guard<std::mutex> lock(mtx_calc_);
+                cv_calc_.notify_all();
+            }
+
+            if ((upsample_col + 1) % 10 == 0) {
+                frame_buffer->recv_idx.store(upsample_col + 1);
+                cv_recv_.notify_all();
+            }
         }
     } else {
         LogError("ERROR: pkt_seq value is invalid:{}", pkt_cnt);
     }
 
-    cv_recv_.notify_all();
-}
-
-/**
- * \brief Judge if enough Data is able to send.
- * \param[in] col: column index
- *               Range: 0-759. Accuracy: 1.
- */
-bool CloudManager::sendEnoughData(int32_t col)
-{
-    std::unique_lock<std::mutex> lock(mtx_send_);
-
-    // 检查所有线程的处理状态
-    bool all_loss = true;
-    bool all_ready = true;
-    for (const auto& kIdx : algo_proc_idx_) {
-        int32_t val = kIdx.load();
-        all_loss = all_loss && (val == ALGO_LOSS_PKT_CODE);
-        all_ready = all_ready && (val > col);
-    }
-    if (all_loss) {
-        return false;
-    }
-    // if (algo_func_.VIEW_W == col) {
-    //     return true;
-    // }
-    if (all_ready) {
-        return true;
-    }
-
-    bool success = cv_send_.wait_for(lock, std::chrono::milliseconds(2000), [&] {
-        bool all_loss = true;
-        bool all_ready = true;
-        for(const auto& kIdx : algo_proc_idx_) {
-            int32_t val = kIdx.load();
-            all_loss = all_loss && (val == ALGO_LOSS_PKT_CODE);
-            all_ready = all_ready && (val > col);
-        }
-        return (all_loss || all_ready);
-    });
-    if ((!success) || (std::all_of(algo_proc_idx_.begin(), algo_proc_idx_.end(),
-            [](const auto& kIdx) { return kIdx.load() == ALGO_LOSS_PKT_CODE; }))) {
-        if (!success) {
-            LogError("ERROR: send timeout lead to send loss pkt:{}", col);
-        }
-        return false;
-    }
-    return true;
+    //cv_recv_.notify_all();
 }
 
 /**
@@ -810,7 +599,7 @@ bool CloudManager::recvEnoughData(int32_t col, AlgoFunction::tstFrameBuffer* fra
     if (frame_buffer != nullptr && frame_buffer->recv_idx.load() > required_col) {
         return true;
     }
-    bool success = cv_recv_.wait_for(lock, std::chrono::milliseconds(2000),
+    bool success = cv_recv_.wait_for(lock, std::chrono::milliseconds(200),
                                         [&] { return ((frame_buffer->frame_droped.load()) || (frame_buffer->recv_idx.load() > required_col));});
     if ((!success) || frame_buffer->frame_droped.load()) {
         if (!success) {
@@ -821,23 +610,6 @@ bool CloudManager::recvEnoughData(int32_t col, AlgoFunction::tstFrameBuffer* fra
     return true;
 }
 
-/**
- * \brief ‌Submit the processed blocks.
- * \param[in] proc_col: process point cloud column index
- *               Range: 0-759. Accuracy: 1.
- * \param[in] task_id: process thread index
- *               Range: 0-1. Accuracy: 1.
- */
-void CloudManager::updateAlgoIdx(int32_t proc_col, uint32_t task_id)
-{
-    if (task_id >= algo_proc_idx_.size()) {
-        LogError("ERROR: task_id is invalid:{}, max:{}", task_id, algo_proc_idx_.size() - 1);
-        FaultManager8::getInstance().setFault(FaultBits8::LidarThreadNumError);
-        return;
-    }
-    std::lock_guard<std::mutex> lock(mtx_send_);
-    algo_proc_idx_[task_id].store(proc_col + 1);
-    cv_send_.notify_one();
-}
+
 }
 }

@@ -178,7 +178,7 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
             LogDebug("Obstruction detected, starting timer");
         } else {
             // 持续检测到遮挡，检查是否达到500ms
-            auto duration = utils::timeInterval(now, obstruct_start_time_);
+            auto duration = utils::timeInterval(obstruct_start_time_, now);
 
             if (duration >= obstruct_report_time_) {
                 LogWarn("Lidar Obstruction Fault persisted for 500ms, win_block_status:{}",
@@ -235,33 +235,39 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
 
 /**
  * \brief Decode the MSOP packet.
- * \param[in] packet The packet data.
- * \param[in] size The packet size.
+ * \param[in] packet_header The packet header data.
+ * \param[in] size The packet header size.
+ * \param[in] dist_p The algo processed distance.
+ * \param[in] refl_p The algo processed reflection.
+ * \param[in] attr_p The algo processed attribute label.
  * \return The packet is decoded successfully.
  * \retval true: The packet decoding succeeded.
  * \retval false: The packet decoding failed.
  */
-bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
-    if (packet == nullptr) {
+bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet_header, size_t size,
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p) {
+    if (packet_header == nullptr) {
         LogError("[DecoderRSEMX::decodeMsopPkt] packet is nullptr");
         return false;
     }
-    const size_t msop_pkt_size = sizeof(RSEMXMsopPkt);
+    const size_t msop_pkt_header_size = sizeof(RSEMXMsopHeader);
     const uint16_t pixel_per_pkt = const_param_.pixel_per_pkt;
 
-    if (size != msop_pkt_size) {
-        LogError("Wrong MSOP packet size: {}", size);
+    if (size != msop_pkt_header_size) {
+        LogError("Wrong MSOP packet header size: {}", size);
         return false;
-    } else if (0 != memcmp(packet, const_param_.msop_id, const_param_.msop_id_len)) {
+    } else if (0 != memcmp(packet_header, const_param_.msop_id, const_param_.msop_id_len)) {
         LogError("Wrong MSOP packet id");
         return false;
     } else if (point_cloud_ == nullptr) {
         LogError("point_cloud_ is nullptr");
         return false;
     }
-    const RSEMXMsopPkt& pkt = *reinterpret_cast<const RSEMXMsopPkt*>(packet);
-    uint64_t pkt_ts = parseTimeUTCWithUs(pkt.header.timestamp);
-    uint16_t raw_pkt_seq = ntohs(pkt.header.pkt_seq); // 1 ~ 1520
+    const RSEMXMsopHeader& header = *reinterpret_cast<const RSEMXMsopHeader*>(packet_header);
+    uint64_t pkt_ts = parseTimeUTCWithUs(header.timestamp);
+    uint16_t raw_pkt_seq = ntohs(header.pkt_seq); // 1 ~ 1520
 
     if (raw_pkt_seq < EMX_PKT_SEQ_MIN || raw_pkt_seq > EMX_PKT_SEQ_MAX) {
         LogError("MSOP pkt seq: {}, out of range {} - {}", raw_pkt_seq, EMX_PKT_SEQ_MIN, EMX_COLUMNS_PER_FRAME);
@@ -269,7 +275,7 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
     }
     static uint16_t last_pkt_seq{0U};
     static uint64_t first_pkt_ts{0UL};
-    uint32_t frame_cnt = ntohl(pkt.header.frame_cnt);
+    uint32_t frame_cnt = ntohl(header.frame_cnt);
 
     // Determine whether packet loss has occurred
     if ((raw_pkt_seq % EMX_PKT_SEQ_MAX) != ((last_pkt_seq + 1) % EMX_PKT_SEQ_MAX)) {
@@ -279,7 +285,7 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
     last_pkt_seq = raw_pkt_seq;
 
     if (EMX_PKT_SEQ_MIN == raw_pkt_seq) {
-        setPacketHeader(pkt);
+        setPacketHeader(header);
         first_pkt_ts = pkt_ts;
     }
     uint16_t pkt_seq = raw_pkt_seq - 1; // 0 ~ 1519
@@ -296,7 +302,7 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
         last_frame_cnt_ = frame_cnt;
         point_num_ = 0; // reset point num
     }
-    uint8_t surface_index = pkt.header.surface_id;
+    uint8_t surface_index = header.surface_id;
 
     if (surface_index >= EMX_SURFACE_NUM) {
         LogError("surface_id out of range, surface_id is: {}, max is {}", surface_index, EMX_SURFACE_NUM);
@@ -306,15 +312,14 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
     auto& current_block = point_cloud_->packets[pkt_seq];
     // Set the Block header
     current_block.time_offset = static_cast<uint16_t>(std::round(0.1 * (pkt_ts - first_pkt_ts))); // time offset, unit 10us
-    current_block.motor_speed = pkt.header.pitch_offset;
-    current_block.azimuth = pkt.header.yaw;
+    current_block.motor_speed = header.pitch_offset;
+    current_block.azimuth = header.yaw;
 
     for (uint16_t pixel_id = 0; pixel_id < pixel_per_pkt; ++pixel_id) {
-        const RSEMXMsopWave& wave = pkt.pixels[pixel_id].waves[0];
         ChannelData& point = current_block.channel_data[pixel_id];
-        point.radius = wave.radius;
-        point.intensity = wave.intensity;
-        point.point_attribute = wave.attribute;
+        point.radius = htons(dist_p[pixel_id]);
+        point.intensity = refl_p[pixel_id];
+        point.point_attribute = attr_p[pixel_id];
     }
     point_num_ += pixel_per_pkt;
     point_cloud_->point_num = point_num_;
@@ -333,17 +338,17 @@ bool DecoderRSEMX::decodeMsopPkt(const uint8_t* packet, size_t size) {
 /******************************************************************************/
 /**
  * \brief Set the point cloud info.
- * \param[in] pkt The msop packet.
+ * \param[in] header The msop packet's header.
  */
-void DecoderRSEMX::setPacketHeader(const RSEMXMsopPkt& pkt) {
+void DecoderRSEMX::setPacketHeader(const RSEMXMsopHeader& header) {
     if (nullptr == point_cloud_) {
         LogError("point_cloud_ is nullptr");
         return;
     }
     std::unique_lock<std::mutex> lock(mtx_point_cloud_);
-    point_cloud_->frame_timestamp = parseTimeUTCWithUs(pkt.header.timestamp);
+    point_cloud_->frame_timestamp = parseTimeUTCWithUs(header.timestamp);
     point_cloud_->point_num = 0U;
-    point_cloud_->frame_seq = ntohl(pkt.header.frame_cnt);
+    point_cloud_->frame_seq = ntohl(header.frame_cnt);
     static bool lidar_parameter_malloc{false};
 
     if (difop2_received_) {
@@ -361,8 +366,8 @@ void DecoderRSEMX::setPacketHeader(const RSEMXMsopPkt& pkt) {
     }
     point_cloud_->protocol_version = LIDAR_SDK_API_VER_MAJOR * 10000 + LIDAR_SDK_API_VER_MINOR * 100 + LIDAR_SDK_API_VER_PATCH;
     point_cloud_->return_mode = 0x01; // SDK默认输出为0x01最强回波
-    point_cloud_->frame_sync = pkt.header.synchronized;
-    point_cloud_->mirror_id = pkt.header.surface_id;
+    point_cloud_->frame_sync = header.synchronized;
+    point_cloud_->mirror_id = header.surface_id;
     point_cloud_->packet_num = EMX_PKT_SEQ_MAX;
     point_cloud_->data_length = sizeof(LidarPointCloudPackets) - sizeof(DataBlock);
     uint8_t* data_id = (uint8_t*)&(point_cloud_->data_id);

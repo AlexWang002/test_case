@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <netinet/in.h>
 #include <sys/syscall.h>
 
 /******************************************************************************/
@@ -222,13 +223,6 @@ RSLidarSdkImpl::~RSLidarSdkImpl() {
  * \return The version of the Lidar SDK.
  */
 const char* RSLidarSdkImpl::getLidarSdkVersion() {
-    LogInfo("*********************************");
-    LogInfo("Description of this version:");
-    // LogInfo("1.delete MIPI sync queue");
-    // LogInfo("2.delete msop packet loss detect");
-    // LogInfo("3.change the MSOP[] to MSOP*[]");
-    // LogInfo("4.delete cpu cache flush");
-    LogInfo("*********************************");
     return kRSLidarSdkVersionStr.c_str();
 }
 
@@ -316,7 +310,10 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
     decoder_ptr_->regCallback(std::bind(&RSLidarSdkImpl::splitFrame, this, std::placeholders::_1));
     cloud_manager_ptr_ = std::make_shared<CloudManager>();
     cloud_manager_ptr_->regCallback(
-        std::bind(&RSLidarSdkImpl::putMsop, this, std::placeholders::_1, std::placeholders::_2));
+        std::bind(&RSLidarSdkImpl::putMsop, this, std::placeholders::_1, std::placeholders::_2,
+                                                std::placeholders::_3,
+                                                std::placeholders::_4,
+                                                std::placeholders::_5));
     pointcloud_fps_counter_ptr_.reset(new FPSCounter("PointCloud", 10));
     device_info_fps_counter_ptr_.reset(new FPSCounter("DeviceInfo", 60));
     is_initialized_.store(true, std::memory_order_seq_cst);
@@ -346,10 +343,10 @@ LidarSdkErrorCode RSLidarSdkImpl::deInit() {
         }
     }
 
-    DestroyLog();
     clearLidarSdkCallbacks();
     is_initialized_.store(false, std::memory_order_seq_cst);
     LogInfo("Completed deinitialized LidarSdk: Result = {}", ret_code == LIDAR_SDK_SUCCESS ? "SUCCESS" : "FAILURE");
+    DestroyLog();
     return ret_code;
 }
 
@@ -360,8 +357,8 @@ LidarSdkErrorCode RSLidarSdkImpl::deInit() {
  * \retval LidarSdkErrorCode::LIDAR_SDK_FAILD: Starting failed.
  */
 LidarSdkErrorCode RSLidarSdkImpl::start() {
-    std::lock_guard<std::mutex> lock(mutex_);
     LogInfo("Begin to start LidarSdk");
+
     if (!is_initialized_.load(std::memory_order_seq_cst)) {
         LogError("LidarSdk start failed, please call init() first");
         return LIDAR_SDK_FAILD;
@@ -374,7 +371,10 @@ LidarSdkErrorCode RSLidarSdkImpl::start() {
     LidarSdkErrorCode ret = LIDAR_SDK_FAILD;
 
     try {
-        is_running_.store(true, std::memory_order_seq_cst);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            is_running_.store(true, std::memory_order_seq_cst);
+        }
         LogInfo("Creating data handling thread...");
         thread::ThreadConfig handle_mipi_config;
 
@@ -406,11 +406,17 @@ LidarSdkErrorCode RSLidarSdkImpl::start() {
             cloud_manager_ptr_->process_delay_switch_ = this->delay_stat_switch_;
             cloud_manager_ptr_->start();
         }
-        is_started_.store(true, std::memory_order_seq_cst);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            is_started_.store(true, std::memory_order_seq_cst);
+        }
         ret = LIDAR_SDK_SUCCESS;
     } catch (const std::exception& e) {
         LogError("Failed to start lidar thread: {}", e.what());
-        is_running_.store(false, std::memory_order_seq_cst);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            is_running_.store(false, std::memory_order_seq_cst);
+        }
         if (handle_lidar_mipi_data_thread_.joinable()) {
             try {
                 handle_lidar_mipi_data_thread_.detach();
@@ -443,11 +449,14 @@ LidarSdkErrorCode RSLidarSdkImpl::stop() {
         return LIDAR_SDK_SUCCESS;
     }
     LogInfo("Begin to stop LidarSdk");
-    std::lock_guard<std::mutex> lock(mutex_);
     LidarSdkErrorCode ret{LIDAR_SDK_FAILD};
     auto start_time = std::chrono::steady_clock::now();
 
-    is_running_.store(false, std::memory_order_seq_cst);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        is_running_.store(false, std::memory_order_seq_cst);
+    }
+
     mipi_data_queue_.stopWait();
     mipi_data_queue_.reset();
 
@@ -708,7 +717,7 @@ LidarSdkErrorCode RSLidarSdkImpl::writeDid(uint16_t did, uint8_t* data, uint16_t
  * \retval LidarSdkErrorCode::LIDAR_SDK_FAILD: Did reading failed.
  */
 LidarSdkErrorCode RSLidarSdkImpl::readDid(uint16_t did, uint8_t* data, uint16_t* dataLen, uint8_t* nrc) {
-    static const uint16_t READ_SDK_VERSION_DID = 0x1112U;
+    static const uint16_t kReadSdkVersionDID = 0x1112U;
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!is_started_.load(std::memory_order_seq_cst)) {
@@ -722,11 +731,19 @@ LidarSdkErrorCode RSLidarSdkImpl::readDid(uint16_t did, uint8_t* data, uint16_t*
     }
 
     // 实现DID读取逻辑
-    if (READ_SDK_VERSION_DID == did) {
-        (void)std::memcpy(data, &kSdkVersionEncoded, sizeof(kSdkVersionEncoded));
-        *dataLen = sizeof(kSdkVersionEncoded);
+    if (kReadSdkVersionDID == did) {
+        if (kSdkVersionEncoded > 0xFFFFU) {
+            LogError("[ReadDID] SDK version is 0x{:x}, more than 2 bytes", kSdkVersionEncoded);
+        } else {
+            LogInfo("[ReadDID] SDK version is 0x{:x}", kSdkVersionEncoded);
+        }
+        uint16_t sdk_version = htons(static_cast<uint16_t>(kSdkVersionEncoded));
+
+        (void)std::memcpy(data, &sdk_version, sizeof(sdk_version));
+        *dataLen = sizeof(sdk_version);
         *nrc = static_cast<uint8_t>(POSITIVE);
     } else {
+        LogError("Unknow DID number: 0x{:x}", did);
         *dataLen = 0;
         *nrc = static_cast<uint8_t>(REQUEST_SEQUENCE_ERROR);
     }
@@ -871,11 +888,17 @@ void RSLidarSdkImpl::clearLidarSdkCallbacks() {
 
 /**
  * \brief Put the MSOP data into the queue.
- * \param[in] data The pointer to the MSOP data.
- * \param[in] size The size of the MSOP data.
+ * \param[in] data The pointer to the MSOP data's header.
+ * \param[in] size The size of the MSOP data's header.
+ * \param[in] dist_p The algo processed distance.
+ * \param[in] refl_p The algo processed reflection.
+ * \param[in] attr_p The algo processed attribute label.
  */
-void RSLidarSdkImpl::putMsop(const uint8_t* data, uint32_t size) {
-    decoder_ptr_->processMsopPkt(data, size);
+void RSLidarSdkImpl::putMsop(const uint8_t* data, uint32_t size,
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p) {
+    decoder_ptr_->processMsopPkt(data, size, dist_p, refl_p, attr_p);
 }
 
 /**
@@ -1164,7 +1187,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             frm_normal_start_time_ = start_time;
             frm_normal_detected_ = true;
         } else if (frm_normal_reported_) {
-            auto time_cost = utils::timeInterval(start_time, frm_normal_start_time_);
+            auto time_cost = utils::timeInterval(frm_normal_start_time_);
 
             if (time_cost > lostfrm_report_time_) {
                 if (FaultManager64::getInstance().hasFault(FaultBits::LidarMIPIPacketLossFault)) {
@@ -1267,8 +1290,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             }
             last_pkt_seq = pkt_seq;
         }
-        auto data_check_end = std::chrono::steady_clock::now();
-        auto data_check_cost_time = utils::timeInterval(start_time, data_check_end);
+        auto data_check_cost_time = utils::timeInterval(start_time);
 
         if (data_check_cost_time > kMsopProcessTimeMs) {
             LogWarn("handleLidarMipiData frame index {} , Data check time: {} ms, exceeds the limit: {} ms",

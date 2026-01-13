@@ -95,7 +95,10 @@ struct PacketRangePerMipiFrame {
  */
 class Decoder {
   public:
-    virtual bool decodeMsopPkt(const uint8_t* pkt, size_t size) = 0;
+    virtual bool decodeMsopPkt(const uint8_t* packet_header, size_t size,
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p) = 0;
     virtual bool decodeDifopPkt(const uint8_t* pkt, size_t size) = 0;
     virtual bool decodeDeviceInfoPkt(const uint8_t* pkt, size_t size) = 0;
     virtual ~Decoder() = default;
@@ -104,7 +107,10 @@ class Decoder {
                      const RSDecoderParam& param);
 
     bool init();
-    bool processMsopPkt(const uint8_t* pkt, size_t size);
+    bool processMsopPkt(const uint8_t* packet_header, size_t size,
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p);
     bool processDifopPkt(const uint8_t* pkt, size_t size);
     bool processDeviceInfoPkt(const uint8_t* pkt, size_t size);
 

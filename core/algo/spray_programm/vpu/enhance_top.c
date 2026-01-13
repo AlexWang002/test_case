@@ -282,8 +282,8 @@ void rainEnhanceExec(SprayParam_t *spray_Param, SprayConfig_t *config)
         dvshortx cur_filter_mask_0 = (rain0_center | (count_0 < spray_Param->filter_count_thr)) & (gnd0 == 0);
         dvshortx cur_filter_mask_1 = (rain1_center | (count_1 < spray_Param->filter_count_thr)) & (gnd1 == 0);
 
-        final0 = dvmux(~cur_filter_mask_0 & ~cur_filter_mask_1, final0, cur_filter_mask_0);
-        final1 = dvmux(~cur_filter_mask_0 & ~cur_filter_mask_1, final1, cur_filter_mask_1);
+        final0 = dvmux((!cur_filter_mask_0) & (!cur_filter_mask_1), final0, cur_filter_mask_0);
+        final1 = dvmux((!cur_filter_mask_0) & (!cur_filter_mask_1), final1, cur_filter_mask_1);
 
         vstore(final0, output_final_agen0);
         vstore(final1, output_final_agen1);

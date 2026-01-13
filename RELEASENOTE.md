@@ -1,12 +1,11 @@
 # RELEASENOTE
 
-## [3.00.00] - 2025-12-10
+## [3.02.00] - 2026-1-5
 
-1. 增加json配置VPU使能功能，字段’VPU_AUTH’写true:开启VPU使能；写false:关闭VPU使能
-2. 增加PVA算法各阶段时延日志打印
-3. 增加PVA算法任务超时限制
-4. 优化高度计算算法耗时
-5. 优化杂散算法耗时
-6. ag_config.json中算法线程的调度策略调整至FIFO
-7. 将deviceinfo相关业务移至点云业务后，不计入handlemipi总耗时中
-8. runDeviceInfoCallback回调频率调整至10Hz
+1. 关闭CRC算法
+2. 增加readDID接口功能
+3. 优化拖点算法，解决近距离墙面边缘拖点问题
+4. 算法线程减少为1个，降低cpu负载
+5. json文件线程配置减少为3个
+6. json文件ENABLE_DELETE字段改为ENABLE_SPRAY_DELETE字段
+7. 降低互斥锁使用频率

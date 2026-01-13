@@ -83,13 +83,19 @@ bool Decoder::processDifopPkt(const uint8_t* pkt, size_t size) {
 
 /**
  * \brief Process the MSOP packet.
- * \param[in] pkt The pointer of MSOP packet.
- * \param[in] size The size of MSOP packet.
+ * \param[in] packet_header The pointer of MSOP packet's header.
+ * \param[in] size The size of MSOP packet's header.
+ * \param[in] dist_p The algo processed distance.
+ * \param[in] refl_p The algo processed reflection.
+ * \param[in] attr_p The algo processed attribute label.
  * \retval true: MSOP packet decoding succeeded.
  * \retval false: MSOP packet decoding failed.
  */
-bool Decoder::processMsopPkt(const uint8_t* pkt, size_t size) {
-    return decodeMsopPkt(pkt, size);
+bool Decoder::processMsopPkt(const uint8_t* packet_header, size_t size,
+                                const uint16_t* dist_p,
+                                const uint16_t* refl_p,
+                                const uint16_t* attr_p) {
+    return decodeMsopPkt(packet_header, size, dist_p, refl_p, attr_p);
 }
 
 /**

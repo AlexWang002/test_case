@@ -30,7 +30,6 @@
 /*                         Include dependant headers                          */
 /******************************************************************************/
 #include <cupva_device.h>
-#include <cupva_device_debug.h>
 
 /******************************************************************************/
 /*                      Include headers of the component                      */
@@ -59,7 +58,7 @@ VMEM(B, uint16_t, hortrail_judge_buffer, TILE_WIDTH * TILE_HEIGHT);
 VMEM(A, uint16_t, wall_judge_buffer, TILE_WIDTH * TILE_HEIGHT);
 VMEM(B, uint16_t, nearCntVBuffer, TILE_WIDTH * TILE_HEIGHT);
 VMEM(C, uint16_t, verCntBuffer, TILE_WIDTH * TILE_HEIGHT);
-
+VMEM(B, uint16_t, draw_judge_Buffer, TILE_WIDTH * TILE_HEIGHT);
 typedef struct
 {
     AgenCFG input_dist;
@@ -79,6 +78,16 @@ typedef struct
     AgenCFG refer_mask;
     int32_t niter;
 } Part1Config_t;
+typedef struct
+{
+    AgenCFG up_dist;
+    AgenCFG mid_dist;
+    AgenCFG bottom_dist;
+    AgenCFG draw_mask;
+    AgenCFG center;
+    int32_t niter;
+} DrawConfig_t;
+
 typedef struct
 {
     AgenCFG input_dist;
@@ -116,12 +125,14 @@ typedef struct
     AgenCFG Hortrail_judge;
     AgenCFG con3_1;
     AgenCFG refer_mask;
+    AgenCFG draw_judge;
     AgenCFG output;
     int32_t niter;
 } Part5Config_t;
 
 VMEM(B, MaskConfig_t, maskParam);
 VMEM(B, Part1Config_t, Part1Param);
+VMEM(B, DrawConfig_t, DrawParam);
 VMEM(B, Part2Config_t, Part2Param);
 VMEM(B, Part3Config_t, Part3Param);
 VMEM(B, Part4Config_t, Part4Param);
@@ -338,6 +349,132 @@ void trail_cond_part1_exec(TrailParam_t *trail_Param, Part1Config_t *config)
         vstore(refer_mask, refer_mask_agen);
         vstore(con1_3, con1_3_agen);
         vstore(con3_1, con3_1_agen);
+    }
+}
+
+/**
+ * \brief  Draw judgment initialization function
+ * \param[in] config : Draw judgment configuration structure
+ *                Range: NA. Accuracy: NA.
+ * \param[in] input_line_pitch : Line pitch with halo
+ *                Range: 194. Accuracy: NA.
+ * \param[out] draw_judge : Draw judgment
+ *                Range: 0-1. Accuracy: 1.
+ */
+void trail_cond_draw_init(uint16_t *draw_judge, int32_t input_line_pitch, DrawConfig_t *config)
+{
+    AgenWrapper input_wrapper;
+    input_wrapper.size = sizeof(uint16_t);
+    input_wrapper.n1   = 11;
+    input_wrapper.s1   = input_line_pitch;
+    input_wrapper.n2   = TILE_WIDTH / VECW;
+    input_wrapper.s2   = VECW;
+    input_wrapper.n3   = TILE_HEIGHT;
+    input_wrapper.s3   = input_line_pitch;
+
+    agen left_agen     = init((dvushort *)NULL);
+    INIT_AGEN3(left_agen, input_wrapper);
+    agen mid_agen      = init((dvushort *)NULL);
+    INIT_AGEN3(mid_agen, input_wrapper);
+    agen right_agen    = init((dvushort *)NULL);
+    INIT_AGEN3(right_agen, input_wrapper);
+
+    AgenWrapper agen_wrapper;
+    agen_wrapper.size = sizeof(uint16_t);
+    agen_wrapper.n1   = TILE_WIDTH / VECW;
+    agen_wrapper.s1   = VECW;
+    agen_wrapper.n2   = TILE_HEIGHT;
+    agen_wrapper.s2   = TILE_WIDTH;
+
+    agen draw_judge_agen = init((dvushort *)draw_judge);
+    INIT_AGEN2(draw_judge_agen, agen_wrapper);
+
+    AgenWrapper center_wrapper;
+    center_wrapper.size = sizeof(uint16_t);
+    center_wrapper.n1   = TILE_WIDTH / VECW;
+    center_wrapper.s1   = VECW;
+    center_wrapper.n2   = TILE_HEIGHT;
+    center_wrapper.s2   = input_line_pitch;
+
+    agen center_agen = init((dvushort *)NULL);
+    INIT_AGEN2(center_agen, center_wrapper);
+
+    config->up_dist = extract_agen_cfg(left_agen);
+    config->mid_dist = extract_agen_cfg(mid_agen);
+    config->bottom_dist = extract_agen_cfg(right_agen);
+    config->draw_mask  = extract_agen_cfg(draw_judge_agen);
+    config->center     = extract_agen_cfg(center_agen);
+    config->niter      = (TILE_WIDTH / VECW) * TILE_HEIGHT;
+}
+
+/**
+ * \brief  Draw judgment execute function
+ * \param[in] config : Draw judgment configuration structure
+ *                Range: NA. Accuracy: NA.
+ * \param[in] trail_Param : Trail parameters structure
+ *                Range: NA. Accuracy: NA.
+ */
+void trail_cond_draw_exec(TrailParam_t *trail_Param, DrawConfig_t *config)
+{
+    agen up_dist_agen     = init_agen_from_cfg(config->up_dist);
+    agen mid_dist_agen    = init_agen_from_cfg(config->mid_dist);
+    agen bottom_dist_agen = init_agen_from_cfg(config->bottom_dist);
+    agen draw_judge_agen  = init_agen_from_cfg(config->draw_mask);
+    agen center_agen      = init_agen_from_cfg(config->center);
+
+    int32_t niter = config->niter;
+
+    for (int32_t i = 0; i < niter; i++) chess_prepare_for_pipelining
+    chess_loop_range(3, )
+    {
+        dvshortx cond1 = vec0;
+        dvshortx cond2 = vec0;
+        dvshortx cond3 = vec0;
+        dvshortx cond4 = vec0;
+        dvshortx center_dist = dvushort_load(center_agen);
+        for(int cnt = 0; cnt < 11; cnt++)
+        {
+            dvshortx up_dist     = dvushort_load(up_dist_agen);
+            dvshortx mid_dist    = dvushort_load(mid_dist_agen);
+            dvshortx bottom_dist = dvushort_load(bottom_dist_agen);
+
+            dvshortx up_pred     = up_dist > 0;
+            dvshortx mid_pred    = mid_dist > 0;
+            dvshortx bottom_pred = bottom_dist > 0;
+
+            dvshortx dif_up_distC     = up_dist - center_dist;
+            dvshortx dif_mid_distC    = mid_dist - center_dist;
+            dvshortx dif_bottom_distC = bottom_dist - center_dist;
+
+            dvshortx dif_up_distC_abs     = dvmux(!up_pred, 65535, dvabsdif(up_dist, center_dist));
+            dvshortx dif_mid_distC_abs    = dvmux(!mid_pred, 65535, dvabsdif(mid_dist, center_dist));
+            dvshortx dif_bottom_distC_abs = dvmux(!bottom_pred, 65535, dvabsdif(bottom_dist, center_dist));
+
+            dvshortx draw_bd_mask = (mid_pred) & (dif_mid_distC_abs > trail_Param->Draw_D_H);
+            dvshortx near_mask = dif_mid_distC_abs < 100;
+            dvshortx corner_mask = (dif_mid_distC_abs >= dif_up_distC_abs) & (dif_mid_distC_abs >= dif_bottom_distC_abs)
+                                    & (mid_pred) & (near_mask);
+            dvshortx cono_mask = (dif_mid_distC > dif_up_distC) & near_mask;
+            dvshortx result_mask = corner_mask & cono_mask;
+
+            dvshortx left_coef;
+            left_coef.lo = replicateh(trail_Param->left_coef[cnt]);
+            left_coef.hi = replicateh(trail_Param->left_coef[cnt]);
+
+            dvshortx right_coef;
+            right_coef.lo = replicateh(trail_Param->right_coef[cnt]);
+            right_coef.hi = replicateh(trail_Param->right_coef[cnt]);
+
+            dvshortx cono_mask_result1 = (left_coef) & (result_mask | draw_bd_mask);
+            dvshortx cono_mask_result2 = (right_coef) & (result_mask | draw_bd_mask);
+
+            cond1 |= result_mask;
+            cond2 |= draw_bd_mask;
+            cond3 |= cono_mask_result1;
+            cond4 |= cono_mask_result2;
+        }
+        dvshortx cond = cond1 & cond2 & cond3 & cond4;
+        vstore(cond, draw_judge_agen);
     }
 }
 
@@ -686,7 +823,7 @@ void trail_cond_part4_exec(TrailParam_t *trail_Param, Part4Config_t *config)
  *                Range: 0-1. Accuracy: 1.
  */
 void trail_cond_part5_init(uint16_t *near_cnt_v, uint16_t *ver_cnt, uint16_t *wall_judge, uint16_t *mask,
-                                 uint16_t *Hortrail_judge, uint16_t *con3_1, uint16_t *refer_mask,
+                                 uint16_t *Hortrail_judge, uint16_t *con3_1, uint16_t *refer_mask, uint16_t *draw_judge,
                                  int32_t input_line_pitch, Part5Config_t *config)
 {
     AgenWrapper agen_wrapper;
@@ -710,6 +847,8 @@ void trail_cond_part5_init(uint16_t *near_cnt_v, uint16_t *ver_cnt, uint16_t *wa
     INIT_AGEN2(con3_1_agen, agen_wrapper);
     agen refer_mask_agen = init((dvushort *)refer_mask);
     INIT_AGEN2(refer_mask_agen, agen_wrapper);
+    agen draw_judge_agen = init((dvushort *)draw_judge);
+    INIT_AGEN2(draw_judge_agen, agen_wrapper);
     agen output_agen    = init((dvushort *)NULL);
     INIT_AGEN2(output_agen, agen_wrapper);
 
@@ -730,6 +869,7 @@ void trail_cond_part5_init(uint16_t *near_cnt_v, uint16_t *ver_cnt, uint16_t *wa
     config->Hortrail_judge = extract_agen_cfg(Hortrail_judge_agen);
     config->con3_1         = extract_agen_cfg(con3_1_agen);
     config->refer_mask     = extract_agen_cfg(refer_mask_agen);
+    config->draw_judge     = extract_agen_cfg(draw_judge_agen);
     config->output         = extract_agen_cfg(output_agen);
     config->niter          = (TILE_WIDTH / VECW) * TILE_HEIGHT;
 }
@@ -750,6 +890,7 @@ void trail_cond_part5_exec(TrailParam_t *trail_Param, Part5Config_t *config)
     agen Hortrail_judge_agen = init_agen_from_cfg(config->Hortrail_judge);
     agen con3_1_agen         = init_agen_from_cfg(config->con3_1);
     agen refer_mask_agen     = init_agen_from_cfg(config->refer_mask);
+    agen draw_judge_agen     = init_agen_from_cfg(config->draw_judge);
     agen center_dist_agen     = init_agen_from_cfg(config->center_dist);
     agen output_agen         = init_agen_from_cfg(config->output);
 
@@ -767,14 +908,16 @@ void trail_cond_part5_exec(TrailParam_t *trail_Param, Part5Config_t *config)
         dvshortx Hortrail_judge = dvushort_load(Hortrail_judge_agen);
         dvshortx con3_1         = dvushort_load(con3_1_agen);
         dvshortx refer_mask     = dvushort_load(refer_mask_agen);
+        dvshortx draw_judge     = dvushort_load(draw_judge_agen);
         dvshortx center_dist    = dvushort_load(center_dist_agen);
 
         dvshortx con3_2         = near_cnt_v < near_cnt_th_v;
         dvshortx con3           = con3_1 & con3_2;
         dvshortx con4_3         = ver_cnt < 3;
         dvshortx con4           = wall_judge | con4_3;
-        dvshortx Vertrail_judge = con3 & con4;
-        dvshortx output         = mask & Hortrail_judge & (refer_mask == 0) & Vertrail_judge;
+        dvshortx con5           = draw_judge & (center_dist < draw_dist_end);
+        dvshortx Vertrail_judge = (con3 & con4) | con5;
+        dvshortx output         = mask & ((Hortrail_judge & (refer_mask == 0)) | draw_judge) & Vertrail_judge;
 
         vstore(output, output_agen);
     }
@@ -798,12 +941,12 @@ CUPVA_VPU_MAIN() {
     check_center_init(maskBuffer, nearDistThBuffer, adjDisThreDBuffer, srcDistLinePitch, &maskParam);
     trail_cond_part1_init(nearDistThBuffer, adjDisThreDBuffer, con1_3buffer, con3_1buffer, refer_buffer,
                             srcDistLinePitch, &Part1Param);
+    trail_cond_draw_init(draw_judge_Buffer, srcDistLinePitch, &DrawParam);
     trail_cond_part2_init(adjDisThreDBuffer, con1_3buffer, hortrail_judge_buffer, srcDistLinePitch, &Part2Param);
     trail_cond_part3_init(wall_judge_buffer, srcDistLinePitch, &Part3Param);
     trail_cond_part4_init(nearDistThBuffer, nearCntVBuffer, verCntBuffer,srcDistLinePitch, &Part4Param);
     trail_cond_part5_init(nearCntVBuffer, verCntBuffer, wall_judge_buffer, maskBuffer, hortrail_judge_buffer,
-                            con3_1buffer, refer_buffer, srcDistLinePitch, &Part5Param);
-
+                            con3_1buffer, refer_buffer, draw_judge_Buffer, srcDistLinePitch, &Part5Param);
     for (int TileIdx = 0; TileIdx < TILE_COUNT; TileIdx++)
     {
         for(int i = 0; i < TILE_WIDTH * TILE_HEIGHT; i++){
@@ -815,6 +958,11 @@ CUPVA_VPU_MAIN() {
         /** Update agen base address */
         cupvaModifyAgenCfgBase(&maskParam.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 6 * srcDistLinePitch]);
         cupvaModifyAgenCfgBase(&Part1Param.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 4 * srcDistLinePitch]);
+        cupvaModifyAgenCfgBase(&DrawParam.up_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH]);
+        cupvaModifyAgenCfgBase(&DrawParam.mid_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + srcDistLinePitch]);
+        cupvaModifyAgenCfgBase(&DrawParam.bottom_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 2 * srcDistLinePitch]);
+
+        cupvaModifyAgenCfgBase(&DrawParam.center, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 6 * srcDistLinePitch]);
         cupvaModifyAgenCfgBase(&Part2Param.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 4 * srcDistLinePitch]);
         cupvaModifyAgenCfgBase(&Part3Param.input_dist, &inputDistBufferVMEM[srcDistOffset + KERNEL_RADIUS_WIDTH + 4 * srcDistLinePitch]);
         cupvaModifyAgenCfgBase(&Part4Param.input_dist, &inputDistBufferVMEM[srcDistOffset + 6 * srcDistLinePitch]);
@@ -824,6 +972,7 @@ CUPVA_VPU_MAIN() {
 
         check_center_exec(trail_Param, &maskParam);
         trail_cond_part1_exec(trail_Param, &Part1Param);
+        trail_cond_draw_exec(trail_Param, &DrawParam);
         trail_cond_part2_exec(trail_Param, &Part2Param);
         trail_cond_part3_exec(trail_Param, &Part3Param);
         trail_cond_part4_exec(trail_Param, &Part4Param);

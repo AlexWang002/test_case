@@ -37,6 +37,7 @@
 #include <deque>
 #include <fstream>
 #include <iomanip>
+#include <ios>
 #include <iostream>
 #include <mutex>
 #include <pthread.h>
@@ -1079,7 +1080,9 @@ int32_t main(int32_t argc, char* argv[]) {
         uint8_t nrc {0xFFU};
 
         lidar_interface->readDid(0x1112U, data, &data_len, &nrc);
-        std::cout << "data: " << *(uint16_t*)data << ", data_len: " << data_len << ", nrc: " << (uint16_t)nrc
+        std::cout << std::hex << std::setw(4) << "data: 0x" << *(uint16_t*)data
+                  << std::dec << ", dec: " << *(uint16_t*)data
+                  << ", data_len: " << data_len << ", nrc: " << (uint16_t)nrc
                   << std::endl;
 
         std::this_thread::sleep_for(std::chrono::seconds(2));

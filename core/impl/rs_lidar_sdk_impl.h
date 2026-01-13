@@ -144,7 +144,10 @@ class RSLidarSdkImpl {
     // 内部方法
     bool setLidarSdkCallbacks(const LidarSdkCbks* src);
     void clearLidarSdkCallbacks();
-    void putMsop(const uint8_t* data, uint32_t size);
+    void putMsop(const uint8_t* data, uint32_t size, 
+                    const uint16_t* dist_p,
+                    const uint16_t* refl_p,
+                    const uint16_t* attr_p);
     void handleMsopData();
     void splitFrame(uint32_t point_num);
     void runDeviceInfoCallback();
