@@ -198,6 +198,13 @@ inline void noop(const uint8_t* mipi_data, const uint32_t mipi_data_len) noexcep
     // Do nothing
 }
 
+/**
+ * \brief Safely join a thread.
+ *
+ * \param thread Thread to join.
+ * \param thread_name Name of the thread.
+ * \note If the thread is not joinable, a warning message is logged.
+ */
 inline void safeJoinThread(std::thread& thread, const std::string& thread_name) {
     if (thread.joinable()) {
         try {
@@ -505,6 +512,7 @@ LidarSdkErrorCode RSLidarSdkImpl::stop() {
     mipi_data_queue_.clear();
     mipi_data_queue_.reset();
     LogInfo("[stop] release queue");
+    safeJoinThread(periodic_send_device_info_thread_, "PeriodicSendDeviceInfo");
     safeJoinThread(handle_lidar_mipi_data_thread_, "HandleMIPI");
     point_cloud_queue_.stopWait();
     point_cloud_queue_.clear();
@@ -605,7 +613,7 @@ LidarSdkErrorCode RSLidarSdkImpl::setCalibrationEnable(const bool enabled) {
  */
 LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void* ptrAdc) {
     auto start_time = std::chrono::steady_clock::now();
-    static uint32_t last_seq{0U};
+
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
@@ -622,6 +630,7 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
         LogError("LidarSdk inject adc data failed, ptrAdc is null");
         return LIDAR_SDK_FAILD;
     }
+    static uint32_t last_seq{0U};
     static const uint32_t expected_len = decoder_ptr_->getTheoreticalMipiDataLength();
     LidarAdcBuffer* adc_buffer = (LidarAdcBuffer*)ptrAdc;
     MipiFramePtr mipi_frame = std::make_shared<MipiFrame>();
@@ -629,6 +638,9 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
     mipi_frame->data = nullptr;
     mipi_frame->len = 0U;
     mipi_frame->index = adc_buffer->frameIndex;
+
+    // stop periodicSendDeviceInfo() thread
+    mipi_interruption_.store(false, std::memory_order_seq_cst);
 
 #if defined(__arm__) || defined(__aarch64__)
     using ClientErrorCode = dimw::cameraipcclient::ClientErrorCode;
@@ -648,7 +660,7 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
     if (nullptr == mipi_frame->data) {
         LogError("[injectAdc] Mipi data is null, release adc buffer.");
         releaseBuffer(adc_buffer);
-        runDeviceInfoCallback();
+        runDeviceInfoCallback(); // TODO check if it's necessary
         return LIDAR_SDK_FAILD;
     }
 
@@ -658,10 +670,9 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
         runDeviceInfoCallback();
         return LIDAR_SDK_FAILD;
     }
-    uint32_t seq = static_cast<uint32_t>(mipi_frame->data[27] << 24) |
-                   static_cast<uint32_t>(mipi_frame->data[28] << 16) |
-                   static_cast<uint32_t>(mipi_frame->data[29] <<  8) |
-                   static_cast<uint32_t>(mipi_frame->data[30]);
+    uint32_t seq;
+    (void)std::memcpy(&seq, mipi_frame->data + 27, sizeof(uint32_t));
+    seq = ntohl(seq);
     LogInfo("[injectAdc] inject time: {}, seq: {}, last_seq: {}, index: {}", utils::unixTimestamp(start_time), seq,
                 last_seq, mipi_frame->index);
     last_seq = seq;
@@ -830,6 +841,24 @@ LidarSdkErrorCode RSLidarSdkImpl::ridControl(uint8_t mode, uint16_t rid, uint8_t
  */
 bool RSLidarSdkImpl::getAlarmInfo() {
     return alarm_status_;
+}
+
+/**
+ * \brief Periodically send device information.
+ */
+void RSLidarSdkImpl::periodicSendDeviceInfo() {
+    const int32_t kFrameRateHz{10};
+    constexpr int32_t kPeriodicIntervalMs{1000 / kFrameRateHz};
+
+    while (is_running_.load(std::memory_order_seq_cst)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(kPeriodicIntervalMs));
+
+        if (mipi_interruption_.load(std::memory_order_seq_cst)) {
+            runDeviceInfoCallback();
+        } else {
+            break;
+        }
+    }
 }
 
 /******************************************************************************/
@@ -1016,7 +1045,7 @@ RSLidarSdkImpl::LidarPointCloudPtr RSLidarSdkImpl::deepCopyLidarCloud(const Lida
     }
 
     // Copy the value of all the members of the struct LidarPointCloudPackets
-    (void)memcpy(copy, src, bufferSize);
+    (void)std::memcpy(copy, src, bufferSize);
 
     // Deepcopy the value pointed by the lidar_parameter pointer
     if (src->lidar_parameter && src->lidar_parameter_length > 0) {
@@ -1026,7 +1055,7 @@ RSLidarSdkImpl::LidarPointCloudPtr RSLidarSdkImpl::deepCopyLidarCloud(const Lida
             LogError("Failed to allocate memory for lidar parameter copy");
             return {nullptr, {}};
         }
-        (void)memcpy(copy->lidar_parameter, src->lidar_parameter, src->lidar_parameter_length);
+        (void)std::memcpy(copy->lidar_parameter, src->lidar_parameter, src->lidar_parameter_length);
     } else {
         copy->lidar_parameter = nullptr;
         copy->lidar_parameter_length = 0;
@@ -1120,10 +1149,18 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
         LogInfo("SDK VERSION: {}", device_info->sdk_version);
     }
     // device_info_fps_counter_ptr_->updateFrame(callbacks_.getTimeNowPhc());
-    callbacks_.deviceInfo(sensor_index_, device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
-    FaultManager64::getInstance().clearFaults(~0ULL); // clear all fault code
-    FaultManager8::getInstance().clearFaults(0xFF);   // clear all fault code
-    decoder_ptr_->resetDeviceInfo();
+    // callbacks_.deviceInfo(sensor_index_, device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
+
+    if (mipi_interruption_.load(std::memory_order_seq_cst)) {
+        // TODO get the latest device info
+        callbacks_.deviceInfo(sensor_index_, device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
+    } else {
+        // TODO save the latest device info
+        callbacks_.deviceInfo(sensor_index_, device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
+        FaultManager64::getInstance().clearFaults(~0ULL); // clear all fault code
+        FaultManager8::getInstance().clearFaults(0xFF);   // clear all fault code
+        decoder_ptr_->resetDeviceInfo();
+    }
 }
 
 /**
@@ -1185,10 +1222,11 @@ void RSLidarSdkImpl::handleLidarMipiData() {
     static const uint16_t kMaxMsopPktDiff{1519U}; // 1520 - 1
     static const size_t kPacketPairSize = kMsopSize + kDifopSize + kDeviceInfoSize;
     static const auto& kPacketsRanges = decoder_ptr_->getPacketRanges();
-    static const uint32_t kMaxWaitTimeUs{200000U}; // 200ms
+    static const uint32_t kMaxWaitTimeUs{300000U}; // 300ms
     static const uint32_t kMaxProcessTimeMs{30U};
     static const uint32_t kDeviceInfoProcessTimeMs{8U};
     static const uint32_t kMsopProcessTimeMs{kMaxProcessTimeMs - kDeviceInfoProcessTimeMs};
+
     int32_t pre_packet_part{-1};
     uint16_t last_pkt_seq{0U};
     pid_t tid = gettid();
@@ -1196,13 +1234,42 @@ void RSLidarSdkImpl::handleLidarMipiData() {
 
     while (is_running_.load(std::memory_order_seq_cst)) {
         MipiFramePtr mipi_frame;
+        static const int32_t report_time_threshold{1000};
+        auto start_time = std::chrono::steady_clock::now();
+
+        if (!frm_normal_detected_) {
+            frm_normal_start_time_ = start_time;
+            frm_normal_detected_ = true;
+        } else if (frm_normal_reported_) {
+            auto time_cost = utils::timeInterval(frm_normal_start_time_);
+
+            if (time_cost > report_time_threshold) {
+                if (FaultManager64::getInstance().hasFault(FaultBits::LidarMIPIPacketLossFault)) {
+                    FaultManager64::getInstance().clearFault(FaultBits::LidarMIPIPacketLossFault);
+                    frm_normal_reported_ = false;
+                }
+            }
+        }
 
         if (!mipi_data_queue_.popWait(mipi_frame, kMaxWaitTimeUs)) {
             LogError("LidarSDK recv mipi data timeout");
             FaultManager64::getInstance().setFault(FaultBits::LidarMIPIPacketLossFault);
             frm_normal_detected_ = false;
             frm_normal_reported_ = true;
-            runDeviceInfoCallback();
+            // runDeviceInfoCallback();
+
+            // start periodicSendDeviceInfo() thread
+            if ((!mipi_interruption_.load(std::memory_order_seq_cst)) &&
+                (!periodic_send_device_info_thread_.joinable())) {
+                try {
+                    mipi_interruption_.store(true, std::memory_order_seq_cst);
+                    periodic_send_device_info_thread_ = std::thread(&RSLidarSdkImpl::periodicSendDeviceInfo, this);
+                    LogInfo("start periodicSendDeviceInfo thread");
+                } catch (const std::exception& e) {
+                    LogError("periodicSendDeviceInfo thread exception: {}", e.what());
+                    mipi_interruption_.store(false, std::memory_order_seq_cst);
+                }
+            }
 
             TimeStruct input_time;
             if (inputTimeQueue1.size() > 0) {
@@ -1210,7 +1277,6 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             }
             continue;
         }
-        auto start_time = std::chrono::steady_clock::now();
 
         if (!mipi_frame || !mipi_frame->data) {
             LogError("LidarSDK recv mipi data is null");
@@ -1221,27 +1287,11 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             }
             continue;
         }
-        constexpr int32_t lostfrm_report_time_{1000};
-
-        if (!frm_normal_detected_) {
-            frm_normal_start_time_ = start_time;
-            frm_normal_detected_ = true;
-        } else if (frm_normal_reported_) {
-            auto time_cost = utils::timeInterval(frm_normal_start_time_);
-
-            if (time_cost > lostfrm_report_time_) {
-                if (FaultManager64::getInstance().hasFault(FaultBits::LidarMIPIPacketLossFault)) {
-                    FaultManager64::getInstance().clearFault(FaultBits::LidarMIPIPacketLossFault);
-                    frm_normal_reported_ = false;
-                }
-            }
-        }
         uint8_t* mipi_data = mipi_frame->data;
         size_t frame_size = mipi_frame->len;
-        uint32_t seq = static_cast<uint32_t>(mipi_data[27] << 24) |
-                    static_cast<uint32_t>(mipi_data[28] << 16) |
-                    static_cast<uint32_t>(mipi_data[29] <<  8) |
-                    static_cast<uint32_t>(mipi_data[30]);
+        uint32_t seq;
+        (void)std::memcpy(&seq, mipi_frame->data + 27, sizeof(uint32_t));
+        seq = ntohl(seq);
         for (uint8_t part_index{0U}; part_index < EMX_MIPI_PART_NUM; ++part_index) {
             uint8_t* part_data = mipi_data + part_index * EMX_MIPI_PART_LEN;
 
