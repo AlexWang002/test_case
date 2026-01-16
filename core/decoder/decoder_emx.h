@@ -48,13 +48,7 @@ namespace robosense::lidar {
 #define EMX_PKT_SEQ_MAX        (1520U)
 #define EMX_MIPI_PART_LEN      (EMX_GMSL_WIDTH * EMX_GMSL_HEIGHT)
 
-// #ifdef MIPI_10HZ
 #define EMX_MIPI_PART_NUM    (6)
-// #elif defined(MIPI_30HZ)
-// #   define EMX_MIPI_PART_NUM    (2)
-// #else   // default 60Hz
-// #   define EMX_MIPI_PART_NUM    (1)
-// #endif
 
 #if COMPILE_RELEASE_VERSION // release version 3040 mipi
 #define EMX_MIPI_PACKET_NUM     (3040)

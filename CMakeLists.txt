@@ -10,8 +10,6 @@ option(COMPILE_EXAMPLES "Build Lidar SDK examples" ON)
 option(COMPILE_ARM_VERSION "Build arm version" OFF)
 option(COMPILE_TABLE_HIDE "Hide interface or not" ON)
 option(COMPILE_RELEASE_VERSION "Compile release version" ON)
-# option(COMPILE_MIPI_10HZ "Compile the MIPI 10Hz version" OFF)
-# option(COMPILE_MIPI_30HZ "Compile the MIPI 30Hz version" OFF)
 
 if(COMPILE_ARM_VERSION)
     message("Build arm version")
@@ -29,14 +27,6 @@ else()
     message("Compile local test version 3372 mipi")
     add_compile_definitions(COMPILE_RELEASE_VERSION=0)
 endif()
-
-# if(COMPILE_MIPI_10HZ)
-#     message("COMPILE the MIPI 10Hz version")
-#     add_compile_definitions(MIPI_10HZ=1)
-# elseif(COMPILE_MIPI_30HZ)
-#     message("COMPILE the MIPI 30Hz version")
-#     add_compile_definitions(MIPI_30HZ=1)
-# endif()
 
 # Add submodules
 add_subdirectory(${CMAKE_SOURCE_DIR}/3rdparty/rs_logger)

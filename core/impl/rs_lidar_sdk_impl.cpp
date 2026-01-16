@@ -821,7 +821,6 @@ LidarSdkErrorCode RSLidarSdkImpl::ridControl(uint8_t mode, uint16_t rid, uint8_t
         return LIDAR_SDK_FAILD;
     }
 
-    // 实现RID控制逻辑
     return LIDAR_SDK_SUCCESS;
 }
 
@@ -1067,12 +1066,6 @@ void RSLidarSdkImpl::splitFrame(uint32_t point_num) {
         if (cloud_copy) {
             bool override = false;
 
-            // auto seq = cloud->frame_seq;
-            // auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-            // if (this->delay_stat_switch_ && (seq % 10 == 0)) {
-            //     LogInfo("seq: {}, push time: {}", seq, timestamp);
-            // }
-
             (void)point_cloud_queue_.push(std::move(cloud_copy), override);
             if (override) {
                 FaultManager64::getInstance().overflow_position_ |= 0x2;
@@ -1193,11 +1186,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
     static const size_t kPacketPairSize = kMsopSize + kDifopSize + kDeviceInfoSize;
     static const auto& kPacketsRanges = decoder_ptr_->getPacketRanges();
     static const uint32_t kMaxWaitTimeUs{200000U}; // 200ms
-// #if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
     static const uint32_t kMaxProcessTimeMs{30U};
-// #else
-//     static const uint32_t kMaxProcessTimeMs{20U};
-// #endif
     static const uint32_t kDeviceInfoProcessTimeMs{8U};
     static const uint32_t kMsopProcessTimeMs{kMaxProcessTimeMs - kDeviceInfoProcessTimeMs};
     int32_t pre_packet_part{-1};
@@ -1249,16 +1238,13 @@ void RSLidarSdkImpl::handleLidarMipiData() {
         }
         uint8_t* mipi_data = mipi_frame->data;
         size_t frame_size = mipi_frame->len;
-// #if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
         uint32_t seq = static_cast<uint32_t>(mipi_data[27] << 24) |
                     static_cast<uint32_t>(mipi_data[28] << 16) |
                     static_cast<uint32_t>(mipi_data[29] <<  8) |
                     static_cast<uint32_t>(mipi_data[30]);
         for (uint8_t part_index{0U}; part_index < EMX_MIPI_PART_NUM; ++part_index) {
             uint8_t* part_data = mipi_data + part_index * EMX_MIPI_PART_LEN;
-// #else
-//         uint8_t* part_data = mipi_data;
-// #endif
+
         uint16_t first_seq = (static_cast<uint16_t>(part_data[4]) << 8) | static_cast<uint16_t>(part_data[5]);
         int32_t current_part = findCurrentPacketPart(first_seq, kPacketsRanges);
 
@@ -1350,7 +1336,6 @@ void RSLidarSdkImpl::handleLidarMipiData() {
                     mipi_frame->index, data_check_cost_time, kMsopProcessTimeMs);
         }
     }
-// #if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
         TimeStruct input_time;
         if (inputTimeQueue1.size() > 0) {
             (void)inputTimeQueue1.pop(input_time);
@@ -1384,7 +1369,6 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             }
         }
     }
-// #endif
 }
 
 /**

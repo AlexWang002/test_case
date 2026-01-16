@@ -70,7 +70,7 @@ class RSLidarSdkImpl {
     RSLidarSdkImpl();
     ~RSLidarSdkImpl();
 
-    // 接口实现
+    // Interface implementation
     const char* getLidarSdkVersion();
     LidarSdkErrorCode init(const LidarSdkCbks* fptrCbks, const char* configPath);
     LidarSdkErrorCode deInit();
@@ -91,7 +91,7 @@ class RSLidarSdkImpl {
     }
 
   private:
-    // 使用自定义删除器的智能指针类型
+    // Smart pointer type with custom deleter
     struct LidarCloudDeleter {
         void operator()(LidarPointCloudPackets* p) const {
             if (p) {
@@ -103,6 +103,7 @@ class RSLidarSdkImpl {
             }
         }
     };
+
     bool lostpkg[18] = {false};
     uint8_t cur_rear_{0};
     bool frm_normal_detected_{true};
@@ -110,19 +111,20 @@ class RSLidarSdkImpl {
     std::chrono::steady_clock::time_point frm_normal_start_time_;
     using LidarPointCloudPtr = std::unique_ptr<LidarPointCloudPackets, LidarCloudDeleter>;
 
-    // 内部状态
+    // Internal state flags
     std::atomic<bool> is_initialized_{false};
     std::atomic<bool> is_started_{false};
     std::atomic<bool> is_running_{false};
     std::mutex mutex_;
 
     LidarSdkCbks callbacks_;
-    nlohmann::json json_data_;
     bool parse_inner_param_bin_{true};
     bool alarm_status_{false};
-
-    // 配置路径
+    // Delay statistics switch
+    bool delay_stat_switch_;
+    // Path to the configuration file
     std::string config_path_;
+
     std::shared_ptr<Decoder> decoder_ptr_;
     std::shared_ptr<CloudManager> cloud_manager_ptr_;
     std::shared_ptr<FPSCounter> pointcloud_fps_counter_ptr_;
@@ -131,20 +133,17 @@ class RSLidarSdkImpl {
     std::thread handle_process_msop_data_thread_;
     SyncQueue<LidarPointCloudPtr> point_cloud_queue_;
 
-    //链路延时统计开关
-    bool delay_stat_switch_;
-
     using MipiFramePtr = std::shared_ptr<MipiFrame>;
     SyncQueue<MipiFramePtr> mipi_data_queue_;
+
     LidarSensorIndex sensor_index_ {MIDDLE_LIDAR};
-    uint16_t sdk_version_encoded_ {0};
 
     std::function<void(const uint8_t* mipi_data, const uint32_t mipi_data_len)> funcCheckMipiCrc_;
 
-    // 内部方法
+    // Internal functions
     bool setLidarSdkCallbacks(const LidarSdkCbks* src);
     void clearLidarSdkCallbacks();
-    void putMsop(const uint8_t* data, uint32_t size, 
+    void putMsop(const uint8_t* data, uint32_t size,
                     const uint16_t* dist_p,
                     const uint16_t* refl_p,
                     const uint16_t* attr_p);

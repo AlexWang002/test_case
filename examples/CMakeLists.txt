@@ -19,7 +19,6 @@ if(COMPILE_ARM_VERSION)
     )
 
     set(customer_lib ${CMAKE_SOURCE_DIR}/3rdparty/dimw/lib/libsensor_ipcclient_10hz.so)
-    # set(customer_lib ${CMAKE_SOURCE_DIR}/3rdparty/dimw/lib/libsensor_ipcclient_$<IF:$<BOOL:${COMPILE_MIPI_10HZ}>,10hz,$<IF:$<BOOL:${COMPILE_MIPI_30HZ}>,30hz,60hz>>.so)
 
     target_link_libraries(rs_demo_online
         "-Wl,-unresolved-symbols=ignore-in-shared-libs"
