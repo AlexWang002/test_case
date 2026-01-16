@@ -455,25 +455,38 @@ LidarSdkErrorCode RSLidarSdkImpl::stop() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         is_running_.store(false, std::memory_order_seq_cst);
+        LogInfo("[stop] set runing tag false");
     }
 
     mipi_data_queue_.stopWait();
+    mipi_data_queue_.clear();
     mipi_data_queue_.reset();
+    LogInfo("[stop] release queue");
 
     if (handle_lidar_mipi_data_thread_.joinable()) {
+        LogInfo("[stop] handle mipi joinable");
         handle_lidar_mipi_data_thread_.join();
+        LogInfo("[stop] handle mipi joined");
     } else {
         LogError("handle_lidar_mipi_data_thread_ is not joinable");
     }
 
     if (handle_process_msop_data_thread_.joinable()) {
+        LogInfo("[stop] handle msop joinable");
         handle_process_msop_data_thread_.join();
+        LogInfo("[stop] handle msop joined");
     } else {
         LogError("handle_process_msop_data_thread_ is not joinable");
     }
 
+    mipi_data_queue_.stopWait();
     mipi_data_queue_.clear();
+    mipi_data_queue_.reset();
+    LogInfo("[stop] release queue");
+
     if (cloud_manager_ptr_) {
+        LogInfo("[stop] Begin to stop cloud");
+
         if (cloud_manager_ptr_->stop()) {
             ret = LIDAR_SDK_SUCCESS;
             LogInfo("Cloud manager stopped successfully");
@@ -664,18 +677,23 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
 LidarSdkErrorCode RSLidarSdkImpl::injectAlarmInfo(const LidarAlarmInfo& lidarAlarmInfo) {
     LidarSdkErrorCode result = LidarSdkErrorCode::LIDAR_SDK_FAILD;
 
+    LogInfo("[injectAlarmInfo] alarmId: {}, alarmObj: {}", lidarAlarmInfo.alarmId, lidarAlarmInfo.alarmObj);
+
     if (((lidarAlarmInfo.alarmId == 20105) || (lidarAlarmInfo.alarmId == 20106) ||
          (lidarAlarmInfo.alarmId == 20107) || (lidarAlarmInfo.alarmId == 20119)) &&
         (lidarAlarmInfo.alarmObj == 0)) {
 
         if (lidarAlarmInfo.status == 1) {
             alarm_status_ = true;
+            LogInfo("[injectAlarmInfo] set status true");
         } else {
             alarm_status_ = false;
+            LogInfo("[injectAlarmInfo] set status false");
         }
         result = LidarSdkErrorCode::LIDAR_SDK_SUCCESS;
     }
 
+    LogInfo("[injectAlarmInfo] result: {}", result);
     return result;
 }
 
@@ -918,18 +936,16 @@ void RSLidarSdkImpl::handleMsopData() {
 
         if (point_cloud_queue_.popWait(cloud_ptr, 300e3)) { // 300ms超时
             auto seq = cloud_ptr->frame_seq;
-            // auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-            // if (this->delay_stat_switch_ && (seq % 10 == 0)) {
-            //     LogInfo("seq: {}, pop time: {}", seq, timestamp);
-            // }
 
             auto current_time = callbacks_.getTimeNowPhc();
             static auto last_time = callbacks_.getTimeNowPhc(); // unit: ns, 1e-9 sec
             pointcloud_fps_counter_ptr_->updateFrame(current_time);
             TimeStruct input_time;
+            if (inputTimeQueue.size() > 0)
             (void)inputTimeQueue.pop(input_time);
 
             while (seq > input_time.seq) {
+                if (inputTimeQueue.size() > 0)
                 (void)inputTimeQueue.pop(input_time);
             }
 
@@ -1149,7 +1165,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
     static const uint16_t kMaxMsopPktDiff{1519U}; // 1520 - 1
     static const size_t kPacketPairSize = kMsopSize + kDifopSize + kDeviceInfoSize;
     static const auto& kPacketsRanges = decoder_ptr_->getPacketRanges();
-    static const uint32_t kMaxWaitTimeUs{300000U};
+    static const uint32_t kMaxWaitTimeUs{200000U}; // 200ms
 #if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
     static const uint32_t kMaxProcessTimeMs{30U};
 #else
@@ -1172,9 +1188,12 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             FaultManager64::getInstance().setFault(FaultBits::LidarMIPIPacketLossFault);
             frm_normal_detected_ = false;
             frm_normal_reported_ = true;
+            runDeviceInfoCallback();
 
             TimeStruct input_time;
+            if (inputTimeQueue1.size() > 0) {
             (void)inputTimeQueue1.pop(input_time);
+            }
             continue;
         }
         auto start_time = std::chrono::steady_clock::now();
@@ -1183,6 +1202,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             LogError("LidarSDK recv mipi data is null");
 
             TimeStruct input_time;
+            if (inputTimeQueue1.size() > 0)
             (void)inputTimeQueue1.pop(input_time);
             continue;
         }
@@ -1258,6 +1278,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             last_pkt_seq = 0;
 
             TimeStruct input_time;
+            if (inputTimeQueue1.size() > 0)
             (void)inputTimeQueue1.pop(input_time);
             continue;
         }
@@ -1304,6 +1325,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
     }
 #if (defined(MIPI_10HZ) || defined(MIPI_30HZ))
         TimeStruct input_time;
+        if (inputTimeQueue1.size() > 0)
         (void)inputTimeQueue1.pop(input_time);
         if (delay_stat_switch_ && (seq % 10) == 0) {
             LogInfo("[handleMIPI] {}: time {:.2f}ms",

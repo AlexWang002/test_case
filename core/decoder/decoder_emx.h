@@ -169,7 +169,7 @@ class DecoderRSEMX : public Decoder {
     explicit DecoderRSEMX(const RSDecoderParam& param);
     virtual ~DecoderRSEMX() {};
 
-    virtual bool decodeMsopPkt(const uint8_t* packet_header, size_t size, 
+    virtual bool decodeMsopPkt(const uint8_t* packet_header, size_t size,
                                 const uint16_t* dist_p,
                                 const uint16_t* refl_p,
                                 const uint16_t* attr_p) override;

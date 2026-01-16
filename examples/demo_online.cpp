@@ -78,6 +78,7 @@ bool is_exit {false};
 bool save_pcd {false};
 bool test_stop {false};
 bool test_poweroff {false};
+bool test_inject {false};
 bool save_raw_data {false};
 std::string save_path {"./"};
 int32_t test_num {0};
@@ -401,7 +402,7 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor, const void* kBuffe
     static uint64_t min_interval {98000UL};
     static uint32_t last_fram_seq {0U};
     if (((frame_time_interval > (max_interval)) || (frame_time_interval < min_interval)) ||
-        ((kLidarCloud->frame_seq % 1) == 0)) {
+        ((kLidarCloud->frame_seq % 100) == 0)) {
         std::cout << "[LidarPointCloudPackets Info :" << kLidarCloud->frame_seq << "]: "
                   << ", frame_timestamp:" << kLidarCloud->frame_timestamp << " us"
                   << ", point_num:" << kLidarCloud->point_num << ", frame_seq:" << kLidarCloud->frame_seq
@@ -613,7 +614,7 @@ LidarSdkErrorCode deviceInfoCallback(LidarSensorIndex sensor, const void* kBuffe
     if ((kDeviceInfo->sdk_total_fault_number > 0) && (kDeviceInfo->sdk_fault_code_position != 1)) {
         printLidarDeviceInfo(*kDeviceInfo);
     }
-    if ((device_frame_seq % 600) == 0) {
+    if ((device_frame_seq % 100) == 0) {
         std::cout << "device_frame_seq = " << device_frame_seq << std::endl;
         printLidarDeviceInfo(*kDeviceInfo);
     }
@@ -913,6 +914,7 @@ void printHelp() {
     std::cout << "  -t, --test <测试模式> 进行stop接口测试。\n";
     std::cout << "  -f, --poweroff     进行Lidar安全下电测试。\n";
     std::cout << "  -p, --path <路径>   设置数据保存路径。\n";
+    std::cout << "  -i, --inject       进行InjectAdcAlarm测试。\n";
     std::cout << "  -n, --num <数量>    设置数量。\n";
     std::cout << "  -s, --save <保存原始数据>    \n";
     std::cout << "  -d, --pcd <PCD文件名> 保存点云数据为PCD格式。\n";
@@ -945,6 +947,8 @@ int32_t main(int32_t argc, char* argv[]) {
             test_stop = true;
         } else if ((arg == "-f") || (arg == "--poweroff")) {
             test_poweroff = true;
+        } else if ((arg == "-i") || (arg == "--inject")) {
+            test_inject = true;
         } else if ((arg == "-p") || (arg == "--path")) {
             if ((i + 1) < argc) {
                 save_path = argv[++i]; // 获取下一个参数作为路径
@@ -1140,6 +1144,27 @@ int32_t main(int32_t argc, char* argv[]) {
             std::cout << "main, address: " << std::hex << address << ", data: " << (uint32_t)data[0] << ", length: " << std::dec << length << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(5));
             // return 0;
+        }
+
+        if (test_inject) {
+            LidarAlarmInfo alarm = {20105, 0, 0};
+            lidar_interface->injectAlarmInfo(alarm);
+            usleep(100000); // 100ms
+            alarm.alarmId = 20106;
+            lidar_interface->injectAlarmInfo(alarm);
+            usleep(100000); // 100ms
+            alarm.alarmId = 20107;
+            lidar_interface->injectAlarmInfo(alarm);
+            usleep(100000); // 100ms
+            alarm.alarmId = 20119;
+            lidar_interface->injectAlarmInfo(alarm);
+            usleep(100000); // 100ms
+            alarm.alarmObj = 2;
+            lidar_interface->injectAlarmInfo(alarm);
+            usleep(100000); // 100ms
+            alarm.alarmId = 20120;
+            lidar_interface->injectAlarmInfo(alarm);
+            usleep(100000); // 100ms
         }
 
         while (true) {
