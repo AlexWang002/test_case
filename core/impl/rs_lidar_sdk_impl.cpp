@@ -648,9 +648,6 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
     mipi_frame->len = 0U;
     mipi_frame->index = adc_buffer->frameIndex;
 
-    // stop periodicSendDeviceInfo() thread
-    mipi_interruption_.store(false, std::memory_order_seq_cst);
-
 #if defined(__arm__) || defined(__aarch64__)
     using ClientErrorCode = dimw::cameraipcclient::ClientErrorCode;
     using dimw::gpuBuf::nvBufObjToCpuBuffer;
@@ -669,7 +666,7 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
     if (nullptr == mipi_frame->data) {
         LogError("[injectAdc] Mipi data is null, release adc buffer.");
         releaseBuffer(adc_buffer);
-        runDeviceInfoCallback(); // TODO check if it's necessary
+        runDeviceInfoCallback();
         return LIDAR_SDK_FAILD;
     }
 
@@ -679,6 +676,10 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
         runDeviceInfoCallback();
         return LIDAR_SDK_FAILD;
     }
+    // stop periodicSendDeviceInfo() thread
+    sensor_index_ = sensor;
+    mipi_interruption_.store(false, std::memory_order_seq_cst);
+
     uint32_t seq;
     (void)std::memcpy(&seq, mipi_frame->data + 27, sizeof(uint32_t));
     seq = ntohl(seq);
@@ -688,17 +689,15 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
         if (time_interval > 1.5) {
             LogInfo("[gpu] {}: time {:.2f}ms", seq, time_interval);
         }
+        // TODO Delete this log when release SOC version;
         LogInfo("[injectAdc] inject time: {}, seq: {}, last_seq: {}, index: {}", utils::unixTimestamp(start_time), seq,
                     last_seq, mipi_frame->index);
     }
     last_seq = seq;
-
     checkMipiIndexContinuity(mipi_frame->index);
     checkMipiTimeConsumption(mipi_frame->index, adc_buffer->tsof, adc_buffer->teof);
     checkMipiCounterContinuity(mipi_frame->index, mipi_frame->data, mipi_frame->len);
     funcCheckMipiCrc_(mipi_frame->data, mipi_frame->len);
-
-    sensor_index_ = sensor;
 
     bool ret{false};
 
@@ -997,10 +996,10 @@ void RSLidarSdkImpl::handleMsopData() {
 
         if (point_cloud_queue_.popWait(cloud_ptr, 300e3)) { // 300ms超时
             auto seq = cloud_ptr->frame_seq;
-
             auto current_time = callbacks_.getTimeNowPhc();
             static auto last_time = callbacks_.getTimeNowPhc(); // unit: ns, 1e-9 sec
             pointcloud_fps_counter_ptr_->updateFrame(current_time);
+
             TimeStruct input_time;
             if (inputTimeQueue.size() > 0) {
                 (void)inputTimeQueue.pop(input_time);
@@ -1017,19 +1016,18 @@ void RSLidarSdkImpl::handleMsopData() {
                 last_time = current_time;
                 LogDebug(pointcloud_fps_counter_ptr_->getStatus().c_str());
             }
-            size_t bufferSize = cloud_ptr->data_length;
 
             if (delay_stat_switch_) {
                 uint64_t time_ns = cloud_ptr->frame_timestamp * 1000;
                 uint64_t time_now = callbacks_.getTimeNowPhc();
-
                 LogInfo("Seq: {}, time consumption {:.3f}ms", seq, (time_now - time_ns)*0.001*0.001);
+
+                if (seq % 10 == 0) {
+                    LogInfo("[HandleMSOP] {}: time {:.2f}ms", seq,
+                            utils::timeInterval<std::chrono::microseconds>(input_time.time) * 0.001);
+                }
             }
-            if (delay_stat_switch_ && (seq % 10 == 0)) {
-                LogInfo("[HandleMSOP] {}: time {:.2f}ms",
-                        seq, utils::timeInterval<std::chrono::microseconds>(input_time.time) * 0.001);
-            }
-            callbacks_.pointCloud(sensor_index_, cloud_ptr.get(), static_cast<uint32_t>(bufferSize));
+            callbacks_.pointCloud(sensor_index_, cloud_ptr.get(), static_cast<uint32_t>(cloud_ptr->data_length));
         }
     }
 }
@@ -1261,7 +1259,6 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             FaultManager64::getInstance().setFault(FaultBits::LidarMIPIPacketLossFault);
             frm_normal_detected_ = false;
             frm_normal_reported_ = true;
-            // runDeviceInfoCallback();
 
             // start periodicSendDeviceInfo() thread
             if ((!mipi_interruption_.load(std::memory_order_seq_cst)) &&
