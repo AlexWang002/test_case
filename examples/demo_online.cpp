@@ -613,10 +613,12 @@ LidarSdkErrorCode deviceInfoCallback(LidarSensorIndex sensor, const void* kBuffe
     if ((kDeviceInfo->sdk_total_fault_number > 0) && (kDeviceInfo->sdk_fault_code_position != 1)) {
         printLidarDeviceInfo(*kDeviceInfo);
     }
-    if ((device_frame_seq % 100) == 0) {
+    // if ((device_frame_seq % 100) == 0) {
         std::cout << "device_frame_seq = " << device_frame_seq << std::endl;
+        auto time = std::chrono::steady_clock::now();
+        std::cout << "time: " << std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count() << std::endl;
         printLidarDeviceInfo(*kDeviceInfo);
-    }
+    // }
     device_frame_seq++;
     return LidarSdkErrorCode::LIDAR_SDK_SUCCESS;
 }

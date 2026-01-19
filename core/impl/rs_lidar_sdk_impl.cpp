@@ -673,21 +673,20 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
     uint32_t seq;
     (void)std::memcpy(&seq, mipi_frame->data + 27, sizeof(uint32_t));
     seq = ntohl(seq);
-    LogInfo("[injectAdc] inject time: {}, seq: {}, last_seq: {}, index: {}", utils::unixTimestamp(start_time), seq,
-                last_seq, mipi_frame->index);
-    last_seq = seq;
 
     if (delay_stat_switch_) {
         auto time_interval = utils::timeInterval<std::chrono::microseconds>(start_time) * 0.001;
         if (time_interval > 1.5) {
             LogInfo("[gpu] {}: time {:.2f}ms", seq, time_interval);
         }
+        LogInfo("[injectAdc] inject time: {}, seq: {}, last_seq: {}, index: {}", utils::unixTimestamp(start_time), seq,
+                    last_seq, mipi_frame->index);
     }
+    last_seq = seq;
 
     checkMipiIndexContinuity(mipi_frame->index);
     checkMipiTimeConsumption(mipi_frame->index, adc_buffer->tsof, adc_buffer->teof);
     checkMipiCounterContinuity(mipi_frame->index, mipi_frame->data, mipi_frame->len);
-    auto crc_start = std::chrono::steady_clock::now();
     funcCheckMipiCrc_(mipi_frame->data, mipi_frame->len);
 
     sensor_index_ = sensor;
@@ -1127,6 +1126,7 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
         return;
     }
     static bool first_call = true;
+    static LidarDeviceInfo latest_device_info;
     auto* device_info = decoder_ptr_->device_info_.get();
     uint8_t sdk_fault_state{FaultManager64::getInstance().getFaultLevel()};
     uint8_t fault_state{device_info->lidar_fault_state};
@@ -1148,14 +1148,11 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
         LogInfo("FIRWARE VERSION: {}", device_info->firware_version);
         LogInfo("SDK VERSION: {}", device_info->sdk_version);
     }
-    // device_info_fps_counter_ptr_->updateFrame(callbacks_.getTimeNowPhc());
-    // callbacks_.deviceInfo(sensor_index_, device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
 
     if (mipi_interruption_.load(std::memory_order_seq_cst)) {
-        // TODO get the latest device info
-        callbacks_.deviceInfo(sensor_index_, device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
+        callbacks_.deviceInfo(sensor_index_, &latest_device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
     } else {
-        // TODO save the latest device info
+        latest_device_info = *device_info;
         callbacks_.deviceInfo(sensor_index_, device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
         FaultManager64::getInstance().clearFaults(~0ULL); // clear all fault code
         FaultManager8::getInstance().clearFaults(0xFF);   // clear all fault code
@@ -1235,10 +1232,9 @@ void RSLidarSdkImpl::handleLidarMipiData() {
     while (is_running_.load(std::memory_order_seq_cst)) {
         MipiFramePtr mipi_frame;
         static const int32_t report_time_threshold{1000};
-        auto start_time = std::chrono::steady_clock::now();
 
         if (!frm_normal_detected_) {
-            frm_normal_start_time_ = start_time;
+            frm_normal_start_time_ = std::chrono::steady_clock::now();
             frm_normal_detected_ = true;
         } else if (frm_normal_reported_) {
             auto time_cost = utils::timeInterval(frm_normal_start_time_);
@@ -1287,12 +1283,13 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             }
             continue;
         }
+        auto start_time = std::chrono::steady_clock::now();
         uint8_t* mipi_data = mipi_frame->data;
         size_t frame_size = mipi_frame->len;
         uint32_t seq;
         (void)std::memcpy(&seq, mipi_frame->data + 27, sizeof(uint32_t));
         seq = ntohl(seq);
-        for (uint8_t part_index{0U}; part_index < EMX_MIPI_PART_NUM; ++part_index) {
+    for (uint8_t part_index{0U}; part_index < EMX_MIPI_PART_NUM; ++part_index) {
             uint8_t* part_data = mipi_data + part_index * EMX_MIPI_PART_LEN;
 
         uint16_t first_seq = (static_cast<uint16_t>(part_data[4]) << 8) | static_cast<uint16_t>(part_data[5]);
@@ -1385,6 +1382,24 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             LogWarn("handleLidarMipiData frame index {} , Data check time: {} ms, exceeds the limit: {} ms",
                     mipi_frame->index, data_check_cost_time, kMsopProcessTimeMs);
         }
+
+        if (part_index == EMX_MIPI_PART_NUM - 1) {
+            uint8_t* device_info_data = part_data + kMsopSize + kDifopSize;
+            uint16_t first_seq = (static_cast<uint16_t>(part_data[4]) << 8) | static_cast<uint16_t>(part_data[5]);
+            bool ret = decoder_ptr_->processDeviceInfoPkt(device_info_data, kDeviceInfoSize);
+
+            if (!ret) {
+                LogError("processDeviceInfoPkt failed, first_seq: {}", first_seq);
+            }
+
+            auto run_device_start = std::chrono::steady_clock::now();
+            runDeviceInfoCallback();
+            auto duration = utils::timeInterval(run_device_start);
+
+            if (duration > kDeviceInfoProcessTimeMs) {
+                LogError("runDeviceInfoCallback time out, frame index {}, cost time: {} ms", mipi_frame->index, duration);
+            }
+        }
     }
         TimeStruct input_time;
         if (inputTimeQueue1.size() > 0) {
@@ -1393,30 +1408,6 @@ void RSLidarSdkImpl::handleLidarMipiData() {
         if (delay_stat_switch_ && (seq % 10) == 0) {
             LogInfo("[handleMIPI] {}: time {:.2f}ms",
                     seq, utils::timeInterval<std::chrono::microseconds>(input_time.time) * 0.001);
-        }
-
-        for (uint8_t part_index{0U}; part_index < EMX_MIPI_PART_NUM; ++part_index) {
-            uint8_t* part_data = mipi_data + part_index * EMX_MIPI_PART_LEN;
-            uint8_t* device_info_data = part_data + kMsopSize + kDifopSize;
-
-            uint16_t first_seq = (static_cast<uint16_t>(part_data[4]) << 8) | static_cast<uint16_t>(part_data[5]);
-
-            bool ret{false};
-            ret = decoder_ptr_->processDeviceInfoPkt(device_info_data, kDeviceInfoSize);
-
-            if (!ret) {
-                LogError("processDeviceInfoPkt failed, first_seq: {}", first_seq);
-            }
-
-            if (part_index == EMX_MIPI_PART_NUM - 1) {
-                auto run_device_start = std::chrono::steady_clock::now();
-                runDeviceInfoCallback();
-                auto duration = utils::timeInterval(run_device_start);
-
-                if (duration > kDeviceInfoProcessTimeMs) {
-                    LogError("runDeviceInfoCallback time out, frame index {}, cost time: {} ms", mipi_frame->index, duration);
-                }
-            }
         }
     }
 }
