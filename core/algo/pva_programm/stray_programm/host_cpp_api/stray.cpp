@@ -274,7 +274,7 @@ int strayProcPva(std::string& exception_msg, int32_t& status_code,
     try
     {
         CmdProgram& stray_prog = getStrayProg();
-        
+
         SyncObj sync = SyncObj::Create(true);
         Fence fence{sync};
         CmdRequestFences rf{fence};
@@ -287,7 +287,7 @@ int strayProcPva(std::string& exception_msg, int32_t& status_code,
 
         auto time6 = std::chrono::steady_clock::now();
 
-        fence.wait(); // stray task timeout: 4.5ms
+        fence.wait();
 
         auto time7 = std::chrono::steady_clock::now();
 

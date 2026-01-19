@@ -461,8 +461,6 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code,
 
         auto time6 = std::chrono::steady_clock::now();
 
-        //fence.wait(); // sprayremove task timeout: 6ms
-
         auto time7 = std::chrono::steady_clock::now();
 
         submit_time = std::chrono::duration_cast<std::chrono::microseconds>(time6 - time5).count();
@@ -511,7 +509,7 @@ int rainEnhancePva(std::string& exception_msg, int32_t& status_code,
 
         auto time6 = std::chrono::steady_clock::now();
 
-        fence.wait(); // rainenhance task timeout: 3.5ms
+        fence.wait();
 
         auto time7 = std::chrono::steady_clock::now();
 

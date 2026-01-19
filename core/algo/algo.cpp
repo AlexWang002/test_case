@@ -444,10 +444,6 @@ void AlgoFunction::submitPvaTaskWithRetry(PvaFunc func, std::string algo_name)
     int ret = 0, retry_cnt = 0;
     uint32_t submit_time, wait_time;
 
-    if (algo_name == "algo6") {
-        cnt = (cnt + 1) % 10;
-    }
-
     for (retry_cnt = 0; retry_cnt < RETRY_CNT; retry_cnt ++) {
         auto time_start = std::chrono::steady_clock::now();
         ret = func(exception_msg, status_code, submit_time, wait_time);
@@ -476,6 +472,11 @@ void AlgoFunction::submitPvaTaskWithRetry(PvaFunc func, std::string algo_name)
     else if (retry_cnt > 0) {
         LogWarn("[{}] PVA task submitted {} times.", algo_name, retry_cnt + 1);
     }
+
+    if (algo_name == "algo6") {
+        cnt = (cnt + 1) % 10;
+    }
+
 }
 
 /**

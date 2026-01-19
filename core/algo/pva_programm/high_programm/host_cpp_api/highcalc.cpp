@@ -278,7 +278,7 @@ int highcalcPva(std::string& exception_msg, int32_t& status_code,
 
         auto time6 = std::chrono::steady_clock::now();
 
-        fence.wait(); // highcalc task timeout: 6.5ms
+        fence.wait();
 
         auto time7 = std::chrono::steady_clock::now();
 

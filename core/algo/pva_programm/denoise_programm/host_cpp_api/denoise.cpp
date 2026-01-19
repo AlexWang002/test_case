@@ -184,8 +184,6 @@ int denoiseProcPva(std::string& exception_msg, int32_t& status_code,
 
         auto time6 = std::chrono::steady_clock::now();
 
-        //fence.wait(); // denoise task timeout: 2.5 ms
-
         auto time7 = std::chrono::steady_clock::now();
 
         submit_time = std::chrono::duration_cast<std::chrono::microseconds>(time6 - time5).count();
