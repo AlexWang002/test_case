@@ -274,16 +274,20 @@ int strayProcPva(std::string& exception_msg, int32_t& status_code,
     try
     {
         CmdProgram& stray_prog = getStrayProg();
+        
+        SyncObj sync = SyncObj::Create(true);
+        Fence fence{sync};
+        CmdRequestFences rf{fence};
         CmdStatus status[2];
 
         auto time5 = std::chrono::steady_clock::now();
 
         Stream& algo_stream = getAlgoStream();
-        algo_stream.submit({&stray_prog}, status);
+        algo_stream.submit({&stray_prog, &rf}, status);
 
         auto time6 = std::chrono::steady_clock::now();
 
-        //fence.wait(); // stray task timeout: 4.5ms
+        fence.wait(); // stray task timeout: 4.5ms
 
         auto time7 = std::chrono::steady_clock::now();
 
@@ -291,7 +295,7 @@ int strayProcPva(std::string& exception_msg, int32_t& status_code,
         wait_time = std::chrono::duration_cast<std::chrono::microseconds>(time7 - time6).count();
     
         cupva::Error statusCode = CheckCommandStatus(status[0]);
-        if (statusCode != Error::None && statusCode != Error::OperationPending)
+        if (statusCode != Error::None)
         {
             status_code = (int32_t)statusCode;
             return 2;

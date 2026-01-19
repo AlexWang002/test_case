@@ -444,7 +444,7 @@ void AlgoFunction::submitPvaTaskWithRetry(PvaFunc func, std::string algo_name)
     int ret = 0, retry_cnt = 0;
     uint32_t submit_time, wait_time;
 
-    if (algo_name == "algo1") {
+    if (algo_name == "algo6") {
         cnt = (cnt + 1) % 10;
     }
 
@@ -568,6 +568,8 @@ void AlgoFunction::strayDeleteExec(tstFrameBuffer* pstFrameBuffer)
                                         std::placeholders::_3, std::placeholders::_4), 
                                         "algo4");
 
+        memcpy(stray_mask_out_frm0[0], &stray_pva_buff.stray_mask0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+        memcpy(stray_mask_out_frm1[0], &stray_pva_buff.stray_mask1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
     }
     else {
         for (int cc = 0; cc < VIEW_W; cc ++) {
@@ -1264,8 +1266,6 @@ void AlgoFunction::sprayRemoveExec(tstFrameBuffer* pstFrameBuffer)
                         std::placeholders::_3, std::placeholders::_4), 
                         "algo5.2");
 
-        memcpy(stray_mask_out_frm0[0], &stray_pva_buff.stray_mask0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
-        memcpy(stray_mask_out_frm1[0], &stray_pva_buff.stray_mask1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
         memcpy(spray_mark_out_frm0[0], &FinalOut0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
         memcpy(spray_mark_out_frm1[0], &FinalOut1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
     }
@@ -1304,8 +1304,12 @@ void AlgoFunction::highcalcExec(tstFrameBuffer* pstFrameBuffer)
                                     std::placeholders::_3, std::placeholders::_4), 
                                     "algo3");
 
-    memcpy(denoise_mask_out_frm[0], &denoise_mask_buffer_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
-    memcpy(trail_mask_out_frm[0], &ValidOut_h[0], sizeof(uint16_t) * VIEW_W * VIEW_H);
+    if (algo_Param.DenoiseOn) {
+        memcpy(denoise_mask_out_frm[0], &denoise_mask_buffer_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
+    }
+    if (algo_Param.TrailRemoveOn) {
+        memcpy(trail_mask_out_frm[0], &ValidOut_h[0], sizeof(uint16_t) * VIEW_W * VIEW_H);
+    }
     memcpy((uint8_t *)pstFrameBuffer->gnd_mark0[0], (uint8_t *)&h_gnd_out0_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
     memcpy((uint8_t *)pstFrameBuffer->gnd_mark1[0], (uint8_t *)&h_gnd_out1_h[0], VIEW_W * VIEW_H * sizeof(uint16_t));
 }
