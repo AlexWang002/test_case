@@ -119,6 +119,8 @@ class CloudManager
 
   public:
     bool process_delay_switch_ = false;
+    bool pvaInit(void);
+    bool pvaDeinit(void);
     void start(void);
     bool stop(void);
     void receiveCloud(const uint8_t* kMsopData, int32_t msop_data_size);

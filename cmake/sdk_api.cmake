@@ -8,12 +8,13 @@ set(BUILD_SHARED_LIBS ON)
 
 add_library(${PROJECT_NAME} ${SDK_API_TYPE} ${SOURCES})
 
-add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/trail_programm)
-add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/denoise_programm)
-add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/upsample_programm)
-add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/stray_programm)
-add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/spray_programm)
-add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/high_programm)
+add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/pva_programm)
+add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/pva_programm/trail_programm)
+add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/pva_programm/denoise_programm)
+add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/pva_programm/upsample_programm)
+add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/pva_programm/stray_programm)
+add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/pva_programm/spray_programm)
+add_subdirectory(${CMAKE_SOURCE_DIR}/core/algo/pva_programm/high_programm)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     VERSION ${PROJECT_VERSION}
@@ -25,18 +26,19 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_SOURCE_DIR}/api
     ${CMAKE_SOURCE_DIR}/core
     ${CMAKE_SOURCE_DIR}/core/algo
-    ${CMAKE_SOURCE_DIR}/core/algo/trail_programm
-    ${CMAKE_SOURCE_DIR}/core/algo/trail_programm/host_cpp_api
-    ${CMAKE_SOURCE_DIR}/core/algo/denoise_programm
-    ${CMAKE_SOURCE_DIR}/core/algo/denoise_programm/host_cpp_api
-    ${CMAKE_SOURCE_DIR}/core/algo/upsample_programm
-    ${CMAKE_SOURCE_DIR}/core/algo/upsample_programm/host_cpp_api
-    ${CMAKE_SOURCE_DIR}/core/algo/stray_programm
-    ${CMAKE_SOURCE_DIR}/core/algo/stray_programm/host_cpp_api
-    ${CMAKE_SOURCE_DIR}/core/algo/spray_programm
-    ${CMAKE_SOURCE_DIR}/core/algo/spray_programm/host_cpp_api
-    ${CMAKE_SOURCE_DIR}/core/algo/high_programm
-    ${CMAKE_SOURCE_DIR}/core/algo/high_programm/host_cpp_api
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/trail_programm
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/trail_programm/host_cpp_api
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/denoise_programm
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/denoise_programm/host_cpp_api
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/upsample_programm
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/upsample_programm/host_cpp_api
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/stray_programm
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/stray_programm/host_cpp_api
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/spray_programm
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/spray_programm/host_cpp_api
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/high_programm
+    ${CMAKE_SOURCE_DIR}/core/algo/pva_programm/high_programm/host_cpp_api
     ${CMAKE_SOURCE_DIR}/3rdparty
     ${CMAKE_SOURCE_DIR}/3rdparty/dimw/include
     ${CMAKE_SOURCE_DIR}/3rdparty/rs_logger/lib/spdlog/include
@@ -47,6 +49,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME}
     rs_logger
     pthread
+    pva_utils_api
     trail_api
     denoise_api
     upsample_api

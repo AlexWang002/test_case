@@ -356,6 +356,10 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
                                                 std::placeholders::_3,
                                                 std::placeholders::_4,
                                                 std::placeholders::_5));
+    if (!cloud_manager_ptr_->pvaInit()) {
+        LogError("pva buffer init failed!");
+        return LIDAR_SDK_FAILD;
+    }
     pointcloud_fps_counter_ptr_.reset(new FPSCounter("PointCloud", 10));
     device_info_fps_counter_ptr_.reset(new FPSCounter("DeviceInfo", 60));
     is_initialized_.store(true, std::memory_order_seq_cst);
@@ -387,7 +391,12 @@ LidarSdkErrorCode RSLidarSdkImpl::deInit() {
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
-    clearLidarSdkCallbacks();
+    if (!cloud_manager_ptr_->pvaDeinit()) {
+        LogError("Failed to deinit pva buffer during deinitialization");
+        ret_code = LIDAR_SDK_FAILD;
+    }
+
+	clearLidarSdkCallbacks();
     is_initialized_.store(false, std::memory_order_seq_cst);
     LogInfo("Completed deinitialized LidarSdk: Result = {}", ret_code == LIDAR_SDK_SUCCESS ? "SUCCESS" : "FAILURE");
     DestroyLog();
