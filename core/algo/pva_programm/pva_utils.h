@@ -1,7 +1,7 @@
 /*******************************************************************************
- * \addtogroup denoise_programm
+ * \addtogroup pva_utils
  * \{
- * \headerfile denoise.h "denoise.h"
+ * \headerfile pva_utils.h "pva_utils.h"
  * \brief
  * \version 0.3
  * \date 2025-11-28

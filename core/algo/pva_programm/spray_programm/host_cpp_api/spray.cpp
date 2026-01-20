@@ -346,6 +346,10 @@ int pvaEnhanceCompile()
 
 /**
  * \brief Allocate memory for spray processing data structures
+ * 
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
 */
 int sprayDataAlloc()
 {
@@ -397,6 +401,10 @@ int sprayDataAlloc()
 
 /**
  * \brief Free memory for spray processing data structures
+ * 
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
 */
 int sprayDataFree()
 {
@@ -445,6 +453,11 @@ int sprayDataFree()
  *
  * \param[in] status_code: column index of the buffer
  *                 Range: 0-2. Accuracy: 1.
+ * 
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
+ * \retval 2: VPU Program returned an Error Code
 */
 int sprayRemovePva(std::string& exception_msg, int32_t& status_code,
     uint32_t& submit_time, uint32_t& wait_time)
@@ -489,6 +502,11 @@ int sprayRemovePva(std::string& exception_msg, int32_t& status_code,
  *
  * \param[in] status_code: column index of the buffer
  *                 Range: 0-2. Accuracy: 1.
+ * 
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
+ * \retval 2: VPU Program returned an Error Code
 */
 int rainEnhancePva(std::string& exception_msg, int32_t& status_code,
     uint32_t& submit_time, uint32_t& wait_time)

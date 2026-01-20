@@ -190,6 +190,10 @@ int pvaHighcalcCompile()
 
 /**
  * \brief Allocate memory for highcalc processing data structures
+ * 
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
 */
 int highcalcDataAlloc()
 {
@@ -226,6 +230,10 @@ int highcalcDataAlloc()
 
 /**
  * \brief Free memory for highcalc processing data structures
+ * 
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
 */
 int highcalcDataFree()
 {
@@ -257,7 +265,12 @@ int highcalcDataFree()
 }
 
 /**
- * \brief Spray processing main function in host-side C++ API
+ * \brief Highcalc processing main function in host-side C++ API
+ * 
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
+ * \retval 2: VPU Program returned an Error Code
 */
 int highcalcPva(std::string& exception_msg, int32_t& status_code,
     uint32_t& submit_time, uint32_t& wait_time)

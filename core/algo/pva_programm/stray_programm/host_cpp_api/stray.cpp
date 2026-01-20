@@ -170,7 +170,9 @@ int pvaStrayCompile()
 /**
  * \brief Alloc pva host memory
  *
- * @return pva error code
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
 */
 int strayDataAlloc()
 {
@@ -218,7 +220,9 @@ int strayDataAlloc()
 /**
  * \brief Release the alloced pva host memory
  *
- * @return pva error code
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
 */
 int strayDataFree()
 {
@@ -251,6 +255,12 @@ int strayDataFree()
     return 0;
 }
 
+/**
+ * \brief Set rainwall params in CmdProgram
+ *
+ * \param[in]  rainwall_cnt  : rainwall cnt
+ * \param[in]  rainwall_dist : rainwall dist
+*/
 void setRainWallParams(int rainwall_cnt, int rainwall_dist)
 {
     CmdProgram& stray_prog = getStrayProg();
@@ -267,6 +277,11 @@ void setRainWallParams(int rainwall_cnt, int rainwall_dist)
  * \param[in]  rainwall_dist : rainwall dist
  * \param[out] exception_msg : pva task exception message
  * \param[out] status_code   : pva task error code
+ * 
+ * \return Error code
+ * \retval 0: PVA task submitted successed
+ * \retval 1: Caught a cuPVA exceptions
+ * \retval 2: VPU Program returned an Error Code
 */
 int strayProcPva(std::string& exception_msg, int32_t& status_code,
     uint32_t& submit_time, uint32_t& wait_time)
