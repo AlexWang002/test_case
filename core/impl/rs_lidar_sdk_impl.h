@@ -32,6 +32,7 @@
 /*                      Include headers of the component                      */
 /******************************************************************************/
 #include "algo/algo_process.h"
+#include "common/fault_log.h"
 #include "common/fps_counter.h"
 #include "json.hpp"
 #include "lidar_sdk_api.h"
@@ -127,6 +128,7 @@ class RSLidarSdkImpl {
     std::string config_path_;
 
     std::shared_ptr<Decoder> decoder_ptr_;
+    std::shared_ptr<FaultLog> fault_log_ptr_;
     std::shared_ptr<CloudManager> cloud_manager_ptr_;
     std::shared_ptr<FPSCounter> pointcloud_fps_counter_ptr_;
     std::shared_ptr<FPSCounter> device_info_fps_counter_ptr_;

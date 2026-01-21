@@ -340,6 +340,7 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
 
     RSDecoderParam param;
     decoder_ptr_ = std::make_shared<DecoderRSEMX>(param);
+    fault_log_ptr_ = std::make_shared<FaultLog>();
 
     if (nullptr == decoder_ptr_) {
         LogError("create decoder failed! LidarType: {}", static_cast<int32_t>(param.lidar_type));
@@ -1132,6 +1133,11 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
         LogError("Decoder pointer is null!");
         return;
     }
+
+    if (!fault_log_ptr_) {
+        LogError("Fault log pointer is null!");
+        return;
+    }
     static bool first_call = true;
     static LidarDeviceInfo latest_device_info;
     auto* device_info = decoder_ptr_->device_info_.get();
@@ -1154,6 +1160,10 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
         first_call = false;
         LogInfo("FIRWARE VERSION: {}", device_info->firware_version);
         LogInfo("SDK VERSION: {}", device_info->sdk_version);
+    }
+
+    if (device_info->lidar_fault_state > 2U) {
+        fault_log_ptr_->writeLog(reinterpret_cast<const uint8_t*>(device_info), sizeof(LidarDeviceInfo));
     }
 
     if (mipi_interruption_.load(std::memory_order_seq_cst)) {
@@ -1295,6 +1305,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
         uint32_t seq;
         (void)std::memcpy(&seq, mipi_frame->data + 27, sizeof(uint32_t));
         seq = ntohl(seq);
+
     for (uint8_t part_index{0U}; part_index < EMX_MIPI_PART_NUM; ++part_index) {
             uint8_t* part_data = mipi_data + part_index * EMX_MIPI_PART_LEN;
 
