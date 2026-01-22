@@ -37,8 +37,10 @@
         "ENABLE_MIPI_CRC": false,
         "INNER_PARAM_PATH": "/osdata/satelite/lidar/",
         "LOG_CONFIG_FILE": "/applog/lidar/rs_lidar_sdk.log",
+        "FAULT_LOG_SAVE": true,
+        "FAULT_LOG_FOLDER": "/applog/lidar/fault_log/",
         "PARSE_INNER_PARAM_BIN": true,
-        "DELAY_STAT": true,
+        "DELAY_STAT": false,
         "VPU_AUTH": true,
         "THREADS": [
             {

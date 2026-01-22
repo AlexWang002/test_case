@@ -117,6 +117,8 @@ std::vector<DataVariant> parseJsonFile(const std::string& file) {
         DataVariant mipi_crc = getJsonData<bool>(target, "ENABLE_MIPI_CRC");
         DataVariant param_path = getJsonData<std::string>(target, "INNER_PARAM_PATH");
         DataVariant log_path = getJsonData<std::string>(target, "LOG_CONFIG_FILE");
+        DataVariant fault_save = getJsonData<bool>(target, "PARSE_INNER_PARAM_BIN");
+        DataVariant fault_path = getJsonData<std::string>(target, "LOG_CONFIG_FILE");
         DataVariant parse_inner_param_bin = getJsonData<bool>(target, "PARSE_INNER_PARAM_BIN");
         DataVariant delay_stat = getJsonData<bool>(target, "DELAY_STAT");
         DataVariant vpu_auth = getJsonData<bool>(target, "VPU_AUTH");
@@ -131,6 +133,8 @@ std::vector<DataVariant> parseJsonFile(const std::string& file) {
         result.push_back(parse_inner_param_bin);
         result.push_back(threads);
         result.push_back(algo_param);
+        result.push_back(fault_save);
+        result.push_back(fault_path);
 
         if (target.contains("TEST_PARAM")) {
             DataVariant param = getJsonData<TestParam>(target, "TEST_PARAM");

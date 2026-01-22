@@ -45,7 +45,6 @@ namespace lidar {
 /**********************************************************************************************************************/
 /*                 Definition of local constant data                                                                  */
 /**********************************************************************************************************************/
-const size_t kFolderMaxSize{1024 * 1024}; // 1MB
 const std::string kFaultLogDir{"/applog/lidar/fault_log"};
 const std::string kFileNamePrefix{"rs_lidar_fault_"};
 const std::string kFileNameSuffix{".log"};
@@ -58,29 +57,29 @@ const std::string kFileNameTimeFormat{"%Y_%m_%d"};
 /**
  * @brief Constructor of FaultLog class.
  * @param folder_path Path of the folder to store fault log files.
- * @param max_size Maximum size (in bytes) of the fault log folder.
+ * @param max_size Maximum number of fault log files.
  */
-FaultLog::FaultLog() :
-        log_folder_path_(kFaultLogDir), folder_max_size_(kFolderMaxSize) {
+FaultLog::FaultLog() : log_folder_path_(kFaultLogDir) {
     folder_exist_ = createDirectoryIfNotExist(log_folder_path_);
     getAllFilesInfo();
 
-    LogInfo("Fault log folder {} already has {} log files, max size is {} current used size is {}.",
-        log_folder_path_.c_str(), log_files_.size(), folder_max_size_, getFolderSize());
+    LogInfo("Fault log folder {} already has {} log files, max file counter is {}.",
+        log_folder_path_.c_str(), log_files_.size(), max_file_counter_);
+    showFileVector();
 }
 
 /**
  * @brief Constructor of FaultLog class.
  * @param folder_path Path of the folder to store fault log files.
- * @param max_size Maximum size (in bytes) of the fault log folder.
+ * @param max_size Maximum number of fault log files.
  */
-FaultLog::FaultLog(const std::string& folder_path, size_t max_size) :
-        log_folder_path_(folder_path), folder_max_size_(max_size) {
+FaultLog::FaultLog(const std::string& folder_path) : log_folder_path_(folder_path) {
     folder_exist_ = createDirectoryIfNotExist(log_folder_path_);
     getAllFilesInfo();
 
-    LogInfo("Fault log folder {} already has {} log files, max size is {} current used size is {}.",
-        log_folder_path_.c_str(), log_files_.size(), folder_max_size_, getFolderSize());
+    LogInfo("Fault log folder {} already has {} log files, max file counter is {}.",
+        log_folder_path_.c_str(), log_files_.size(), max_file_counter_);
+    showFileVector();
 }
 
 /**
@@ -98,8 +97,7 @@ void FaultLog::writeLog(const void* data, size_t size) {
         LogError("Fault log folder {} is NOT exist.", kFaultLogDir);
         return;
     }
-    showFileVector();
-    ensureSpaceAvailable(size * 2);
+    ensureSpaceAvailable();
 
     std::string time_prefix = utils::getCurrentTimeStr(kFileNameTimeFormat);
     std::string timestamp = utils::getCurrentTimeStr(kTimestampFormat);
@@ -314,14 +312,12 @@ void FaultLog::deleteOldestFile() {
  * @brief Ensure that there is enough space available in the log folder to store new log files.
  * @param required_size Required size in bytes to store new log files.
  */
-void FaultLog::ensureSpaceAvailable(size_t required_size) {
-    size_t folder_size = getFolderSize();
+void FaultLog::ensureSpaceAvailable() {
 
-    while (folder_size + required_size >= folder_max_size_) {
-        LogWarn("Fault log folder size %ld exceeds max size %ld, start to delete old files.",
-                folder_size, folder_max_size_);
+    while (log_files_.size() >= max_file_counter_) {
+        LogWarn("Fault log folder has %ld log files, max file counter is %ld, start to delete old files.",
+                log_files_.size(), max_file_counter_);
         deleteOldestFile(); // delete the oldest file to free space
-        folder_size = getFolderSize();
     }
 }
 
@@ -330,17 +326,30 @@ void FaultLog::ensureSpaceAvailable(size_t required_size) {
  */
 void FaultLog::showFileVector() {
     if (log_files_.empty()) {
-        std::cout << "Log file vector is empty." << std::endl;
+        LogInfo("The fault log file vector is empty.");
         return;
     }
-    std::cout << "==========Show File List============" << std::endl;
+    LogInfo("==========Show File List============");
 
-    for (const auto& info : log_files_) {
-        std::cout << "Log file name: " << info.name << ", year: " << info.year
-                << ", month: " << info.month << ", day: " << info.day
-                << ", sequence: " << info.sequence << std::endl;
+    if (log_files_.size() < 5) {
+        for (const auto& info : log_files_) {
+            LogInfo("Log file name: %s, year: %d, month: %d, day: %d, sequence: %d",
+                    info.name.c_str(), info.year, info.month, info.day, info.sequence);
+        }
+    } else {
+        auto& info = log_files_.front();
+
+        for (int i = 0; i < 3; i++) {
+            info = log_files_[i];
+            LogInfo("Log file name: %s, year: %d, month: %d, day: %d, sequence: %d",
+                    info.name.c_str(), info.year, info.month, info.day, info.sequence);
+        }
+        LogInfo("...");
+        info = log_files_.back();
+        LogInfo("Log file name: %s, year: %d, month: %d, day: %d, sequence: %d",
+                info.name.c_str(), info.year, info.month, info.day, info.sequence);
     }
-    std::cout << "====================================" << std::endl;
+    LogInfo("====================================");
 }
 
 /**

@@ -39,7 +39,7 @@ namespace lidar {
 class FaultLog {
   public:
     FaultLog();
-    FaultLog(const std::string& folder_path, size_t max_size);
+    FaultLog(const std::string& folder_path);
     ~FaultLog() = default;
 
     void writeLog(const void* data, size_t size);
@@ -62,7 +62,7 @@ class FaultLog {
     };
 
     std::string log_folder_path_{""};
-    size_t folder_max_size_{1024};
+    size_t max_file_counter_{255};
     bool folder_exist_{false};
 
     std::vector<LogFileTimeInfo> log_files_;
@@ -76,7 +76,7 @@ class FaultLog {
     void getAllFilesInfo();
     void deleteOldestFile();
     void updateFileVector(const std::string& file_name);
-    void ensureSpaceAvailable(size_t required_size);
+    void ensureSpaceAvailable();
 };
 
 } // namespace lidar

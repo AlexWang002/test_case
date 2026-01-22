@@ -327,12 +327,17 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
     parse_inner_param_bin_ = mpark::get<bool>(config_data[5]);
     thread::thread_params = mpark::get<std::vector<thread::ThreadConfig>>(config_data[6]);
 
+    if (mpark::get<bool>(config_data[7])) {
+        fault_log_ptr_ = std::make_shared<FaultLog>(mpark::get<std::string>(config_data[8]));
+    } else {
+        fault_log_ptr_ = nullptr;
+    }
+
     if (vpu_auth) {
         const char *script_path = "sudo echo 0 > /sys/kernel/debug/pva0/vpu_app_authentication";
         system(script_path);
         LogInfo("VPU authentication enabled.");
     }
-
     funcCheckMipiCrc_ = enable_mipi_crc ? checkMipiCrc : noop;
 
     if (is_initialized_.load(std::memory_order_seq_cst)) {
@@ -358,7 +363,6 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
 
     RSDecoderParam param;
     decoder_ptr_ = std::make_shared<DecoderRSEMX>(param);
-    fault_log_ptr_ = std::make_shared<FaultLog>();
 
     if (nullptr == decoder_ptr_) {
         LogError("create decoder failed! LidarType: {}", static_cast<int32_t>(param.lidar_type));
@@ -540,7 +544,7 @@ LidarSdkErrorCode RSLidarSdkImpl::stop() {
     mipi_data_queue_.clear();
     mipi_data_queue_.reset();
     LogInfo("[stop] release queue");
-    safeJoinThread(periodic_send_device_info_thread_, "PeriodicSendDeviceInfo");
+    // safeJoinThread(periodic_send_device_info_thread_, "PeriodicSendDeviceInfo");
     safeJoinThread(handle_lidar_mipi_data_thread_, "HandleMIPI");
     point_cloud_queue_.stopWait();
     point_cloud_queue_.clear();
@@ -872,20 +876,20 @@ bool RSLidarSdkImpl::getAlarmInfo() {
 /**
  * \brief Periodically send device information.
  */
-void RSLidarSdkImpl::periodicSendDeviceInfo() {
-    const int32_t kFrameRateHz{10};
-    constexpr int32_t kPeriodicIntervalMs{1000 / kFrameRateHz};
+// void RSLidarSdkImpl::periodicSendDeviceInfo() {
+//     const int32_t kFrameRateHz{10};
+//     constexpr int32_t kPeriodicIntervalMs{1000 / kFrameRateHz};
 
-    while (is_running_.load(std::memory_order_seq_cst)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(kPeriodicIntervalMs));
+//     while (is_running_.load(std::memory_order_seq_cst)) {
+//         std::this_thread::sleep_for(std::chrono::milliseconds(kPeriodicIntervalMs));
 
-        if (mipi_interruption_.load(std::memory_order_seq_cst)) {
-            runDeviceInfoCallback();
-        } else {
-            break;
-        }
-    }
-}
+//         if (mipi_interruption_.load(std::memory_order_seq_cst)) {
+//             runDeviceInfoCallback();
+//         } else {
+//             break;
+//         }
+//     }
+// }
 
 /******************************************************************************/
 /*         Definition of private functions of classes or templates            */
@@ -1152,10 +1156,6 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
         return;
     }
 
-    if (!fault_log_ptr_) {
-        LogError("Fault log pointer is null!");
-        return;
-    }
     static bool first_call = true;
     static LidarDeviceInfo latest_device_info;
     static std::vector<LidarDeviceInfo> saved_data;
@@ -1187,10 +1187,15 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
                     })
         )) {
         saved_data.emplace_back(*device_info);
-        fault_log_ptr_->writeLog(reinterpret_cast<const uint8_t*>(device_info), sizeof(LidarDeviceInfo));
+
+        if (fault_log_ptr_) {
+            fault_log_ptr_->writeLog(reinterpret_cast<const uint8_t*>(device_info), sizeof(LidarDeviceInfo));
+        }
     }
 
     if (mipi_interruption_.load(std::memory_order_seq_cst)) {
+        callbacks_.deviceInfo(sensor_index_, &latest_device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
+        callbacks_.deviceInfo(sensor_index_, &latest_device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
         callbacks_.deviceInfo(sensor_index_, &latest_device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
     } else {
         latest_device_info = *device_info;
@@ -1293,26 +1298,30 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             FaultManager64::getInstance().setFault(FaultBits::LidarMIPIPacketLossFault);
             frm_normal_detected_ = false;
             frm_normal_reported_ = true;
+            mipi_interruption_.store(true, std::memory_order_seq_cst);
+            runDeviceInfoCallback();
 
             // start periodicSendDeviceInfo() thread
-            if ((!mipi_interruption_.load(std::memory_order_seq_cst)) &&
-                (!periodic_send_device_info_thread_.joinable())) {
-                try {
-                    mipi_interruption_.store(true, std::memory_order_seq_cst);
-                    periodic_send_device_info_thread_ = std::thread(&RSLidarSdkImpl::periodicSendDeviceInfo, this);
-                    LogInfo("start periodicSendDeviceInfo thread");
-                } catch (const std::exception& e) {
-                    LogError("periodicSendDeviceInfo thread exception: {}", e.what());
-                    mipi_interruption_.store(false, std::memory_order_seq_cst);
-                }
-            }
+            // if ((!mipi_interruption_.load(std::memory_order_seq_cst)) &&
+            //     (!periodic_send_device_info_thread_.joinable())) {
+            //     try {
+            //         mipi_interruption_.store(true, std::memory_order_seq_cst);
+            //         periodic_send_device_info_thread_ = std::thread(&RSLidarSdkImpl::periodicSendDeviceInfo, this);
+            //         LogInfo("start periodicSendDeviceInfo thread");
+            //     } catch (const std::exception& e) {
+            //         LogError("periodicSendDeviceInfo thread exception: {}", e.what());
+            //         mipi_interruption_.store(false, std::memory_order_seq_cst);
+            //     }
+            // }
 
             TimeStruct input_time;
+
             if (inputTimeQueue1.size() > 0) {
                 (void)inputTimeQueue1.pop(input_time);
             }
             continue;
         }
+        mipi_interruption_.store(false, std::memory_order_seq_cst);
 
         if (!mipi_frame || !mipi_frame->data) {
             LogError("LidarSDK recv mipi data is null");
