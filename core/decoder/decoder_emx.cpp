@@ -225,6 +225,7 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
         }
     }
     std::memcpy(&device_info_->reserved[7], &pkt.dtc, 3);
+    std::memcpy(&device_info_->reserved[11], &pkt.work_info.win_block_status, 19);
 
     std::unique_lock<std::mutex> lock(mtx_point_cloud_);
     // packets sync_status is take from TimesyncStatus in DIFOP1 and keep consistent with that in device_info.

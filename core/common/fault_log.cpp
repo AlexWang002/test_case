@@ -333,7 +333,7 @@ void FaultLog::showFileVector() {
 
     if (log_files_.size() < 5) {
         for (const auto& info : log_files_) {
-            LogInfo("Log file name: %s, year: %d, month: %d, day: %d, sequence: %d",
+            LogInfo("Log file name: {}, year: {}, month: {}, day: {}, sequence: {}",
                     info.name.c_str(), info.year, info.month, info.day, info.sequence);
         }
     } else {
@@ -341,12 +341,12 @@ void FaultLog::showFileVector() {
 
         for (int i = 0; i < 3; i++) {
             info = log_files_[i];
-            LogInfo("Log file name: %s, year: %d, month: %d, day: %d, sequence: %d",
+            LogInfo("Log file name: {}, year: {}, month: {}, day: {}, sequence: {}",
                     info.name.c_str(), info.year, info.month, info.day, info.sequence);
         }
         LogInfo("...");
         info = log_files_.back();
-        LogInfo("Log file name: %s, year: %d, month: %d, day: %d, sequence: %d",
+        LogInfo("Log file name: {}, year: {}, month: {}, day: {}, sequence: {}",
                 info.name.c_str(), info.year, info.month, info.day, info.sequence);
     }
     LogInfo("====================================");

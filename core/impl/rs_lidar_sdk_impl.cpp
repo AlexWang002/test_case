@@ -321,14 +321,13 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
     }
     bool enable_mipi_crc = mpark::get<bool>(config_data[0]);
     config_path_ = mpark::get<std::string>(config_data[1]);
-    log_config.log_file_path_ = mpark::get<std::string>(config_data[2]);
-    delay_stat_switch_ = mpark::get<bool>(config_data[3]);
-    bool vpu_auth = mpark::get<bool>(config_data[4]);
-    parse_inner_param_bin_ = mpark::get<bool>(config_data[5]);
+    parse_inner_param_bin_ = mpark::get<bool>(config_data[3]);
+    delay_stat_switch_ = mpark::get<bool>(config_data[4]);
+    bool vpu_auth = mpark::get<bool>(config_data[5]);
     thread::thread_params = mpark::get<std::vector<thread::ThreadConfig>>(config_data[6]);
 
-    if (mpark::get<bool>(config_data[7])) {
-        fault_log_ptr_ = std::make_shared<FaultLog>(mpark::get<std::string>(config_data[8]));
+    if (mpark::get<bool>(config_data[8])) {
+        fault_log_ptr_ = std::make_shared<FaultLog>(mpark::get<std::string>(config_data[9]));
     } else {
         fault_log_ptr_ = nullptr;
     }

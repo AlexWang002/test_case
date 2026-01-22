@@ -523,6 +523,7 @@ void printLidarDeviceInfo(const LidarDeviceInfo& kInfo) {
     }
     std::cout << std::endl;
 
+    // 打印供应商内部故障信息2
     std::cout << "  Supplier Internal Fault ID2: 0x";
     for (size_t i = 0; i < 2; ++i) {
         std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int32_t>(kInfo.reserved[i])
@@ -543,6 +544,21 @@ void printLidarDeviceInfo(const LidarDeviceInfo& kInfo) {
     }
     std::cout << std::endl;
     std::cout << "  SDK Thread Crash Fault: " << static_cast<int32_t>(kInfo.reserved[10]) << std::endl;
+
+    // 打印窗口遮挡状态
+    std::cout << std::endl << "Window Block Status: ";
+    std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int32_t>(kInfo.reserved[11]) << std::endl;
+
+    // 打印窗口遮挡等级
+    std::cout << "  Window Block Level: " << std::endl;
+    for (size_t i = 12; i < 30; ++i) {
+        std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int32_t>(kInfo.reserved[i])
+                  << std::dec << " ";
+        if ((i - 11) % 10 == 0) { // 每10个字节换行
+            std::cout << std::endl;
+        }
+    }
+    std::cout << std::endl;
 
     // 打印时间同步信息
     std::cout << std::endl << "Time Synchronization:" << std::endl;
