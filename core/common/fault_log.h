@@ -42,7 +42,7 @@ class FaultLog {
     FaultLog(const std::string& folder_path, size_t max_size);
     ~FaultLog() = default;
 
-    bool writeLog(const void* data, size_t size);
+    void writeLog(const void* data, size_t size);
     std::string getFileTotalNumber();
 
   private:
@@ -50,23 +50,21 @@ class FaultLog {
         int year;
         int month;
         int day;
-        // int hour;
         int sequence;
         std::string name;
-        // std::string path;
 
         bool operator<(const LogFileTimeInfo& other) const {
             if (year != other.year) return year < other.year;
             if (month != other.month) return month < other.month;
             if (day != other.day) return day < other.day;
-            // if (hour != other.hour) return hour < other.hour;
             return sequence < other.sequence;
         }
     };
 
-    std::string log_folder_path_;
-    size_t folder_max_size_;
-    std::deque<LogFileTimeInfo> log_file_deque_;
+    std::string log_folder_path_{""};
+    size_t folder_max_size_{1024};
+    bool folder_exist_{false};
+
     std::vector<LogFileTimeInfo> log_files_;
 
     std::string getNextSequenceNumber(const std::string& timePrefix);

@@ -241,6 +241,24 @@ inline void safeJoinThread(std::thread& thread, const std::string& thread_name) 
     }
 }
 
+inline bool deviceInfoIsSame(LidarDeviceInfo* data_1, LidarDeviceInfo* data_2) {
+    return ((data_1->firware_version == data_2->firware_version) &&
+            (data_1->sdk_version == data_2->sdk_version) &&
+            (data_1->lidar_operation_state == data_2->lidar_operation_state) &&
+            (data_1->lidar_fault_state == data_2->lidar_fault_state) &&
+            (data_1->sdk_total_fault_number == data_2->sdk_total_fault_number) &&
+            (data_1->sdk_fault_code_position == data_2->sdk_fault_code_position) &&
+            (data_1->supplier_internal_fault_id == data_2->supplier_internal_fault_id) &&
+            (0 == memcmp(data_1->supplier_internal_fault_indicate, data_2->supplier_internal_fault_indicate, 12)) &&
+            (data_1->supplier_internal_fault_number == data_2->supplier_internal_fault_number) &&
+            (data_1->supplier_internal_fault_position == data_2->supplier_internal_fault_position) &&
+            (data_1->time_sync_mode == data_2->time_sync_mode) &&
+            (0 == memcmp(data_1->lidar_product_sn, data_2->lidar_product_sn, 25)) &&
+            (data_1->manufacture == data_2->manufacture) &&
+            (data_1->model == data_2->model)
+           );
+}
+
 /******************************************************************************/
 /*          Definition of public functions of classes or templates            */
 /******************************************************************************/
@@ -995,7 +1013,7 @@ void RSLidarSdkImpl::handleMsopData() {
     while (is_running_.load(std::memory_order_seq_cst)) {
         LidarPointCloudPtr cloud_ptr {nullptr, {}};
 
-        if (point_cloud_queue_.popWait(cloud_ptr, 300e3)) { // 300ms超时
+        if (point_cloud_queue_.popWait(cloud_ptr, 300e3)) { // 300ms time out threshold
             auto seq = cloud_ptr->frame_seq;
             auto current_time = callbacks_.getTimeNowPhc();
             static auto last_time = callbacks_.getTimeNowPhc(); // unit: ns, 1e-9 sec
@@ -1012,7 +1030,7 @@ void RSLidarSdkImpl::handleMsopData() {
                 }
             }
 
-            if (current_time - last_time > 1.1e9) { // 1.1秒，用于打印FPS
+            if (current_time - last_time > 1.1e9) { // 1.1 sec time out threshold, used for print FPS
                 LogDebug("(handleMsopData) current_time: {} ns, last_time: {}", current_time, last_time);
                 last_time = current_time;
                 LogDebug(pointcloud_fps_counter_ptr_->getStatus().c_str());
@@ -1140,6 +1158,7 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
     }
     static bool first_call = true;
     static LidarDeviceInfo latest_device_info;
+    static std::vector<LidarDeviceInfo> saved_data;
     auto* device_info = decoder_ptr_->device_info_.get();
     uint8_t sdk_fault_state{FaultManager64::getInstance().getFaultLevel()};
     uint8_t fault_state{device_info->lidar_fault_state};
@@ -1162,7 +1181,12 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
         LogInfo("SDK VERSION: {}", device_info->sdk_version);
     }
 
-    if (device_info->lidar_fault_state > 2U) {
+    if ((device_info->lidar_fault_state >= 2U) &&
+        (std::none_of(saved_data.begin(), saved_data.end(), [device_info](LidarDeviceInfo x) {
+                            return deviceInfoIsSame(&x, device_info);
+                    })
+        )) {
+        saved_data.emplace_back(*device_info);
         fault_log_ptr_->writeLog(reinterpret_cast<const uint8_t*>(device_info), sizeof(LidarDeviceInfo));
     }
 

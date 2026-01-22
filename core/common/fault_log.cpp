@@ -62,7 +62,7 @@ const std::string kFileNameTimeFormat{"%Y_%m_%d"};
  */
 FaultLog::FaultLog() :
         log_folder_path_(kFaultLogDir), folder_max_size_(kFolderMaxSize) {
-    createDirectoryIfNotExist(log_folder_path_);
+    folder_exist_ = createDirectoryIfNotExist(log_folder_path_);
     getAllFilesInfo();
 
     LogInfo("Fault log folder {} already has {} log files, max size is {} current used size is {}.",
@@ -76,7 +76,7 @@ FaultLog::FaultLog() :
  */
 FaultLog::FaultLog(const std::string& folder_path, size_t max_size) :
         log_folder_path_(folder_path), folder_max_size_(max_size) {
-    createDirectoryIfNotExist(log_folder_path_);
+    folder_exist_ = createDirectoryIfNotExist(log_folder_path_);
     getAllFilesInfo();
 
     LogInfo("Fault log folder {} already has {} log files, max size is {} current used size is {}.",
@@ -87,29 +87,31 @@ FaultLog::FaultLog(const std::string& folder_path, size_t max_size) :
  * @brief Write fault log data to a file.
  * @param data Pointer to the fault log data.
  * @param size Size (in bytes) of the fault log data.
- * @return True if the fault log is written successfully, false otherwise.
  */
-bool FaultLog::writeLog(const void* data, size_t size) {
+void FaultLog::writeLog(const void* data, size_t size) {
     if (data == nullptr || size == 0) {
         LogError("Write fault log error: data is nullptr or size is 0.");
-        return false;
+        return;
+    }
+
+    if (!folder_exist_) {
+        LogError("Fault log folder {} is NOT exist.", kFaultLogDir);
+        return;
     }
     showFileVector();
-    ensureSpaceAvailable(size);
+    ensureSpaceAvailable(size * 2);
 
     std::string time_prefix = utils::getCurrentTimeStr(kFileNameTimeFormat);
     std::string timestamp = utils::getCurrentTimeStr(kTimestampFormat);
-    // std::string sequence_prefix = getNextSequenceNumber(time_prefix);
     std::string file_name = kFileNamePrefix + time_prefix + "_" + getNextSequenceNumber(time_prefix) + kFileNameSuffix;
     std::string file_path = log_folder_path_ + "/" + file_name;
     uint8_t* data_ptr = (uint8_t*)data;
     std::ofstream log_file(file_path, std::ios::trunc);
 
     if (!log_file.is_open()) {
-        LogError("Open fault log file %s error: %s", file_path.c_str(), strerror(errno));
-        return false;
+        LogError("Open fault log file {} error: {}", file_path.c_str(), strerror(errno));
+        return;
     }
-
     log_file.write(timestamp.c_str(), timestamp.size());
 
     for (size_t i = 0; i < size; i++) {
@@ -120,10 +122,9 @@ bool FaultLog::writeLog(const void* data, size_t size) {
     }
     log_file.write("\n", 1);
     log_file.close();
+    LogInfo("Device info saved in {}, file size {} Bytes.", file_name, getFileSize(file_path));
     updateFileVector(file_name);
     showFileVector();
-
-    return true;
 }
 
 /**********************************************************************************************************************/
@@ -141,22 +142,26 @@ bool FaultLog::createDirectoryIfNotExist(const std::string& path) {
     }
 
     if (0 == access(path.c_str(), F_OK)) {
-        LogInfo("Fault log directory %s already exist.", path.c_str());
+        LogInfo("Fault log directory {} already exist.", path.c_str());
         return true;
     }
     size_t pos = path.find_last_of("/");
 
     if (pos != std::string::npos) {
         std::string parent_path = path.substr(0, pos);
+        LogInfo("parent_path: {}", parent_path);
 
-        return createDirectoryIfNotExist(parent_path);
+        if (!createDirectoryIfNotExist(parent_path)) {
+            LogError("Create fault log directory {} error: {}", parent_path.c_str(), strerror(errno));
+            return false;
+        }
     }
 
     if (-1 == mkdir(path.c_str(), 0755)) {
-        LogError("Create directory %s error: %s", path.c_str(), strerror(errno));
+        LogError("Create directory {} error: {}", path.c_str(), strerror(errno));
         return false;
     } else {
-        LogInfo("Create fault log directory %s success.", path.c_str());
+        LogInfo("Create fault log directory {} success.", path.c_str());
     }
 
     return true;
@@ -169,7 +174,6 @@ bool FaultLog::createDirectoryIfNotExist(const std::string& path) {
  * @return True if the log file name is parsed successfully, false otherwise.
  */
 bool FaultLog::parseLogFileName(const std::string& filename, LogFileTimeInfo& info) {
-    // std::regex pattern(R"(^file_(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{3})\.log$)");
     std::regex pattern(R"(^rs_lidar_fault_(\d{4})_(\d{2})_(\d{2})_(\d{3})\.log$)");
     std::smatch matches;
 
@@ -178,8 +182,6 @@ bool FaultLog::parseLogFileName(const std::string& filename, LogFileTimeInfo& in
         info.year = std::stoi(matches[1].str());
         info.month = std::stoi(matches[2].str());
         info.day = std::stoi(matches[3].str());
-        // info.hour = std::stoi(matches[4].str());
-        // info.sequence = std::stoi(matches[5].str());
         info.sequence = std::stoi(matches[4].str());
 
         return true;
@@ -226,7 +228,7 @@ size_t FaultLog::getFileSize(const std::string& file_path) {
     struct stat file_stat;
 
     if (0 != stat(file_path.c_str(), &file_stat)) {
-        LogError("Get file %s size error: %s", file_path.c_str(), strerror(errno));
+        LogError("Get file {} size error: {}", file_path.c_str(), strerror(errno));
         return 0;
     }
 
@@ -238,11 +240,11 @@ size_t FaultLog::getFileSize(const std::string& file_path) {
  * @return Total size of all files in the log folder in bytes, or 0 if an error occurs.
  */
 size_t FaultLog::getFolderSize() {
-    size_t total_size = 0; // unit: byte
+    size_t total_size = 0; // unit: Byte
     DIR* dir = opendir(log_folder_path_.c_str()); // open the log folder
 
     if (nullptr == dir) {
-        LogError("Open directory %s error: %s", log_folder_path_.c_str(), strerror(errno));
+        LogError("Open directory {} error: {}", log_folder_path_.c_str(), strerror(errno));
         return total_size;
     }
     struct dirent* entry; // the pointer to the directory entry
@@ -269,7 +271,7 @@ void FaultLog::getAllFilesInfo() {
     DIR* dir = opendir(log_folder_path_.c_str());   // open the log folder
 
     if (nullptr == dir) {
-        LogError("Open directory %s error: %s", log_folder_path_.c_str(), strerror(errno));
+        LogError("Open directory {} error: {}", log_folder_path_.c_str(), strerror(errno));
         return;
     }
     struct dirent* entry;   // the pointer to the directory entry
@@ -300,12 +302,12 @@ void FaultLog::deleteOldestFile() {
     std::string oldest_file_path = log_folder_path_ + "/" + oldest_file.name;
 
     if (0 != remove(oldest_file_path.c_str())) {
-        LogError("Delete file %s error: %s", oldest_file_path.c_str(), strerror(errno));
+        LogError("Delete file {} error: {}", oldest_file_path.c_str(), strerror(errno));
         return;
     }
 
     log_files_.erase(log_files_.begin());
-    LogInfo("Delete oldest log file %s success.", oldest_file_path.c_str());
+    LogInfo("Delete oldest log file {} success.", oldest_file_path.c_str());
 }
 
 /**
@@ -348,7 +350,6 @@ void FaultLog::showFileVector() {
 void FaultLog::updateFileVector(const std::string& file_name) {
     if (file_name.empty()) {
         LogError("Update file vector error: the file name is empty.");
-        // std::cerr << "Update file vector error: the file name is empty." << std::endl;
         return;
     }
     LogFileTimeInfo info;
@@ -356,8 +357,7 @@ void FaultLog::updateFileVector(const std::string& file_name) {
     if (parseLogFileName(file_name, info)) {
         log_files_.emplace_back(info);
     } else {
-        LogError("Update file vector error: parse log file name %s error.", file_name.c_str());
-        // std::cerr << "Update file vector error: parse log file name " << file_name << " error." << std::endl;
+        LogError("Update file vector error: parse log file name {} error.", file_name.c_str());
     }
 }
 
