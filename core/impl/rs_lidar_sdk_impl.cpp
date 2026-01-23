@@ -307,7 +307,7 @@ LidarSdkErrorCode RSLidarSdkImpl::init(const LidarSdkCbks* fptrCbks, const char*
     config_path_ = "./";
 #endif
     log_config.max_file_size_mb_ = 6;
-    log_config.max_files_ = 6;
+    log_config.max_files_ = 3;
 
     std::vector<json_reader::DataVariant> config_data = json_reader::parseJsonFile(configPath);
 
@@ -698,9 +698,7 @@ LidarSdkErrorCode RSLidarSdkImpl::injectAdc(LidarSensorIndex sensor, const void*
         runDeviceInfoCallback();
         return LIDAR_SDK_FAILD;
     }
-    // stop periodicSendDeviceInfo() thread
     sensor_index_ = sensor;
-    mipi_interruption_.store(false, std::memory_order_seq_cst);
 
     uint32_t seq;
     (void)std::memcpy(&seq, mipi_frame->data + 27, sizeof(uint32_t));
@@ -871,24 +869,6 @@ LidarSdkErrorCode RSLidarSdkImpl::ridControl(uint8_t mode, uint16_t rid, uint8_t
 bool RSLidarSdkImpl::getAlarmInfo() {
     return alarm_status_;
 }
-
-/**
- * \brief Periodically send device information.
- */
-// void RSLidarSdkImpl::periodicSendDeviceInfo() {
-//     const int32_t kFrameRateHz{10};
-//     constexpr int32_t kPeriodicIntervalMs{1000 / kFrameRateHz};
-
-//     while (is_running_.load(std::memory_order_seq_cst)) {
-//         std::this_thread::sleep_for(std::chrono::milliseconds(kPeriodicIntervalMs));
-
-//         if (mipi_interruption_.load(std::memory_order_seq_cst)) {
-//             runDeviceInfoCallback();
-//         } else {
-//             break;
-//         }
-//     }
-// }
 
 /******************************************************************************/
 /*         Definition of private functions of classes or templates            */
@@ -1299,20 +1279,6 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             frm_normal_reported_ = true;
             mipi_interruption_.store(true, std::memory_order_seq_cst);
             runDeviceInfoCallback();
-
-            // start periodicSendDeviceInfo() thread
-            // if ((!mipi_interruption_.load(std::memory_order_seq_cst)) &&
-            //     (!periodic_send_device_info_thread_.joinable())) {
-            //     try {
-            //         mipi_interruption_.store(true, std::memory_order_seq_cst);
-            //         periodic_send_device_info_thread_ = std::thread(&RSLidarSdkImpl::periodicSendDeviceInfo, this);
-            //         LogInfo("start periodicSendDeviceInfo thread");
-            //     } catch (const std::exception& e) {
-            //         LogError("periodicSendDeviceInfo thread exception: {}", e.what());
-            //         mipi_interruption_.store(false, std::memory_order_seq_cst);
-            //     }
-            // }
-
             TimeStruct input_time;
 
             if (inputTimeQueue1.size() > 0) {

@@ -168,6 +168,7 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
     const RSEMXDeviceInfoPkt& pkt = *(const RSEMXDeviceInfoPkt*)(packet);
     device_info_->firware_version = ntohs(pkt.device_version.sw_version);
     constexpr int obstruct_report_time_{500};
+    static bool log_out_{false};
 
     if (pkt.work_info.win_block_status != 0) {
         auto now = std::chrono::steady_clock::now();
@@ -180,10 +181,11 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
             // 持续检测到遮挡，检查是否达到500ms
             auto duration = utils::timeInterval(obstruct_start_time_, now);
 
-            if (duration >= obstruct_report_time_) {
+            if ((duration >= obstruct_report_time_) && (!log_out_)) {
                 LogWarn("Lidar Obstruction Fault persisted for 500ms, win_block_status:{}",
                         pkt.work_info.win_block_status);
                 FaultManager64::getInstance().setFault(FaultBits::LidarObstructionFault);
+                log_out_ = true;
             }
         }
     } else {
@@ -191,6 +193,7 @@ bool DecoderRSEMX::decodeDeviceInfoPkt(const uint8_t* packet, size_t size) {
         if (obstruct_detected_) {
             LogDebug("Obstruction cleared");
             obstruct_detected_ = false;
+            log_out_ = false;
 
             // 清除故障（如果之前已经报告过）
             if (FaultManager64::getInstance().hasFault(FaultBits::LidarObstructionFault)) {

@@ -134,7 +134,6 @@ class RSLidarSdkImpl {
     std::shared_ptr<FPSCounter> device_info_fps_counter_ptr_;
     std::thread handle_lidar_mipi_data_thread_;
     std::thread handle_process_msop_data_thread_;
-    // std::thread periodic_send_device_info_thread_;
     SyncQueue<LidarPointCloudPtr> point_cloud_queue_;
 
     using MipiFramePtr = std::shared_ptr<MipiFrame>;
@@ -160,7 +159,6 @@ class RSLidarSdkImpl {
     bool checkContinuity(int32_t pre, int32_t cur, int32_t diff);
     void handleLidarMipiData();
     bool loadConfiguration(const std::string& configPath);
-    // void periodicSendDeviceInfo();
 
     LidarPointCloudPtr deepCopyLidarCloud(const LidarPointCloudPackets* src);
 };

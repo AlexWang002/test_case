@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.02.01] - 2026-1-23
+
+### Update
+- 增加故障日志存储功能
+- PVA任务流改为多次提交一次等待
+- Json文件增加 FAULT_LOG_SAVE 字段，默认打开（true）：
+  - true  开启：SDK会保存故障日志。
+  - false 关闭：SDK不会保存故障日志。
+- Json文件增加 FAULT_LOG_FOLDER 字段，默认值为 "/applog/lidar/fault_log/"
+  - 注意： 必须先给该目录添加可写权限，否则SDK会报错。
+- Json文件修改 DELAY_STAT 字段，默认关闭（false）：
+
+### Fix
+- 修复MIPI断流后，DeviceInfo未发送的问题
+- 修复调用stop接口后，程序未正常退出的问题
+
 ## [3.02.00] - 2026-1-5
 
 ### Update
