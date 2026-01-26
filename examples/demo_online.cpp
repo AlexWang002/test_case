@@ -582,7 +582,7 @@ void printLidarDeviceInfo(const LidarDeviceInfo& kInfo) {
 
     // 打印预留字段（每10个字节换行）
     std::cout << "Reserved: " << std::endl;
-    for (size_t i = 10; i < sizeof(kInfo.reserved); ++i) {
+    for (size_t i = 30; i < sizeof(kInfo.reserved); ++i) {
         std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int32_t>(kInfo.reserved[i])
                   << std::dec << " ";
         if ((i + 1) % 10 == 0) { // 每10个字节换行
