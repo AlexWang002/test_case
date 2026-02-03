@@ -401,7 +401,7 @@ LidarSdkErrorCode pointCloudCallback(LidarSensorIndex sensor, const void* kBuffe
     static uint64_t min_interval {98000UL};
     static uint32_t last_fram_seq {0U};
     if (((frame_time_interval > (max_interval)) || (frame_time_interval < min_interval)) ||
-        ((kLidarCloud->frame_seq % 1) == 0)) {
+        ((kLidarCloud->frame_seq % 100) == 0)) {
         std::cout << "[LidarPointCloudPackets Info :" << kLidarCloud->frame_seq << "]: "
                   << ", frame_timestamp:" << kLidarCloud->frame_timestamp << " us"
                   << ", point_num:" << kLidarCloud->point_num << ", frame_seq:" << kLidarCloud->frame_seq
@@ -523,6 +523,7 @@ void printLidarDeviceInfo(const LidarDeviceInfo& kInfo) {
     }
     std::cout << std::endl;
 
+    // 打印供应商内部故障信息2
     std::cout << "  Supplier Internal Fault ID2: 0x";
     for (size_t i = 0; i < 2; ++i) {
         std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int32_t>(kInfo.reserved[i])
@@ -543,6 +544,21 @@ void printLidarDeviceInfo(const LidarDeviceInfo& kInfo) {
     }
     std::cout << std::endl;
     std::cout << "  SDK Thread Crash Fault: " << static_cast<int32_t>(kInfo.reserved[10]) << std::endl;
+
+    // 打印窗口遮挡状态
+    std::cout << std::endl << "Window Block Status: ";
+    std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int32_t>(kInfo.reserved[11]) << std::endl;
+
+    // 打印窗口遮挡等级
+    std::cout << "  Window Block Level: " << std::endl;
+    for (size_t i = 12; i < 30; ++i) {
+        std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int32_t>(kInfo.reserved[i])
+                  << std::dec << " ";
+        if ((i - 11) % 10 == 0) { // 每10个字节换行
+            std::cout << std::endl;
+        }
+    }
+    std::cout << std::endl;
 
     // 打印时间同步信息
     std::cout << std::endl << "Time Synchronization:" << std::endl;
@@ -613,10 +629,12 @@ LidarSdkErrorCode deviceInfoCallback(LidarSensorIndex sensor, const void* kBuffe
     if ((kDeviceInfo->sdk_total_fault_number > 0) && (kDeviceInfo->sdk_fault_code_position != 1)) {
         printLidarDeviceInfo(*kDeviceInfo);
     }
-    if ((device_frame_seq % 600) == 0) {
+    // if ((device_frame_seq % 100) == 0) {
         std::cout << "device_frame_seq = " << device_frame_seq << std::endl;
+        auto time = std::chrono::steady_clock::now();
+        std::cout << "time: " << std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count() << std::endl;
         printLidarDeviceInfo(*kDeviceInfo);
-    }
+    // }
     device_frame_seq++;
     return LidarSdkErrorCode::LIDAR_SDK_SUCCESS;
 }

@@ -48,19 +48,16 @@ namespace robosense::lidar {
 #define EMX_PKT_SEQ_MAX        (1520U)
 #define EMX_MIPI_PART_LEN      (EMX_GMSL_WIDTH * EMX_GMSL_HEIGHT)
 
-#ifdef MIPI_10HZ
-#   define EMX_MIPI_PART_NUM    (6)
-#elif defined(MIPI_30HZ)
-#   define EMX_MIPI_PART_NUM    (2)
-#else   // default 60Hz
-#   define EMX_MIPI_PART_NUM    (1)
-#endif
+#define EMX_MIPI_PART_NUM    (6)
 
-// #define EMX_MIPI_DATA_LEN       (EMX_MIPI_PART_LEN * EMX_MIPI_PART_NUM)
-// #define EMX_EMBED_MIPI_DATA_LEN (EMX_MIPI_DATA_LEN + EMX_GMSL_WIDTH)
+#if COMPILE_RELEASE_VERSION // release version 3040 mipi
 #define EMX_MIPI_PACKET_NUM     (3040)
 #define EMX_MIPI_DATA_LEN       (EMX_GMSL_WIDTH * EMX_MIPI_PACKET_NUM)
 #define EMX_EMBED_MIPI_DATA_LEN (EMX_MIPI_DATA_LEN + EMX_GMSL_WIDTH)
+#else   // local test version 3372 mipi
+#define EMX_MIPI_DATA_LEN       (EMX_MIPI_PART_LEN * EMX_MIPI_PART_NUM)
+#define EMX_EMBED_MIPI_DATA_LEN (EMX_MIPI_DATA_LEN + EMX_GMSL_WIDTH)
+#endif
 
 /******************************************************************************/
 /*        Definition of exported types (typedef, enum, struct, union)         */
@@ -169,7 +166,7 @@ class DecoderRSEMX : public Decoder {
     explicit DecoderRSEMX(const RSDecoderParam& param);
     virtual ~DecoderRSEMX() {};
 
-    virtual bool decodeMsopPkt(const uint8_t* packet_header, size_t size, 
+    virtual bool decodeMsopPkt(const uint8_t* packet_header, size_t size,
                                 const uint16_t* dist_p,
                                 const uint16_t* refl_p,
                                 const uint16_t* attr_p) override;

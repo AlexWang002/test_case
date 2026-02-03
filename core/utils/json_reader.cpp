@@ -122,15 +122,19 @@ std::vector<DataVariant> parseJsonFile(const std::string& file) {
         DataVariant vpu_auth = getJsonData<bool>(target, "VPU_AUTH");
         DataVariant threads = getJsonData<std::vector<thread::ThreadConfig>>(target, "THREADS");
         DataVariant algo_param = getJsonData<AlgoSwitch>(target, "ALGORITHM");
+        DataVariant fault_save = getJsonData<bool>(target, "FAULT_LOG_SAVE");
+        DataVariant fault_path = getJsonData<std::string>(target, "FAULT_LOG_FOLDER");
         algo_switch = getJsonData<AlgoSwitch>(target, "ALGORITHM");
         result.push_back(mipi_crc);
         result.push_back(param_path);
         result.push_back(log_path);
+        result.push_back(parse_inner_param_bin);
         result.push_back(delay_stat);
         result.push_back(vpu_auth);
-        result.push_back(parse_inner_param_bin);
         result.push_back(threads);
         result.push_back(algo_param);
+        result.push_back(fault_save);
+        result.push_back(fault_path);
 
         if (target.contains("TEST_PARAM")) {
             DataVariant param = getJsonData<TestParam>(target, "TEST_PARAM");

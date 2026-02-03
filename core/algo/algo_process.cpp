@@ -39,6 +39,7 @@
 #include "thread_config.h"
 #include "cpu_load.h"
 #include "rs_new_logger.h"
+#include "pva_utils.h"
 #include "trail.h"
 #include "denoise.h"
 #include "upsample.h"
@@ -91,6 +92,90 @@ void CloudManager::regCallback(const std::function<void(const uint8_t* pkt, size
                                 const uint16_t* attr_p)>& kCbSend)
 {
     cb_send_ = kCbSend;
+}
+
+/**
+ * \brief  Init pva buffer and pva program.
+ * 
+ * \return The pva buffer is inited successfully.
+ * \retval true: The pva buffer inited succeeded.
+ * \retval false: The pva buffer inited failed.
+ */
+bool CloudManager::pvaInit(void)
+{
+    if (denoiseDataAlloc() != 0) {
+        LogError("ERROR: denoiseDataAlloc failed!");
+        return false;
+    }
+
+    if (trailDataAlloc() != 0) {
+        LogError("ERROR: trailDataAlloc failed!");
+        return false;
+    }
+
+    if (highcalcDataAlloc() != 0) {
+        LogError("ERROR: highcalcDataAlloc failed!");
+        return false;
+    }
+
+    if (strayDataAlloc() != 0) {
+        LogError("ERROR: strayDataAlloc failed!");
+        return false;
+    }
+
+    if (sprayDataAlloc() != 0) {
+        LogError("ERROR: sprayDataAlloc failed!");
+        return false;
+    }
+
+    if (upsampleDataAlloc() != 0) {
+        LogError("ERROR: upsampleDataAlloc failed!");
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * \brief  Deinit pva buffer and pva program.
+ * 
+ * \return The pva buffer is deinited successfully.
+ * \retval true: The pva buffer deinited succeeded.
+ * \retval false: The pva buffer deinited failed.
+ */
+bool CloudManager::pvaDeinit(void)
+{
+    if (denoiseDataFree() != 0) {
+        LogError("ERROR: denoiseDataFree failed!");
+        return false;
+    }
+
+    if (trailDataFree() != 0) {
+        LogError("ERROR: trailDataFree failed!");
+        return false;
+    }
+
+    if (highcalcDataFree() != 0) {
+        LogError("ERROR: highcalcDataFree failed!");
+        return false;
+    }
+
+    if (strayDataFree() != 0) {
+        LogError("ERROR: strayDataFree failed!");
+        return false;
+    }
+
+    if (sprayDataFree() != 0) {
+        LogError("ERROR: sprayDataFree failed!");
+        return false;
+    }
+
+    if (upsampleDataFree() != 0) {
+        LogError("ERROR: upsampleDataFree failed!");
+        return false;
+    }
+
+    return true;
 }
 
 /**
@@ -166,12 +251,6 @@ void CloudManager::algoProcess(int32_t task_id)
     try {
         pid_t tid = gettid();
         utils::addThread(tid, "algorithm");
-        /*线程启动时在DRAM中为pva申请算法所需内存*/
-        thread_local bool first{true};
-        if (first) {
-            first = false;
-            upsampleDataAlloc();
-        }
 
         while (false == to_exit_handle_.load()) {
             std::chrono::microseconds total_time = (std::chrono::microseconds)0;
@@ -404,13 +483,6 @@ void CloudManager::algoProcess(int32_t task_id)
                 });
             }
         }
-        /** memory release */
-        denoiseDataFree();
-        TrailDataFree();
-        upsampleDataFree();
-        highcalcDataFree();
-        strayBufferRelease();
-        sprayDataFree();
     }
     catch (const std::exception& kE) {
         LogError("ERROR: algoProcess thread:{}, crashed:{}", task_id, kE.what());

@@ -67,7 +67,6 @@ struct RSDecoderConstParam {
     uint8_t msop_id[8];
     uint8_t difop_id[8];
     uint8_t device_info_id[8];
-
     uint16_t pixel_per_pkt;
 
     // distance

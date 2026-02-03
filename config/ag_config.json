@@ -38,7 +38,7 @@
         "INNER_PARAM_PATH": "/osdata/satelite/lidar/",
         "LOG_CONFIG_FILE": "/applog/lidar/rs_lidar_sdk.log",
         "PARSE_INNER_PARAM_BIN": true,
-        "DELAY_STAT": true,
+        "DELAY_STAT": false,
         "VPU_AUTH": true,
         "THREADS": [
             {
@@ -66,6 +66,8 @@
             "ENABLE_STRAY": true,
             "ENABLE_SPRAY": true,
             "ENABLE_SPRAY_DELETE": true
-        }
+        },
+        "FAULT_LOG_SAVE": true,
+        "FAULT_LOG_FOLDER": "/applog/lidar/fault_log/"
     }
 }

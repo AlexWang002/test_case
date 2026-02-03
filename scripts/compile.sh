@@ -9,7 +9,7 @@ function show_help {
   echo "  -c , --clean        Perform a clean build (delete build directory contents)"
   echo "  -i , --install      Install the project after build)"
   echo "  -p, --platform      Specify platform [pc|arm] (default: pc)"
-  echo "  -f, --frequency     Specify the frequency of mipi [10|30|60] (default: 60)"
+  echo "  -l, --local         Build local version [3372 mipi] (default: release [3040 mipi])"
   echo "  --build-dir DIR     Specify the build directory (default: build)"
   echo "  --cmake-arg ARG     Pass additional arguments to CMake"
   echo "  -h, --help          Show this help message"
@@ -20,10 +20,10 @@ function show_help {
 # 默认参数
 CLEAN=false
 BUILD_DIR="build"
-PLATFORM="pc"
+PLATFORM="arm"
+LOCAL_TEST=false
 CMAKE_ARGS=""
-INSTALL=false
-FREQUENCY=""
+INSTALL=true
 
 # 解析命令行参数
 while [ "$#" -gt 0 ]; do
@@ -34,6 +34,11 @@ while [ "$#" -gt 0 ]; do
       ;;
     -i|--install)
       INSTALL=true
+      shift
+      ;;
+    -l|--local)
+      CMAKE_ARGS="$CMAKE_ARGS -DCOMPILE_RELEASE_VERSION=OFF"
+      LOCAL_TEST=true
       shift
       ;;
     --build-dir)
@@ -52,24 +57,6 @@ while [ "$#" -gt 0 ]; do
         exit 1
       fi
       PLATFORM="$2"
-      shift 2
-      ;;
-    -f|--frequency)
-      if [ -z "$2" ]; then
-        echo "Error: --frequency requires a argument [10|30|60]"
-        show_help
-        exit 1
-      fi
-      if [ "$2" != 10 ] && [ "$2" != 30 ] && [ "$2" != 60 ]; then
-        echo "Error: Unknown frequency $freq_val. Supported frequency: 10, 30, 60"
-        show_help
-        exit 1
-      fi
-      case "$2" in
-        10) FREQUENCY="-DCOMPILE_MIPI_10HZ=ON" ;;
-        30) FREQUENCY="-DCOMPILE_MIPI_30HZ=ON" ;;
-        60) FREQUENCY="" ;;
-      esac
       shift 2
       ;;
     --cmake-arg)
@@ -120,7 +107,7 @@ echo "Running cmake..."
 if [ "$PLATFORM" = "pc" ]; then
     cmake .. -DPVA_BUILD_MODE=NATIVE $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
 elif [ "$PLATFORM" = "arm" ]; then
-    cmake .. -DPVA_BUILD_MODE=L4T $CMAKE_ARGS $CMAKE_PLATFORM_ARGS  $FREQUENCY || { echo "CMake failed"; exit 1; }
+    cmake .. -DPVA_BUILD_MODE=L4T $CMAKE_ARGS $CMAKE_PLATFORM_ARGS || { echo "CMake failed"; exit 1; }
 else
     echo "Unsupported platform: $PLATFORM"
     exit 1
@@ -134,7 +121,18 @@ if $INSTALL; then
 # 安装编译结果
 echo "Installing the project..."
 make install || { echo "Make install failed"; exit 1; }
+echo $'\n'
 echo "Build and installation completed successfully!"
 fi
+
+echo $'\n'
+echo "################  NOTE  #################"
+if $LOCAL_TEST; then
+    echo "##        LOCAL TEST ${PLATFORM^^} VERSION       ##"
+else
+    echo "##         RELEASE ${PLATFORM^^} VERSION         ##"
+fi
+echo "#########################################"
+echo $'\n'
 
 cd ..
