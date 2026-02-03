@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.02.02] - 2026-1-26
+### Fix
+- 修复MIPI断流后，DeviceInfo更新不及时的问题
+- 修复MIPI断流后，DeviceInfo发送频率不稳定的问题
+
 ## [3.02.01] - 2026-1-23
 
 ### Update

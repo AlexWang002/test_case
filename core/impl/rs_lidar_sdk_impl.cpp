@@ -1134,11 +1134,21 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
         LogError("Decoder pointer is null!");
         return;
     }
-
     static bool first_call = true;
     static LidarDeviceInfo latest_device_info;
     static std::vector<LidarDeviceInfo> saved_data;
-    auto* device_info = decoder_ptr_->device_info_.get();
+    static LidarDeviceInfo* device_info{nullptr};
+
+    if (mipi_interruption_.load(std::memory_order_seq_cst)) {
+        device_info = &latest_device_info;
+    } else {
+        device_info = decoder_ptr_->device_info_.get();
+    }
+
+    if (!device_info) {
+        LogError("Device info callback is null!");
+        return;
+    }
     uint8_t sdk_fault_state{FaultManager64::getInstance().getFaultLevel()};
     uint8_t fault_state{device_info->lidar_fault_state};
 
@@ -1147,11 +1157,6 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
     device_info->sdk_total_fault_number = FaultManager64::getInstance().countFaults();
     device_info->sdk_fault_code_position = FaultManager64::getInstance().getFaults();
     device_info->reserved[10] = FaultManager8::getInstance().getFaults();
-
-    if (!device_info) {
-        LogError("Device info callback is null!");
-        return;
-    }
     device_info->sdk_version = kSdkVersionEncoded;
 
     if (first_call) {
@@ -1173,8 +1178,6 @@ void RSLidarSdkImpl::runDeviceInfoCallback() {
     }
 
     if (mipi_interruption_.load(std::memory_order_seq_cst)) {
-        callbacks_.deviceInfo(sensor_index_, &latest_device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
-        callbacks_.deviceInfo(sensor_index_, &latest_device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
         callbacks_.deviceInfo(sensor_index_, &latest_device_info, static_cast<uint32_t>(sizeof(LidarDeviceInfo)));
     } else {
         latest_device_info = *device_info;
@@ -1245,6 +1248,7 @@ void RSLidarSdkImpl::handleLidarMipiData() {
     static const size_t kPacketPairSize = kMsopSize + kDifopSize + kDeviceInfoSize;
     static const auto& kPacketsRanges = decoder_ptr_->getPacketRanges();
     static const uint32_t kMaxWaitTimeUs{300000U}; // 300ms
+    static const uint32_t kInterruptionWaitTimeUs{100000U}; // 100ms
     static const uint32_t kMaxProcessTimeMs{30U};
     static const uint32_t kDeviceInfoProcessTimeMs{8U};
     static const uint32_t kMsopProcessTimeMs{kMaxProcessTimeMs - kDeviceInfoProcessTimeMs};
@@ -1272,13 +1276,28 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             }
         }
 
-        if (!mipi_data_queue_.popWait(mipi_frame, kMaxWaitTimeUs)) {
+        if (mipi_interruption_.load(std::memory_order_seq_cst)) {
+            if (!mipi_data_queue_.popWait(mipi_frame, kInterruptionWaitTimeUs)) {
+                FaultManager64::getInstance().setFault(FaultBits::LidarMIPIPacketLossFault);
+                frm_normal_detected_ = false;
+                runDeviceInfoCallback();
+                frm_normal_reported_ = true;
+            } else {
+                mipi_interruption_.store(false, std::memory_order_seq_cst);
+            }
+            TimeStruct input_time;
+
+            if (inputTimeQueue1.size() > 0) {
+                (void)inputTimeQueue1.pop(input_time);
+            }
+            continue;
+        } else if (!mipi_data_queue_.popWait(mipi_frame, kMaxWaitTimeUs)) {
             LogError("LidarSDK recv mipi data timeout");
             FaultManager64::getInstance().setFault(FaultBits::LidarMIPIPacketLossFault);
-            frm_normal_detected_ = false;
-            frm_normal_reported_ = true;
             mipi_interruption_.store(true, std::memory_order_seq_cst);
+            frm_normal_detected_ = false;
             runDeviceInfoCallback();
+            frm_normal_reported_ = true;
             TimeStruct input_time;
 
             if (inputTimeQueue1.size() > 0) {
@@ -1286,7 +1305,6 @@ void RSLidarSdkImpl::handleLidarMipiData() {
             }
             continue;
         }
-        mipi_interruption_.store(false, std::memory_order_seq_cst);
 
         if (!mipi_frame || !mipi_frame->data) {
             LogError("LidarSDK recv mipi data is null");
