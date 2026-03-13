@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>食谱清单</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div>
+        <h1>食谱清单</h1>
+        <p>添加你喜欢的菜谱，让它们随时可用。</p>
+      </div>
+    </header>
+
+    <form id="recipeForm" class="form-row" aria-label="添加食谱">
+      <input id="recipeName" type="text" placeholder="食谱名称" autocomplete="off" required />
+      <textarea id="recipeDesc" placeholder="食谱描述（可选）"></textarea>
+      <button class="button" type="submit">添加食谱</button>
+    </form>
+
+    <section id="recipes" class="recipes" aria-live="polite"></section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

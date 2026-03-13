@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <rect width="640" height="360" fill="#a0d8f1"/>
+  <circle cx="200" cy="220" r="70" fill="#f4c27b"/>
+  <circle cx="220" cy="190" r="18" fill="#000"/>
+  <circle cx="180" cy="190" r="18" fill="#000"/>
+  <path d="M170 240 Q200 270 230 240" stroke="#a35" stroke-width="10" fill="none"/>
+  <circle cx="440" cy="240" r="80" fill="#f4c27b"/>
+  <circle cx="420" cy="220" r="16" fill="#000"/>
+  <circle cx="460" cy="220" r="16" fill="#000"/>
+  <path d="M420 270 Q440 300 460 270" stroke="#a35" stroke-width="10" fill="none"/>
+  <text x="50" y="50" font-size="32" fill="#fff" font-family="sans-serif">爷爷和孙子</text>
+  <text x="50" y="90" font-size="22" fill="#fff" font-family="sans-serif">快乐时光</text>
+</svg>

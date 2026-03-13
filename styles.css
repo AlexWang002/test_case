@@ -1,0 +1,177 @@
+:root {
+  --bg: #0f172a;
+  --card: rgba(255, 255, 255, 0.1);
+  --card-border: rgba(255, 255, 255, 0.2);
+  --accent: #60a5fa;
+  --accent-2: #f97316;
+  --text: #f8fafc;
+  --muted: rgba(248, 250, 252, 0.75);
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  --radius: 18px;
+  --container: 1000px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 20% 20%, rgba(96, 165, 250, 0.45), transparent 55%),
+              radial-gradient(circle at 80% 30%, rgba(249, 115, 22, 0.35), transparent 50%),
+              linear-gradient(140deg, #0f172a, #020617);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.container {
+  width: 100%;
+  max-width: var(--container);
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+  padding: 32px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.header h1 {
+  font-size: 2rem;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.form-row input,
+.form-row textarea {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 1rem;
+  outline: none;
+  resize: none;
+}
+
+.form-row textarea {
+  grid-column: 1 / span 2;
+  min-height: 84px;
+}
+
+.form-row input:focus,
+.form-row textarea:focus {
+  border-color: rgba(96, 165, 250, 0.7);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18);
+}
+
+.button {
+  border: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: white;
+  font-weight: 600;
+  padding: 12px 18px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.button:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.recipes {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.recipe {
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.recipe h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.recipe p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.favorite {
+  background: rgba(252, 211, 77, 0.16);
+  border: 1px solid rgba(252, 211, 77, 0.35);
+  color: rgba(254, 240, 138, 0.95);
+  padding: 8px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.favorite:hover {
+  background: rgba(252, 211, 77, 0.28);
+  transform: translateY(-1px);
+}
+
+.delete {
+  background: rgba(243, 63, 63, 0.2);
+  border: 1px solid rgba(243, 63, 63, 0.35);
+  color: #fee2e2;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.delete:hover {
+  background: rgba(243, 63, 63, 0.35);
+  transform: translateY(-1px);
+}
+
+.empty {
+  padding: 28px;
+  text-align: center;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius);
+  color: var(--muted);
+}
